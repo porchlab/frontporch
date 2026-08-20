@@ -62,8 +62,10 @@ def build_asterisk_configuration():
         .order_by("id")
     )
     endpoints_by_device_id = {endpoint.device_id: endpoint for endpoint in endpoints}
+    sip_endpoints_by_extension = {}
     sip_endpoints_by_child_id = {}
     for endpoint in endpoints:
+        sip_endpoints_by_extension.setdefault(endpoint.extension, []).append(endpoint)
         if endpoint.child_id:
             sip_endpoints_by_child_id.setdefault(endpoint.child_id, []).append(endpoint)
 
@@ -366,12 +368,20 @@ def build_asterisk_configuration():
             target = endpoints_by_device_id.get(shortcut.internal_target_device_id)
             if not target:
                 continue
-            shortcut_rules.append(
+            shared_targets = (
+                endpoint
+                for endpoint in sip_endpoints_by_extension.get(target.extension, ())
+                if endpoint != source
+                and endpoint.owner_type == target.owner_type
+                and endpoint.owner_id == target.owner_id
+            )
+            shortcut_rules.extend(
                 DialShortcutRule(
                     source_endpoint=source,
                     digits=shortcut.digits,
-                    target_endpoint=target,
+                    target_endpoint=shared_target,
                 )
+                for shared_target in shared_targets
             )
         elif (
             shortcut.external_target_extension_id

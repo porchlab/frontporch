@@ -164,7 +164,14 @@ class Device(TimeStampedModel):
         blank=True,
     )
     friendly_name = models.CharField(max_length=200)
-    sip_extension = models.CharField(max_length=32, unique=True)
+    sip_extension = models.CharField(
+        max_length=32,
+        db_index=True,
+        help_text=(
+            "Devices assigned to the same owner may share an extension while using "
+            "separate SIP credentials."
+        ),
+    )
     sip_username = models.CharField(max_length=100, unique=True)
     sip_secret = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
@@ -225,12 +232,33 @@ class Device(TimeStampedModel):
         return self.assigned_family
 
     def clean(self):
+        errors = {}
         owner_count = sum(
             owner is not None
             for owner in (self.assigned_child, self.assigned_parent, self.assigned_family)
         )
         if owner_count != 1:
-            raise ValidationError("Device must be assigned to exactly one child, parent, or family.")
+            errors["__all__"] = (
+                "Device must be assigned to exactly one child, parent, or family."
+            )
+        elif self.sip_extension:
+            devices_with_extension = Device.objects.filter(
+                sip_extension=self.sip_extension
+            ).exclude(pk=self.pk)
+            owner_fields = (
+                "assigned_child_id",
+                "assigned_parent_id",
+                "assigned_family_id",
+            )
+            owner_identity = tuple(getattr(self, field) for field in owner_fields)
+            if any(
+                tuple(getattr(device, field) for field in owner_fields) != owner_identity
+                for device in devices_with_extension.only(*owner_fields)
+            ):
+                errors["sip_extension"] = (
+                    "This extension is already assigned to a different child, parent, "
+                    "or family."
+                )
         if (
             self.sip_extension
             and "ExternalNumberExtension" in globals()
@@ -238,8 +266,8 @@ class Device(TimeStampedModel):
                 dial_extension=self.sip_extension
             ).exists()
         ):
-            raise ValidationError(
-                {"sip_extension": "This extension is already assigned to an external number."}
+            errors["sip_extension"] = (
+                "This extension is already assigned to an external number."
             )
         if (
             self.sip_extension
@@ -249,9 +277,11 @@ class Device(TimeStampedModel):
                 is_active=True,
             ).exists()
         ):
-            raise ValidationError(
-                {"sip_extension": "This extension is already assigned to a child landline."}
+            errors["sip_extension"] = (
+                "This extension is already assigned to a child landline."
             )
+        if errors:
+            raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
         self.full_clean()

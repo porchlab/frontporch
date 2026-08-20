@@ -145,6 +145,19 @@ ASTERISK_GENERATED_CONFIG_DIR=/etc/asterisk/conf.d uv run python manage.py rende
 
 The generated files may contain SIP usernames, secrets, public numbers, caller IDs, and family-specific routing. Do not commit generated config from a real deployment.
 
+### Multiple Devices on One Extension
+
+An ATA and a softphone can share a FrontPorch extension without sharing SIP
+credentials. In Django Admin, create one `Device` for each phone, assign every
+device to the same child, parent, or family, and give them the same SIP extension
+but different SIP usernames and secrets. Calls to the shared extension ring all
+active devices simultaneously. Deactivating one device removes only that device
+from generated configuration.
+
+FrontPorch rejects reuse of an extension by a different owner. Each credential
+continues to allow a single SIP registration, so registering a softphone cannot
+replace the ATA's registration.
+
 ## SIP Trunk Placeholders
 
 The repository includes placeholder VoIP.ms-style example files:

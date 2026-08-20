@@ -61,20 +61,29 @@ class AsteriskConfigRenderer:
                     "",
                 ]
             )
-            for rule in shortcut_rules_by_context.get(endpoint.context_name, []):
+            shortcut_groups = _group_rules_by_value(
+                shortcut_rules_by_context.get(endpoint.context_name, []),
+                lambda rule: rule.digits,
+            )
+            for shortcut_rules in shortcut_groups.values():
                 lines.extend(
-                    self._render_shortcut_rule(
-                        rule,
+                    self._render_shortcut_rules(
+                        shortcut_rules,
                         outbound_caller_id=configuration.outbound_caller_id,
                     )
                 )
-            for rule in rules_by_context.get(endpoint.context_name, []):
-                target = rule.target_endpoint
+            target_groups = _group_rules_by_value(
+                rules_by_context.get(endpoint.context_name, []),
+                lambda rule: rule.dialed_extension,
+            )
+            for dialed_extension, target_rules in target_groups.items():
+                targets = _unique_targets(target_rules)
+                target = targets[0]
                 lines.extend(
                     self._render_call_lines(
-                        f"exten => {rule.dialed_extension},1,",
-                        source_endpoint=rule.source_endpoint,
-                        target_endpoint=target,
+                        f"exten => {dialed_extension},1,",
+                        source_endpoint=target_rules[0].source_endpoint,
+                        target_endpoints=targets,
                         outbound_caller_id=self._outbound_caller_id_for_target(
                             target,
                             configuration.outbound_caller_id,
@@ -102,14 +111,17 @@ class AsteriskConfigRenderer:
 
         return "\n".join(lines).rstrip() + "\n"
 
-    def _render_shortcut_rule(self, rule, outbound_caller_id=""):
+    def _render_shortcut_rules(self, rules, outbound_caller_id=""):
+        rule = rules[0]
         if rule.is_external:
             dial_target = f"PJSIP/{rule.outbound_number}@voipms-endpoint"
             target_endpoint = None
+            target_endpoints = ()
             caller_id = outbound_caller_id
         else:
-            target_endpoint = rule.target_endpoint
-            dial_target = target_endpoint.dial_target
+            target_endpoints = _unique_targets(rules)
+            target_endpoint = target_endpoints[0]
+            dial_target = None
             caller_id = self._outbound_caller_id_for_target(
                 target_endpoint,
                 outbound_caller_id,
@@ -118,6 +130,7 @@ class AsteriskConfigRenderer:
             f"exten => {rule.digits},1,",
             source_endpoint=rule.source_endpoint,
             target_endpoint=target_endpoint,
+            target_endpoints=target_endpoints,
             dial_target=dial_target,
             outbound_caller_id=caller_id,
         )
@@ -127,11 +140,18 @@ class AsteriskConfigRenderer:
         first_prefix,
         source_endpoint=None,
         target_endpoint=None,
+        target_endpoints=(),
         dial_target=None,
         outbound_caller_id="",
     ):
+        if target_endpoints:
+            target_endpoint = target_endpoints[0]
         if dial_target is None:
-            dial_target = target_endpoint.dial_target
+            dial_target = (
+                "&".join(endpoint.dial_target for endpoint in target_endpoints)
+                if target_endpoints
+                else target_endpoint.dial_target
+            )
 
         blackout_checks = self._call_blackout_checks(source_endpoint, target_endpoint)
         outbound_setup = []
@@ -251,12 +271,16 @@ class AsteriskConfigRenderer:
                         _endpoint_sort_identity(rule.target_endpoint),
                     ),
                 )
-                if len(caller_rules) == 1:
+                target_groups = _group_rules_by_value(
+                    caller_rules,
+                    lambda rule: rule.target_endpoint.extension,
+                )
+                if len(target_groups) == 1:
                     label = f"approved-landline-{canonical}-{rule_index}"
                     destination = label
-                    target_endpoint = caller_rules[0].target_endpoint
+                    targets = _unique_targets(next(iter(target_groups.values())))
                     approved_branches.extend(
-                        self._render_labeled_target_call(label, target_endpoint)
+                        self._render_labeled_target_call(label, targets)
                     )
                 else:
                     context_name = (
@@ -287,12 +311,16 @@ class AsteriskConfigRenderer:
                         _endpoint_sort_identity(rule.target_endpoint),
                     ),
                 )
-                if len(caller_rules) == 1:
+                target_groups = _group_rules_by_value(
+                    caller_rules,
+                    lambda rule: rule.target_endpoint.extension,
+                )
+                if len(target_groups) == 1:
                     label = f"approved-{canonical}-{rule_index}"
                     destination = label
-                    target_endpoint = caller_rules[0].target_endpoint
+                    targets = _unique_targets(next(iter(target_groups.values())))
                     approved_branches.extend(
-                        self._render_labeled_target_call(label, target_endpoint)
+                        self._render_labeled_target_call(label, targets)
                     )
                 else:
                     context_name = (
@@ -358,12 +386,16 @@ class AsteriskConfigRenderer:
                     "",
                 ]
             )
-            for rule in caller_rules:
-                target = rule.target_endpoint
+            target_groups = _group_rules_by_value(
+                caller_rules,
+                lambda rule: rule.target_endpoint.extension,
+            )
+            for extension, target_rules in target_groups.items():
+                targets = _unique_targets(target_rules)
                 lines.extend(
                     self._render_call_lines(
-                        f"exten => {target.extension},1,",
-                        target_endpoint=target,
+                        f"exten => {extension},1,",
+                        target_endpoints=targets,
                     )
                 )
             lines.extend(
@@ -377,10 +409,10 @@ class AsteriskConfigRenderer:
 
         return lines
 
-    def _render_labeled_target_call(self, label, target_endpoint):
+    def _render_labeled_target_call(self, label, target_endpoints):
         return self._render_call_lines(
             f" same => n({label}),",
-            target_endpoint=target_endpoint,
+            target_endpoints=target_endpoints,
         )
 
     def render_files(self, configuration):
@@ -420,3 +452,18 @@ def _endpoint_sort_identity(endpoint):
     if hasattr(endpoint, "device_id"):
         return ("sip", endpoint.device_id)
     return ("landline", endpoint.child_landline_id)
+
+
+def _group_rules_by_value(rules, value):
+    groups = {}
+    for rule in rules:
+        groups.setdefault(value(rule), []).append(rule)
+    return groups
+
+
+def _unique_targets(rules):
+    targets_by_identity = {}
+    for rule in rules:
+        target = rule.target_endpoint
+        targets_by_identity.setdefault(_endpoint_sort_identity(target), target)
+    return tuple(targets_by_identity.values())

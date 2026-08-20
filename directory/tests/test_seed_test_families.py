@@ -40,3 +40,20 @@ class SeedTestFamiliesCommandTests(TestCase):
                 assigned_parent__family__name="Cedar",
             ).exists()
         )
+
+    def test_seed_test_families_remains_idempotent_with_shared_extension_device(self):
+        call_command("seed_test_families")
+        alex = Child.objects.get(family__name="River", name="Alex")
+        Device.objects.create(
+            assigned_child=alex,
+            friendly_name="Alex test softphone",
+            sip_extension="3552",
+            sip_username="alex-test-softphone",
+            sip_secret="softphone-secret",
+        )
+
+        call_command("seed_test_families")
+
+        self.assertEqual(Device.objects.filter(sip_extension="3552").count(), 2)
+        self.assertTrue(Device.objects.filter(sip_username="3552").exists())
+        self.assertTrue(Device.objects.filter(sip_username="alex-test-softphone").exists())

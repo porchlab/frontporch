@@ -163,6 +163,122 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         self.assertIn("exten => _X!,1,Hangup(21)", content)
         self.assertIn("[frontporch-blackout]", content)
 
+    def test_shared_extension_rings_separate_device_credentials_simultaneously(self):
+        emma_softphone = SipEndpoint(
+            device_id=103,
+            owner_type="child",
+            owner_id=2,
+            owner_display_name="Emma",
+            family_id=2,
+            extension="102",
+            username="emma-linphone",
+            secret="emma-linphone-secret",
+            child_id=2,
+        )
+        configuration = AsteriskConfiguration(
+            endpoints=(self.alex_endpoint, self.emma_endpoint, emma_softphone),
+            dialplan_rules=(
+                DialplanRule(
+                    source_endpoint=self.alex_endpoint,
+                    target_endpoint=self.emma_endpoint,
+                ),
+                DialplanRule(
+                    source_endpoint=self.alex_endpoint,
+                    target_endpoint=emma_softphone,
+                ),
+            ),
+        )
+
+        content = self.renderer.render_extensions(configuration)
+
+        self.assertIn(
+            "exten => 102,1,Dial(PJSIP/emma&PJSIP/emma-linphone,30)",
+            content,
+        )
+        self.assertEqual(content.count("exten => 102,1,"), 1)
+
+    def test_shared_extension_shortcut_rings_all_linked_devices(self):
+        emma_softphone = SipEndpoint(
+            device_id=103,
+            owner_type="child",
+            owner_id=2,
+            owner_display_name="Emma",
+            family_id=2,
+            extension="102",
+            username="emma-linphone",
+            secret="emma-linphone-secret",
+            child_id=2,
+        )
+        configuration = AsteriskConfiguration(
+            endpoints=(self.alex_endpoint, self.emma_endpoint, emma_softphone),
+            dialplan_rules=(),
+            shortcut_rules=(
+                DialShortcutRule(
+                    source_endpoint=self.alex_endpoint,
+                    digits="2",
+                    target_endpoint=self.emma_endpoint,
+                ),
+                DialShortcutRule(
+                    source_endpoint=self.alex_endpoint,
+                    digits="2",
+                    target_endpoint=emma_softphone,
+                ),
+            ),
+        )
+
+        content = self.renderer.render_extensions(configuration)
+
+        self.assertIn(
+            "exten => 2,1,Dial(PJSIP/emma&PJSIP/emma-linphone,30)",
+            content,
+        )
+        self.assertEqual(content.count("exten => 2,1,"), 1)
+
+    def test_direct_public_inbound_call_rings_shared_extension_devices(self):
+        alex_softphone = SipEndpoint(
+            device_id=103,
+            owner_type="child",
+            owner_id=1,
+            owner_display_name="Alex",
+            family_id=1,
+            extension="101",
+            username="alex-linphone",
+            secret="alex-linphone-secret",
+            child_id=1,
+        )
+        configuration = AsteriskConfiguration(
+            endpoints=(self.alex_endpoint, alex_softphone),
+            dialplan_rules=(),
+            inbound_external_caller_rules=(
+                InboundExternalCallerRule(
+                    public_phone_number_id=1,
+                    caller_normalized_number="+12125550100",
+                    target_endpoint=self.alex_endpoint,
+                ),
+                InboundExternalCallerRule(
+                    public_phone_number_id=1,
+                    caller_normalized_number="+12125550100",
+                    target_endpoint=alex_softphone,
+                ),
+            ),
+            public_inbound_numbers=(
+                PublicInboundNumber(
+                    public_phone_number_id=1,
+                    normalized_number="+12025550199",
+                    label="Example shared FrontPorch DID",
+                ),
+            ),
+        )
+
+        content = self.renderer.render_extensions(configuration)
+
+        self.assertIn(
+            "same => n(approved-12025550199-1),Dial("
+            "PJSIP/alex&PJSIP/alex-linphone,30)",
+            content,
+        )
+        self.assertNotIn("[frontporch-inbound-1-1]", content)
+
     def test_extensions_route_sip_calls_to_landline_child_over_pstn(self):
         configuration = AsteriskConfiguration(
             endpoints=(self.alex_endpoint,),
@@ -364,6 +480,52 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         )
         self.assertIn(
             "same => n(approved-landline-12025550199-1),Dial(PJSIP/alex,30)",
+            content,
+        )
+        self.assertNotIn("[frontporch-landline-inbound-1-1]", content)
+
+    def test_landline_caller_rings_shared_extension_devices_directly(self):
+        alex_softphone = SipEndpoint(
+            device_id=103,
+            owner_type="child",
+            owner_id=1,
+            owner_display_name="Alex",
+            family_id=1,
+            extension="101",
+            username="alex-linphone",
+            secret="alex-linphone-secret",
+            child_id=1,
+        )
+        configuration = AsteriskConfiguration(
+            endpoints=(self.alex_endpoint, alex_softphone),
+            landline_endpoints=(self.luca_landline,),
+            dialplan_rules=(),
+            inbound_landline_caller_rules=(
+                InboundLandlineCallerRule(
+                    public_phone_number_id=1,
+                    caller_endpoint=self.luca_landline,
+                    target_endpoint=self.alex_endpoint,
+                ),
+                InboundLandlineCallerRule(
+                    public_phone_number_id=1,
+                    caller_endpoint=self.luca_landline,
+                    target_endpoint=alex_softphone,
+                ),
+            ),
+            public_inbound_numbers=(
+                PublicInboundNumber(
+                    public_phone_number_id=1,
+                    normalized_number="+12025550199",
+                    label="Example shared FrontPorch DID",
+                ),
+            ),
+        )
+
+        content = self.renderer.render_extensions(configuration)
+
+        self.assertIn(
+            "same => n(approved-landline-12025550199-1),Dial("
+            "PJSIP/alex&PJSIP/alex-linphone,30)",
             content,
         )
         self.assertNotIn("[frontporch-landline-inbound-1-1]", content)

@@ -101,6 +101,47 @@ class AsteriskConfigurationBuilderTests(TestCase):
         self.assertEqual(configuration.endpoints[0].auth_name, "alex-101")
         self.assertEqual(configuration.endpoints[0].aor_name, "alex-101")
 
+    def test_shared_extension_devices_keep_separate_sip_endpoints(self):
+        softphone = Device.objects.create(
+            assigned_child=self.alex,
+            friendly_name="Alex Linphone",
+            sip_extension="101",
+            sip_username="alex-linphone",
+            sip_secret="softphone-secret",
+        )
+
+        configuration = build_asterisk_configuration()
+        shared_endpoints = [
+            endpoint for endpoint in configuration.endpoints if endpoint.extension == "101"
+        ]
+
+        self.assertEqual(
+            [(endpoint.device_id, endpoint.username) for endpoint in shared_endpoints],
+            [
+                (self.alex_device.id, "alex-101"),
+                (softphone.id, "alex-linphone"),
+            ],
+        )
+
+    def test_shared_extension_creates_a_rule_for_each_owned_device(self):
+        Device.objects.create(
+            assigned_child=self.alex,
+            friendly_name="Alex Linphone",
+            sip_extension="101",
+            sip_username="alex-linphone",
+            sip_secret="softphone-secret",
+        )
+
+        configuration = build_asterisk_configuration()
+        targets = [
+            rule.target_endpoint.username
+            for rule in configuration.dialplan_rules
+            if rule.source_endpoint.device_id == self.river_parent_device.id
+            and rule.target_endpoint.extension == "101"
+        ]
+
+        self.assertEqual(targets, ["alex-101", "alex-linphone"])
+
     @override_settings(ASTERISK_OUTBOUND_CALLER_ID="2025550199")
     def test_outbound_caller_id_setting_is_included(self):
         configuration = build_asterisk_configuration()
@@ -547,6 +588,28 @@ class AsteriskConfigurationBuilderTests(TestCase):
         self.assertEqual(
             configuration.shortcut_rules[0].target_endpoint.extension,
             "201",
+        )
+
+    def test_internal_shortcut_targets_every_device_on_shared_extension(self):
+        Device.objects.create(
+            assigned_parent=self.river_parent,
+            friendly_name="Mara Linphone",
+            sip_extension="201",
+            sip_username="mara-linphone",
+            sip_secret="softphone-secret",
+        )
+        DialShortcut.objects.create(
+            source_device=self.alex_device,
+            digits="2",
+            internal_target_device=self.river_parent_device,
+            approved_by=self.river_parent,
+        )
+
+        configuration = build_asterisk_configuration()
+
+        self.assertEqual(
+            [rule.target_endpoint.username for rule in configuration.shortcut_rules],
+            ["mara-201", "mara-linphone"],
         )
 
     def test_external_shortcut_rule_targets_approved_number(self):

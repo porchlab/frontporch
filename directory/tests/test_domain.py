@@ -292,6 +292,65 @@ class DirectoryDomainTests(TestCase):
         self.assertEqual(parent_device.owning_family, self.family_a)
         self.assertEqual(family_device.owning_family, self.family_a)
 
+    def test_devices_for_same_owner_may_share_extension_with_separate_credentials(self):
+        ata = Device.objects.create(
+            assigned_child=self.alex,
+            friendly_name="Alex ATA",
+            sip_extension="101",
+            sip_username="alex-ata",
+            sip_secret="ata-secret",
+        )
+        softphone = Device.objects.create(
+            assigned_child=self.alex,
+            friendly_name="Alex Linphone",
+            sip_extension="101",
+            sip_username="alex-linphone",
+            sip_secret="linphone-secret",
+        )
+
+        self.assertEqual(ata.sip_extension, softphone.sip_extension)
+        self.assertNotEqual(ata.sip_username, softphone.sip_username)
+        self.assertNotEqual(ata.sip_secret, softphone.sip_secret)
+
+    def test_devices_for_different_owners_may_not_share_extension(self):
+        Device.objects.create(
+            assigned_child=self.alex,
+            friendly_name="Alex ATA",
+            sip_extension="101",
+            sip_username="alex-ata",
+            sip_secret="ata-secret",
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "This extension is already assigned to a different child, parent, or family.",
+        ):
+            Device.objects.create(
+                assigned_child=self.emma,
+                friendly_name="Emma Linphone",
+                sip_extension="101",
+                sip_username="emma-linphone",
+                sip_secret="linphone-secret",
+            )
+
+    def test_parent_and_child_devices_may_not_share_extension(self):
+        Device.objects.create(
+            assigned_child=self.alex,
+            friendly_name="Alex ATA",
+            sip_extension="101",
+            sip_username="alex-ata",
+            sip_secret="ata-secret",
+        )
+
+        with self.assertRaises(ValidationError):
+            Device.objects.create(
+                assigned_parent=self.river_parent,
+                friendly_name="Mara Linphone",
+                sip_extension="101",
+                sip_username="mara-linphone",
+                sip_secret="linphone-secret",
+            )
+
     def test_device_requires_exactly_one_owner(self):
         unassigned_device = Device(
             friendly_name="Unassigned phone",

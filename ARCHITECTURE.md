@@ -88,6 +88,11 @@ Django is responsible for:
 
 Generated Asterisk configuration is deterministic: the same application state should produce the same configuration output. Manual edits to generated files should be avoided.
 
+A dialable extension may represent more than one active device owned by the same
+child, parent, or family. Each device retains independent SIP credentials and a
+single-contact AOR. The generated dialplan groups those endpoints into one
+simultaneous ring target. Extensions may not be shared across different owners.
+
 The hand-written configuration under `asterisk/etc/` provides local scaffolding and includes generated FrontPorch files from `asterisk/etc/conf.d/`. Business logic should remain in Django and generated files should be treated as disposable output.
 
 ## Networking

@@ -89,7 +89,7 @@ class DeviceAdmin(admin.ModelAdmin):
         "assigned_parent__family__name",
         "assigned_family__name",
     )
-    ordering = ("friendly_name",)
+    ordering = ("sip_extension", "friendly_name")
 
 
 @admin.register(ExternalPhoneNumber)

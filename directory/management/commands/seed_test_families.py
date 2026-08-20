@@ -116,13 +116,13 @@ class Command(BaseCommand):
         assigned_family=None,
     ):
         Device.objects.update_or_create(
-            sip_extension=extension,
+            sip_username=extension,
             defaults={
                 "assigned_child": assigned_child,
                 "assigned_parent": assigned_parent,
                 "assigned_family": assigned_family,
                 "friendly_name": friendly_name,
-                "sip_username": extension,
+                "sip_extension": extension,
                 "sip_secret": f"test-{extension}",
                 "is_active": True,
             },
