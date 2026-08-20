@@ -207,7 +207,7 @@ Grandparents and other ordinary external contacts are managed as family contacts
 
 FrontPorch devices call that child by dialing the child's FrontPorch extension. Asterisk routes the call through the SIP trunk to the landline number.
 
-A child using the landline calls the shared or family-assigned FrontPorch public number, then dials the known approved extension. The generated dialplan checks the landline caller ID and only accepts target extensions allowed by existing child-to-family approvals. Parents can usually make this easier by saving speed dial entries on the landline phone with pauses between the FrontPorch public number and the target extension.
+A child using the landline calls the shared or family-assigned FrontPorch public number. The generated dialplan checks the landline caller ID and derives destinations from existing child-to-family approvals. A single permitted child destination rings directly. Multiple permitted child destinations remain restricted to the approved children and will use a small voice menu as prompt generation is added.
 
 FrontPorch does not control calls the child places directly from that landline outside the FrontPorch dial-in flow.
 
@@ -222,6 +222,7 @@ DJANGO_SECRET_KEY=replace-with-a-private-secret
 POSTGRES_PASSWORD=replace-with-a-private-password
 ASTERISK_AMI_PASSWORD=replace-with-a-private-password
 ASTERISK_OUTBOUND_CALLER_ID=2025550199
+ASTERISK_CUSTOM_SOUNDS_DIR=./asterisk/sounds
 FRONTPORCH_WEB_BIND_IP=100.64.0.10
 DJANGO_ALLOWED_HOSTS=100.64.0.10,localhost,127.0.0.1
 DJANGO_CSRF_TRUSTED_ORIGINS=http://100.64.0.10:8000
@@ -232,6 +233,14 @@ Start services:
 ```bash
 docker compose up -d --build
 ```
+
+### Asterisk Sound Prompts
+
+The FrontPorch Asterisk image downloads the official English Asterisk Core Sounds 1.6.1 μ-law package during the image build, verifies its pinned SHA-256 digest, and installs it under `/var/lib/asterisk/sounds/en` when the container starts. μ-law matches the preferred PCMU/G.711 codec used by FrontPorch phones and avoids unnecessary prompt transcoding.
+
+Deployment-private prompts belong in `ASTERISK_CUSTOM_SOUNDS_DIR`. Compose mounts only that directory at `/var/lib/asterisk/sounds/frontporch`, preserving the official prompts bundled with the image. The repository ignores everything in `asterisk/sounds/` except its placeholder, so child-name recordings and future TTS output are not committed or included in Docker build context.
+
+The official package is available from the [Asterisk sounds archive](https://downloads.asterisk.org/pub/telephony/sounds/). FrontPorch-specific prompt generation, including child names, is intentionally a separate step from installing the official sound library.
 
 Run Django commands through the web service:
 

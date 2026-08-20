@@ -17,6 +17,10 @@ asterisk/logs/*
 asterisk/spool/*
 !asterisk/spool/.empty
 
+# Deployment-private voice prompts, including child-name recordings.
+asterisk/sounds/*
+!asterisk/sounds/.empty
+
 asterisk/etc/pjsip_voipms.conf
 asterisk/etc/pjsip_network.conf
 asterisk/etc/extensions_voipms.conf

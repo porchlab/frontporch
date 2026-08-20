@@ -1,6 +1,9 @@
 services:
   asterisk:
-    image: andrius/asterisk:22-cert
+    build:
+      context: .
+      dockerfile: asterisk/Dockerfile
+    image: frontporch-asterisk
     network_mode: host
     healthcheck:
       disable: true
@@ -9,6 +12,7 @@ services:
       - ${ASTERISK_CONF_D_DIR:?set ASTERISK_CONF_D_DIR}:/etc/asterisk/conf.d
       - ${ASTERISK_LOG_DIR:?set ASTERISK_LOG_DIR}:/var/log/asterisk
       - ${ASTERISK_SPOOL_DIR:?set ASTERISK_SPOOL_DIR}:/var/spool/asterisk
+      - ${ASTERISK_CUSTOM_SOUNDS_DIR:-./asterisk/sounds}:/var/lib/asterisk/sounds/frontporch:ro
     restart: unless-stopped
 
   web:
