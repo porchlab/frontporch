@@ -207,7 +207,7 @@ Grandparents and other ordinary external contacts are managed as family contacts
 
 FrontPorch devices call that child by dialing the child's FrontPorch extension. Asterisk routes the call through the SIP trunk to the landline number.
 
-A child using the landline calls the shared or family-assigned FrontPorch public number. The generated dialplan checks the landline caller ID and derives destinations from existing child-to-family approvals. A single permitted child destination rings directly. Multiple permitted child destinations remain restricted to the approved children and will use a small voice menu as prompt generation is added.
+A child using the landline calls the shared or family-assigned FrontPorch public number. The generated dialplan checks the landline caller ID and derives destinations from existing child-to-family approvals. A single permitted child destination rings directly. With multiple permitted children, the caller may dial an Admin-configured shortcut from `2` through `9` or an approved four-digit extension. Shortcuts are rechecked against current reciprocal permissions whenever configuration is rendered; stale Admin rows remain visible but are omitted from Asterisk. This selector remains silent until spoken prompt generation is added.
 
 FrontPorch does not control calls the child places directly from that landline outside the FrontPorch dial-in flow.
 

@@ -8,6 +8,7 @@ from .domain import (
     ExternalDialplanRule,
     InboundExternalCallerRule,
     InboundLandlineCallerRule,
+    InboundLandlineShortcutRule,
     LandlineChildEndpoint,
     PublicInboundNumber,
     SipEndpoint,
@@ -16,6 +17,7 @@ from directory.models import (
     AllowedChildFamilyRelationship,
     ChildBlackoutPeriod,
     ChildLandline,
+    ChildLandlineDialShortcut,
     Device,
     DialShortcut,
     ExternalContactPermission,
@@ -96,6 +98,14 @@ def build_asterisk_configuration():
     for endpoint in routable_endpoints:
         if endpoint.child_id:
             routable_endpoints_by_child_id.setdefault(endpoint.child_id, []).append(endpoint)
+    preferred_inbound_endpoints_by_child_id = {}
+    for child_id, child_endpoints in routable_endpoints_by_child_id.items():
+        sip_targets = tuple(
+            endpoint for endpoint in child_endpoints if isinstance(endpoint, SipEndpoint)
+        )
+        preferred_inbound_endpoints_by_child_id[child_id] = (
+            sip_targets or tuple(child_endpoints)
+        )
 
     approved_child_family_pairs = set(
         AllowedChildFamilyRelationship.objects.filter(
@@ -324,17 +334,18 @@ def build_asterisk_configuration():
         if not public_numbers:
             continue
         for public_number in public_numbers:
-            for target in routable_endpoints:
-                if not target.child_id or caller.child_id == target.child_id:
+            for child_id, child_targets in preferred_inbound_endpoints_by_child_id.items():
+                if caller.child_id == child_id:
                     continue
-                if _endpoints_may_call(caller, target, approved_child_family_pairs):
-                    inbound_landline_rule_candidates.append(
-                        InboundLandlineCallerRule(
-                            public_phone_number_id=public_number.public_phone_number_id,
-                            caller_endpoint=caller,
-                            target_endpoint=target,
+                for target in child_targets:
+                    if _endpoints_may_call(caller, target, approved_child_family_pairs):
+                        inbound_landline_rule_candidates.append(
+                            InboundLandlineCallerRule(
+                                public_phone_number_id=public_number.public_phone_number_id,
+                                caller_endpoint=caller,
+                                target_endpoint=target,
+                            )
                         )
-                    )
     inbound_landline_caller_rules = tuple(
         sorted(
             inbound_landline_rule_candidates,
@@ -344,6 +355,66 @@ def build_asterisk_configuration():
                 rule.target_endpoint.extension,
                 getattr(rule.target_endpoint, "device_id", 0),
                 getattr(rule.target_endpoint, "child_landline_id", 0),
+            ),
+        )
+    )
+
+    authorized_inbound_children_by_source_and_number = {}
+    for rule in inbound_landline_caller_rules:
+        authorized_inbound_children_by_source_and_number.setdefault(
+            (
+                rule.caller_endpoint.child_landline_id,
+                rule.public_phone_number_id,
+            ),
+            set(),
+        ).add(rule.target_endpoint.child_id)
+
+    inbound_landline_shortcut_rules = []
+    for shortcut in (
+        ChildLandlineDialShortcut.objects.filter(
+            is_active=True,
+            digits__in=("2", "3", "4", "5", "6", "7", "8", "9"),
+        )
+        .select_related("source_landline", "target_child", "approved_by")
+        .order_by("source_landline_id", "digits", "target_child_id", "id")
+    ):
+        caller = landline_endpoints_by_id.get(shortcut.source_landline_id)
+        if not caller:
+            continue
+        if shortcut.approved_by.family_id != caller.family_id:
+            continue
+        targets = preferred_inbound_endpoints_by_child_id.get(
+            shortcut.target_child_id,
+            (),
+        )
+        if not targets:
+            continue
+        for (
+            source_landline_id,
+            public_phone_number_id,
+        ), authorized_child_ids in authorized_inbound_children_by_source_and_number.items():
+            if source_landline_id != shortcut.source_landline_id:
+                continue
+            if shortcut.target_child_id not in authorized_child_ids:
+                continue
+            inbound_landline_shortcut_rules.extend(
+                InboundLandlineShortcutRule(
+                    public_phone_number_id=public_phone_number_id,
+                    caller_endpoint=caller,
+                    digits=shortcut.digits,
+                    target_endpoint=target,
+                )
+                for target in targets
+            )
+    inbound_landline_shortcut_rules = tuple(
+        sorted(
+            inbound_landline_shortcut_rules,
+            key=lambda rule: (
+                rule.public_phone_number_id,
+                rule.caller_endpoint.extension,
+                rule.digits,
+                rule.target_endpoint.extension,
+                _endpoint_sort_identity(rule.target_endpoint),
             ),
         )
     )
@@ -425,6 +496,7 @@ def build_asterisk_configuration():
         external_dialplan_rules=external_rules,
         inbound_external_caller_rules=inbound_external_caller_rules,
         inbound_landline_caller_rules=inbound_landline_caller_rules,
+        inbound_landline_shortcut_rules=inbound_landline_shortcut_rules,
         shortcut_rules=tuple(shortcut_rules),
         dialplan_rules=tuple(
             sorted(

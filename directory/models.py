@@ -864,6 +864,94 @@ class DialShortcut(TimeStampedModel):
         super().save(*args, **kwargs)
 
 
+class ChildLandlineDialShortcut(TimeStampedModel):
+    source_landline = models.ForeignKey(
+        ChildLandline,
+        on_delete=models.CASCADE,
+        related_name="dial_shortcuts",
+    )
+    digits = models.CharField(max_length=1)
+    target_child = models.ForeignKey(
+        Child,
+        on_delete=models.CASCADE,
+        related_name="targeted_by_landline_shortcuts",
+    )
+    approved_by = models.ForeignKey(
+        Parent,
+        on_delete=models.PROTECT,
+        related_name="approved_child_landline_dial_shortcuts",
+    )
+    label = models.CharField(max_length=200, blank=True)
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = [
+            "source_landline__child__family__name",
+            "source_landline__child__name",
+            "digits",
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_landline", "digits"],
+                name="unique_digits_per_child_landline",
+            ),
+            models.UniqueConstraint(
+                fields=["source_landline", "target_child"],
+                name="unique_target_per_child_landline",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.source_landline} dials {self.digits} for {self.target_child}"
+
+    def clean(self):
+        errors = {}
+        if self.digits not in {"2", "3", "4", "5", "6", "7", "8", "9"}:
+            errors["digits"] = "Shortcut digits must be one of 2 through 9."
+
+        if self.source_landline_id:
+            if self.is_active and not self.source_landline.is_active:
+                errors["source_landline"] = "Source child landline must be active."
+            if (
+                self.approved_by_id
+                and self.approved_by.family_id
+                != self.source_landline.child.family_id
+            ):
+                errors[
+                    "approved_by"
+                ] = "Approval must come from the source child landline's family."
+            if self.target_child_id:
+                if self.target_child_id == self.source_landline.child_id:
+                    errors["target_child"] = "A child landline cannot target its own child."
+                elif self.is_active and not _children_may_call(
+                    self.source_landline.child,
+                    self.target_child,
+                ):
+                    errors[
+                        "target_child"
+                    ] = "The children do not have current reciprocal call permission."
+
+        if self.is_active and self.target_child_id and not (
+            Device.objects.filter(
+                assigned_child_id=self.target_child_id,
+                is_active=True,
+            ).exists()
+            or ChildLandline.objects.filter(
+                child_id=self.target_child_id,
+                is_active=True,
+            ).exists()
+        ):
+            errors["target_child"] = "Target child has no active routable phone."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
 def _devices_may_call(source, target):
     if source.id == target.id:
         return False
@@ -896,6 +984,20 @@ def _devices_may_call(source, target):
         )
 
     return False
+
+
+def _children_may_call(source_child, target_child):
+    if source_child.id == target_child.id:
+        return False
+    if source_child.family_id == target_child.family_id:
+        return True
+    return _child_has_family_approval(
+        source_child.id,
+        target_child.family_id,
+    ) and _child_has_family_approval(
+        target_child.id,
+        source_child.family_id,
+    )
 
 
 def _child_has_family_approval(child_id, target_family_id):

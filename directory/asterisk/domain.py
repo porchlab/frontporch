@@ -116,6 +116,18 @@ class InboundLandlineCallerRule:
 
 
 @dataclass(frozen=True)
+class InboundLandlineShortcutRule:
+    public_phone_number_id: int
+    caller_endpoint: LandlineChildEndpoint
+    digits: str
+    target_endpoint: SipEndpoint | LandlineChildEndpoint
+
+    @property
+    def caller_normalized_number(self):
+        return self.caller_endpoint.normalized_number
+
+
+@dataclass(frozen=True)
 class DialShortcutRule:
     source_endpoint: SipEndpoint
     digits: str
@@ -172,6 +184,7 @@ class AsteriskConfiguration:
     external_dialplan_rules: tuple[ExternalDialplanRule, ...] = ()
     inbound_external_caller_rules: tuple[InboundExternalCallerRule, ...] = ()
     inbound_landline_caller_rules: tuple[InboundLandlineCallerRule, ...] = ()
+    inbound_landline_shortcut_rules: tuple[InboundLandlineShortcutRule, ...] = ()
     shortcut_rules: tuple[DialShortcutRule, ...] = ()
     public_inbound_numbers: tuple[PublicInboundNumber, ...] = ()
 

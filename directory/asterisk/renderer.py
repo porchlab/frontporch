@@ -229,6 +229,12 @@ class AsteriskConfigRenderer:
                 rule.public_phone_number_id,
                 [],
             ).append(rule)
+        landline_shortcuts_by_public_number_id = {}
+        for rule in configuration.inbound_landline_shortcut_rules:
+            landline_shortcuts_by_public_number_id.setdefault(
+                rule.public_phone_number_id,
+                [],
+            ).append(rule)
 
         lines = [f"[{inbound_context_name}]"]
         restricted_contexts = []
@@ -247,6 +253,15 @@ class AsteriskConfigRenderer:
                 (),
             ):
                 landline_caller_groups.setdefault(
+                    rule.caller_normalized_number,
+                    [],
+                ).append(rule)
+            landline_shortcut_groups = {}
+            for rule in landline_shortcuts_by_public_number_id.get(
+                public_number.public_phone_number_id,
+                (),
+            ):
+                landline_shortcut_groups.setdefault(
                     rule.caller_normalized_number,
                     [],
                 ).append(rule)
@@ -289,7 +304,12 @@ class AsteriskConfigRenderer:
                     )
                     destination = f"{context_name},s,1"
                     restricted_contexts.append(
-                        (context_name, caller_number, caller_rules)
+                        (
+                            context_name,
+                            caller_number,
+                            caller_rules,
+                            landline_shortcut_groups.get(caller_number, ()),
+                        )
                     )
 
                 for caller_id in caller_rules[0].caller_id_variants:
@@ -328,7 +348,9 @@ class AsteriskConfigRenderer:
                         f"-{rule_index}"
                     )
                     destination = f"{context_name},s,1"
-                    restricted_contexts.append((context_name, caller_number, caller_rules))
+                    restricted_contexts.append(
+                        (context_name, caller_number, caller_rules, ())
+                    )
 
                 for caller_id in caller_rules[0].caller_id_variants:
                     lines.append(
@@ -372,7 +394,12 @@ class AsteriskConfigRenderer:
             ]
         )
 
-        for context_name, caller_number, caller_rules in restricted_contexts:
+        for (
+            context_name,
+            caller_number,
+            caller_rules,
+            shortcut_rules,
+        ) in restricted_contexts:
             lines.extend(
                 [
                     f"[{context_name}]",
@@ -390,6 +417,17 @@ class AsteriskConfigRenderer:
                 caller_rules,
                 lambda rule: rule.target_endpoint.extension,
             )
+            shortcut_groups = _group_rules_by_value(
+                shortcut_rules,
+                lambda rule: rule.digits,
+            )
+            for digits, digit_rules in shortcut_groups.items():
+                lines.extend(
+                    self._render_call_lines(
+                        f"exten => {digits},1,",
+                        target_endpoints=_unique_targets(digit_rules),
+                    )
+                )
             for extension, target_rules in target_groups.items():
                 targets = _unique_targets(target_rules)
                 lines.extend(

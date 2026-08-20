@@ -8,6 +8,7 @@ from directory.models import (
     Child,
     ChildBlackoutPeriod,
     ChildLandline,
+    ChildLandlineDialShortcut,
     ConferenceGroup,
     Device,
     DialShortcut,
@@ -261,6 +262,191 @@ class DirectoryDomainTests(TestCase):
                 dial_extension="3333",
                 approved_by=self.river_parent,
             )
+
+    def test_child_landline_shortcut_accepts_digits_two_through_nine(self):
+        source = self._create_landline(self.alex, self.river_parent)
+        target = Child.objects.create(family=self.family_a, name="Rowan")
+        self._create_child_device(target, "3552", "rowan")
+
+        shortcut = ChildLandlineDialShortcut.objects.create(
+            source_landline=source,
+            digits="2",
+            target_child=target,
+            approved_by=self.river_parent,
+            label="Rowan",
+        )
+
+        self.assertEqual(shortcut.target_child, target)
+        invalid = ChildLandlineDialShortcut(
+            source_landline=source,
+            digits="1",
+            target_child=target,
+            approved_by=self.river_parent,
+        )
+        with self.assertRaises(ValidationError):
+            invalid.full_clean()
+
+    def test_child_landline_shortcut_requires_unique_digit_and_target(self):
+        source = self._create_landline(self.alex, self.river_parent)
+        rowan = Child.objects.create(family=self.family_a, name="Rowan")
+        quinn = Child.objects.create(family=self.family_a, name="Quinn")
+        self._create_child_device(rowan, "3552", "rowan")
+        self._create_child_device(quinn, "4663", "quinn")
+        ChildLandlineDialShortcut.objects.create(
+            source_landline=source,
+            digits="2",
+            target_child=rowan,
+            approved_by=self.river_parent,
+        )
+
+        with self.assertRaises(ValidationError):
+            ChildLandlineDialShortcut.objects.create(
+                source_landline=source,
+                digits="2",
+                target_child=quinn,
+                approved_by=self.river_parent,
+            )
+        with self.assertRaises(ValidationError):
+            ChildLandlineDialShortcut.objects.create(
+                source_landline=source,
+                digits="3",
+                target_child=rowan,
+                approved_by=self.river_parent,
+            )
+
+    def test_child_landline_shortcut_requires_source_family_approval(self):
+        source = self._create_landline(self.alex, self.river_parent)
+        target = Child.objects.create(family=self.family_a, name="Rowan")
+        self._create_child_device(target, "3552", "rowan")
+
+        with self.assertRaises(ValidationError):
+            ChildLandlineDialShortcut.objects.create(
+                source_landline=source,
+                digits="2",
+                target_child=target,
+                approved_by=self.maple_parent,
+            )
+
+    def test_child_landline_shortcut_rejects_self_target(self):
+        source = self._create_landline(self.alex, self.river_parent)
+
+        with self.assertRaises(ValidationError):
+            ChildLandlineDialShortcut.objects.create(
+                source_landline=source,
+                digits="2",
+                target_child=self.alex,
+                approved_by=self.river_parent,
+            )
+
+    def test_child_landline_shortcut_requires_reciprocal_cross_family_permission(self):
+        source = self._create_landline(self.alex, self.river_parent)
+        self._create_child_device(self.emma, "3552", "emma")
+
+        with self.assertRaises(ValidationError):
+            ChildLandlineDialShortcut.objects.create(
+                source_landline=source,
+                digits="2",
+                target_child=self.emma,
+                approved_by=self.river_parent,
+            )
+
+        self._approve_child_for_family(self.alex, self.family_b)
+        with self.assertRaises(ValidationError):
+            ChildLandlineDialShortcut.objects.create(
+                source_landline=source,
+                digits="2",
+                target_child=self.emma,
+                approved_by=self.river_parent,
+            )
+
+        self._approve_child_for_family(self.emma, self.family_a)
+        shortcut = ChildLandlineDialShortcut.objects.create(
+            source_landline=source,
+            digits="2",
+            target_child=self.emma,
+            approved_by=self.river_parent,
+        )
+        self.assertTrue(shortcut.is_active)
+
+    def test_child_landline_shortcut_rejects_inactive_source(self):
+        source = self._create_landline(self.alex, self.river_parent)
+        source.is_active = False
+        source.save()
+        target = Child.objects.create(family=self.family_a, name="Rowan")
+        self._create_child_device(target, "3552", "rowan")
+
+        with self.assertRaises(ValidationError):
+            ChildLandlineDialShortcut.objects.create(
+                source_landline=source,
+                digits="2",
+                target_child=target,
+                approved_by=self.river_parent,
+            )
+
+    def test_child_landline_shortcut_rejects_unroutable_target(self):
+        source = self._create_landline(self.alex, self.river_parent)
+        target = Child.objects.create(family=self.family_a, name="Rowan")
+
+        with self.assertRaises(ValidationError):
+            ChildLandlineDialShortcut.objects.create(
+                source_landline=source,
+                digits="2",
+                target_child=target,
+                approved_by=self.river_parent,
+            )
+
+    def test_child_landline_shortcut_detects_permission_revocation(self):
+        source = self._create_landline(self.alex, self.river_parent)
+        self._create_child_device(self.emma, "3552", "emma")
+        self._approve_child_for_family(self.alex, self.family_b)
+        reciprocal = self._approve_child_for_family(self.emma, self.family_a)
+        shortcut = ChildLandlineDialShortcut.objects.create(
+            source_landline=source,
+            digits="2",
+            target_child=self.emma,
+            approved_by=self.river_parent,
+        )
+
+        reciprocal.delete()
+
+        with self.assertRaises(ValidationError):
+            shortcut.full_clean()
+
+        shortcut.is_active = False
+        shortcut.save()
+
+        self.assertFalse(shortcut.is_active)
+
+    def _create_landline(self, child, approved_by, number="+1 212 555 0100"):
+        external_number, _ = ExternalPhoneNumber.objects.get_or_create_normalized(number)
+        return ChildLandline.objects.create(
+            child=child,
+            external_phone_number=external_number,
+            approved_by=approved_by,
+        )
+
+    def _create_child_device(self, child, extension, username):
+        return Device.objects.create(
+            assigned_child=child,
+            friendly_name=f"{child.name} bedroom phone",
+            sip_extension=extension,
+            sip_username=username,
+            sip_secret="secret",
+        )
+
+    def _approve_child_for_family(self, child, target_family):
+        return AllowedChildFamilyRelationship.objects.create(
+            child=child,
+            target_family=target_family,
+            approved_by_child_family_guardian=(
+                self.river_parent if child.family_id == self.family_a.id else self.maple_parent
+            ),
+            approved_by_target_family_guardian=(
+                self.river_parent
+                if target_family.id == self.family_a.id
+                else self.maple_parent
+            ),
+        )
 
     def test_device_can_belong_to_child_parent_or_family(self):
         child_device = Device.objects.create(

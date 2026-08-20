@@ -12,6 +12,7 @@ from directory.asterisk.domain import (
     ExternalDialplanRule,
     InboundExternalCallerRule,
     InboundLandlineCallerRule,
+    InboundLandlineShortcutRule,
     LandlineChildEndpoint,
     PublicInboundNumber,
     SipEndpoint,
@@ -451,6 +452,86 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         self.assertIn("exten => 102,1,Dial(PJSIP/emma,30)", content)
         self.assertIn("exten => _X!,1,Hangup(21)", content)
 
+    def test_landline_caller_can_dial_shortcut_or_approved_four_digit_extension(self):
+        rowan_phone = SipEndpoint(
+            device_id=103,
+            owner_type="child",
+            owner_id=1,
+            owner_display_name="Rowan",
+            family_id=1,
+            extension="3552",
+            username="rowan-phone",
+            secret="rowan-phone-secret",
+            child_id=1,
+        )
+        rowan_softphone = SipEndpoint(
+            device_id=104,
+            owner_type="child",
+            owner_id=1,
+            owner_display_name="Rowan",
+            family_id=1,
+            extension="3552",
+            username="rowan-softphone",
+            secret="rowan-softphone-secret",
+            child_id=1,
+        )
+        quinn_phone = SipEndpoint(
+            device_id=105,
+            owner_type="child",
+            owner_id=4,
+            owner_display_name="Quinn",
+            family_id=1,
+            extension="4663",
+            username="quinn-phone",
+            secret="quinn-phone-secret",
+            child_id=4,
+        )
+        configuration = AsteriskConfiguration(
+            endpoints=(rowan_phone, rowan_softphone, quinn_phone),
+            landline_endpoints=(self.luca_landline,),
+            dialplan_rules=(),
+            inbound_landline_caller_rules=(
+                InboundLandlineCallerRule(1, self.luca_landline, rowan_phone),
+                InboundLandlineCallerRule(1, self.luca_landline, rowan_softphone),
+                InboundLandlineCallerRule(1, self.luca_landline, quinn_phone),
+            ),
+            inbound_landline_shortcut_rules=(
+                InboundLandlineShortcutRule(
+                    1,
+                    self.luca_landline,
+                    "2",
+                    rowan_phone,
+                ),
+                InboundLandlineShortcutRule(
+                    1,
+                    self.luca_landline,
+                    "2",
+                    rowan_softphone,
+                ),
+            ),
+            public_inbound_numbers=(
+                PublicInboundNumber(
+                    public_phone_number_id=1,
+                    normalized_number="+12025550199",
+                    label="Example shared FrontPorch DID",
+                ),
+            ),
+        )
+
+        content = self.renderer.render_extensions(configuration)
+
+        self.assertIn(
+            "exten => 2,1,Dial(PJSIP/rowan-phone&PJSIP/rowan-softphone,30)",
+            content,
+        )
+        self.assertIn(
+            "exten => 3552,1,Dial(PJSIP/rowan-phone&PJSIP/rowan-softphone,30)",
+            content,
+        )
+        self.assertIn("exten => 4663,1,Dial(PJSIP/quinn-phone,30)", content)
+        self.assertNotIn("exten => 3,1,Dial(", content)
+        self.assertIn("exten => _X!,1,Hangup(21)", content)
+
     def test_landline_caller_with_one_target_routes_directly(self):
         configuration = AsteriskConfiguration(
             endpoints=(self.alex_endpoint,),
@@ -460,6 +541,14 @@ class AsteriskConfigRendererTests(SimpleTestCase):
                 InboundLandlineCallerRule(
                     public_phone_number_id=1,
                     caller_endpoint=self.luca_landline,
+                    target_endpoint=self.alex_endpoint,
+                ),
+            ),
+            inbound_landline_shortcut_rules=(
+                InboundLandlineShortcutRule(
+                    public_phone_number_id=1,
+                    caller_endpoint=self.luca_landline,
+                    digits="2",
                     target_endpoint=self.alex_endpoint,
                 ),
             ),
@@ -483,6 +572,7 @@ class AsteriskConfigRendererTests(SimpleTestCase):
             content,
         )
         self.assertNotIn("[frontporch-landline-inbound-1-1]", content)
+        self.assertNotIn("exten => 2,1,Dial(", content)
 
     def test_landline_caller_rings_shared_extension_devices_directly(self):
         alex_softphone = SipEndpoint(

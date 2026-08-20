@@ -8,6 +8,7 @@ from directory.models import (
     Child,
     ChildBlackoutPeriod,
     ChildLandline,
+    ChildLandlineDialShortcut,
     Device,
     DialShortcut,
     ExternalContactPermission,
@@ -895,6 +896,213 @@ class AsteriskConfigurationBuilderTests(TestCase):
             },
         )
 
+    def test_child_landline_shortcut_is_scoped_to_callable_family_and_shared_dids(self):
+        shared_number = PublicPhoneNumber.objects.get(normalized_number="+12025550199")
+        shared_number.is_active = True
+        shared_number.save()
+        maple_number = PublicPhoneNumber.objects.create(
+            normalized_number="202-555-0198",
+            assigned_family=self.maple,
+        )
+        river_number = PublicPhoneNumber.objects.create(
+            normalized_number="202-555-0197",
+            assigned_family=self.river,
+        )
+        source_number, _ = ExternalPhoneNumber.objects.get_or_create_normalized(
+            "+1 212 555 0100"
+        )
+        source = ChildLandline.objects.create(
+            child=self.luca,
+            external_phone_number=source_number,
+            dial_extension="2222",
+            approved_by=self.maple_parent,
+        )
+        self.approve_child_for_family(self.luca, self.river)
+        self.approve_child_for_family(self.alex, self.maple)
+        ChildLandlineDialShortcut.objects.create(
+            source_landline=source,
+            digits="2",
+            target_child=self.alex,
+            approved_by=self.maple_parent,
+        )
+
+        first = build_asterisk_configuration()
+        second = build_asterisk_configuration()
+
+        self.assertEqual(
+            self.inbound_shortcut_tuples(first),
+            {
+                (shared_number.id, "+12125550100", "2", "101", self.alex_device.id),
+                (maple_number.id, "+12125550100", "2", "101", self.alex_device.id),
+            },
+        )
+        self.assertEqual(
+            first.inbound_landline_shortcut_rules,
+            second.inbound_landline_shortcut_rules,
+        )
+        self.assertNotIn(
+            river_number.id,
+            {
+                rule.public_phone_number_id
+                for rule in first.inbound_landline_shortcut_rules
+            },
+        )
+
+    def test_child_landline_shortcut_rings_all_sip_devices_on_shared_extension(self):
+        public_number = PublicPhoneNumber.objects.get(normalized_number="+12025550199")
+        public_number.is_active = True
+        public_number.save()
+        softphone = Device.objects.create(
+            assigned_child=self.alex,
+            friendly_name="Alex softphone",
+            sip_extension="101",
+            sip_username="alex-softphone",
+            sip_secret="secret-softphone",
+        )
+        fallback_number, _ = ExternalPhoneNumber.objects.get_or_create_normalized(
+            "+1 646 555 0100"
+        )
+        ChildLandline.objects.create(
+            child=self.alex,
+            external_phone_number=fallback_number,
+            dial_extension="3552",
+            approved_by=self.river_parent,
+        )
+        source_number, _ = ExternalPhoneNumber.objects.get_or_create_normalized(
+            "+1 212 555 0100"
+        )
+        source = ChildLandline.objects.create(
+            child=self.luca,
+            external_phone_number=source_number,
+            dial_extension="2222",
+            approved_by=self.maple_parent,
+        )
+        self.approve_child_for_family(self.luca, self.river)
+        self.approve_child_for_family(self.alex, self.maple)
+        ChildLandlineDialShortcut.objects.create(
+            source_landline=source,
+            digits="2",
+            target_child=self.alex,
+            approved_by=self.maple_parent,
+        )
+
+        configuration = build_asterisk_configuration()
+
+        alex_shortcuts = {
+            (rule.target_endpoint.extension, rule.target_endpoint.device_id)
+            for rule in configuration.inbound_landline_shortcut_rules
+            if rule.public_phone_number_id == public_number.id
+        }
+        self.assertEqual(
+            alex_shortcuts,
+            {("101", self.alex_device.id), ("101", softphone.id)},
+        )
+        self.assertNotIn(
+            "3552",
+            {
+                rule.target_endpoint.extension
+                for rule in configuration.inbound_landline_caller_rules
+                if rule.caller_endpoint == next(
+                    endpoint
+                    for endpoint in configuration.landline_endpoints
+                    if endpoint.child_landline_id == source.id
+                )
+            },
+        )
+
+    def test_child_landline_shortcut_falls_back_to_target_landline_without_sip(self):
+        public_number = PublicPhoneNumber.objects.get(normalized_number="+12025550199")
+        public_number.is_active = True
+        public_number.save()
+        target = Child.objects.create(family=self.maple, name="Quinn")
+        source_number, _ = ExternalPhoneNumber.objects.get_or_create_normalized(
+            "+1 212 555 0100"
+        )
+        target_number, _ = ExternalPhoneNumber.objects.get_or_create_normalized(
+            "+1 646 555 0100"
+        )
+        source = ChildLandline.objects.create(
+            child=self.luca,
+            external_phone_number=source_number,
+            dial_extension="2222",
+            approved_by=self.maple_parent,
+        )
+        target_landline = ChildLandline.objects.create(
+            child=target,
+            external_phone_number=target_number,
+            dial_extension="4663",
+            approved_by=self.maple_parent,
+        )
+        ChildLandlineDialShortcut.objects.create(
+            source_landline=source,
+            digits="3",
+            target_child=target,
+            approved_by=self.maple_parent,
+        )
+
+        configuration = build_asterisk_configuration()
+
+        shortcut = next(
+            rule
+            for rule in configuration.inbound_landline_shortcut_rules
+            if rule.public_phone_number_id == public_number.id
+        )
+        self.assertEqual(shortcut.target_endpoint.child_landline_id, target_landline.id)
+        self.assertEqual(shortcut.target_endpoint.extension, "4663")
+
+    def test_revoked_permission_retains_shortcut_but_omits_runtime_rule(self):
+        public_number = PublicPhoneNumber.objects.get(normalized_number="+12025550199")
+        public_number.is_active = True
+        public_number.save()
+        source_number, _ = ExternalPhoneNumber.objects.get_or_create_normalized(
+            "+1 212 555 0100"
+        )
+        source = ChildLandline.objects.create(
+            child=self.luca,
+            external_phone_number=source_number,
+            dial_extension="2222",
+            approved_by=self.maple_parent,
+        )
+        self.approve_child_for_family(self.luca, self.river)
+        reciprocal = self.approve_child_for_family(self.alex, self.maple)
+        shortcut = ChildLandlineDialShortcut.objects.create(
+            source_landline=source,
+            digits="2",
+            target_child=self.alex,
+            approved_by=self.maple_parent,
+        )
+
+        reciprocal.delete()
+        configuration = build_asterisk_configuration()
+
+        self.assertTrue(ChildLandlineDialShortcut.objects.filter(pk=shortcut.pk).exists())
+        self.assertEqual(configuration.inbound_landline_shortcut_rules, ())
+
+    def test_inactive_child_landline_shortcut_is_omitted(self):
+        public_number = PublicPhoneNumber.objects.get(normalized_number="+12025550199")
+        public_number.is_active = True
+        public_number.save()
+        source_number, _ = ExternalPhoneNumber.objects.get_or_create_normalized(
+            "+1 212 555 0100"
+        )
+        source = ChildLandline.objects.create(
+            child=self.luca,
+            external_phone_number=source_number,
+            dial_extension="2222",
+            approved_by=self.maple_parent,
+        )
+        ChildLandlineDialShortcut.objects.create(
+            source_landline=source,
+            digits="2",
+            target_child=self.emma,
+            approved_by=self.maple_parent,
+            is_active=False,
+        )
+
+        configuration = build_asterisk_configuration()
+
+        self.assertEqual(configuration.inbound_landline_shortcut_rules, ())
+
     def test_cross_family_parent_or_family_devices_cannot_call_each_other(self):
         configuration = build_asterisk_configuration()
 
@@ -934,4 +1142,16 @@ class AsteriskConfigurationBuilderTests(TestCase):
                 rule.target_endpoint.extension,
             )
             for rule in configuration.dialplan_rules
+        }
+
+    def inbound_shortcut_tuples(self, configuration):
+        return {
+            (
+                rule.public_phone_number_id,
+                rule.caller_normalized_number,
+                rule.digits,
+                rule.target_endpoint.extension,
+                getattr(rule.target_endpoint, "device_id", None),
+            )
+            for rule in configuration.inbound_landline_shortcut_rules
         }

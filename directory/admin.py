@@ -5,6 +5,7 @@ from .models import (
     Child,
     ChildBlackoutPeriod,
     ChildLandline,
+    ChildLandlineDialShortcut,
     ConferenceGroup,
     Device,
     DialShortcut,
@@ -274,6 +275,42 @@ class DialShortcutAdmin(admin.ModelAdmin):
             or obj.parent_phone_target
             or obj.child_landline_target
         )
+
+
+@admin.register(ChildLandlineDialShortcut)
+class ChildLandlineDialShortcutAdmin(admin.ModelAdmin):
+    list_display = (
+        "source_landline",
+        "digits",
+        "target_child",
+        "label",
+        "approved_by",
+        "is_active",
+    )
+    list_filter = (
+        "is_active",
+        "source_landline__child__family",
+        "target_child__family",
+    )
+    search_fields = (
+        "digits",
+        "label",
+        "source_landline__child__name",
+        "source_landline__child__family__name",
+        "source_landline__dial_extension",
+        "source_landline__external_phone_number__normalized_number",
+        "target_child__name",
+        "target_child__family__name",
+        "target_child__devices__sip_extension",
+        "target_child__landlines__dial_extension",
+        "approved_by__display_name",
+        "notes",
+    )
+    ordering = (
+        "source_landline__child__family__name",
+        "source_landline__child__name",
+        "digits",
+    )
 
 
 @admin.register(ConferenceGroup)

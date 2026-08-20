@@ -6,6 +6,7 @@ from directory.models import (
     AllowedChildFamilyRelationship,
     Child,
     ChildBlackoutPeriod,
+    ChildLandlineDialShortcut,
     Device,
     DialShortcut,
     ExternalContactPermission,
@@ -22,6 +23,7 @@ from directory.models import (
 @receiver(post_save, sender=Parent)
 @receiver(post_save, sender=Child)
 @receiver(post_save, sender=ChildBlackoutPeriod)
+@receiver(post_save, sender=ChildLandlineDialShortcut)
 @receiver(post_save, sender=Device)
 @receiver(post_save, sender=ExternalPhoneNumber)
 @receiver(post_save, sender=ExternalNumberExtension)
@@ -34,6 +36,7 @@ from directory.models import (
 @receiver(post_delete, sender=Parent)
 @receiver(post_delete, sender=Child)
 @receiver(post_delete, sender=ChildBlackoutPeriod)
+@receiver(post_delete, sender=ChildLandlineDialShortcut)
 @receiver(post_delete, sender=Device)
 @receiver(post_delete, sender=ExternalPhoneNumber)
 @receiver(post_delete, sender=ExternalNumberExtension)

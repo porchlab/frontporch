@@ -5,6 +5,7 @@ from django.urls import reverse
 from directory.models import (
     Child,
     ChildLandline,
+    ChildLandlineDialShortcut,
     Device,
     DialShortcut,
     ExternalPhoneNumber,
@@ -22,6 +23,7 @@ class DirectoryAdminTests(TestCase):
         )
         self.family = Family.objects.create(name="River House")
         self.child = Child.objects.create(family=self.family, name="Alex")
+        self.target_child = Child.objects.create(family=self.family, name="Rowan")
         self.parent = Parent.objects.create(family=self.family, display_name="Mara")
         self.source_device = Device.objects.create(
             assigned_parent=self.parent,
@@ -29,6 +31,13 @@ class DirectoryAdminTests(TestCase):
             sip_extension="201",
             sip_username="mara-201",
             sip_secret="secret-m",
+        )
+        Device.objects.create(
+            assigned_child=self.target_child,
+            friendly_name="Rowan bedroom phone",
+            sip_extension="3552",
+            sip_username="rowan-3552",
+            sip_secret="secret-rowan",
         )
         number, _ = ExternalPhoneNumber.objects.get_or_create_normalized(
             "+1 212 555 0100"
@@ -49,6 +58,29 @@ class DirectoryAdminTests(TestCase):
 
     def test_admin_can_create_dial_shortcut_to_child_landline_and_add_another(self):
         self.assert_admin_can_create_dial_shortcut("_addanother")
+
+    def test_admin_can_create_child_landline_dial_shortcut(self):
+        response = self.client.post(
+            reverse("admin:directory_childlandlinedialshortcut_add"),
+            {
+                "source_landline": self.landline.id,
+                "digits": "2",
+                "target_child": self.target_child.id,
+                "approved_by": self.parent.id,
+                "label": "Rowan",
+                "is_active": "on",
+                "notes": "",
+                "_save": "Save",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        shortcut = ChildLandlineDialShortcut.objects.get(
+            source_landline=self.landline,
+            digits="2",
+        )
+        self.assertEqual(shortcut.target_child, self.target_child)
 
     def assert_admin_can_create_dial_shortcut(self, submit_name):
         response = self.client.post(

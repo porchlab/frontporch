@@ -50,7 +50,7 @@ Trusted callers are recognized by normalized phone number.
 Routing rules:
 
 - If the caller is approved for exactly one child, route directly to that child.
-- If the caller is approved for multiple children, present a small IVR allowing the caller to choose among only those approved children.
+- If a recognized child landline is approved for multiple children, accept an Admin-configured shortcut from `2` through `9` or an approved four-digit extension. A spoken menu will enumerate the configured shortcuts once prompt generation is added.
 - Unknown callers may be routed to parents, routed to voicemail, or rejected, depending on future policy.
 
 External contacts are globally identified by normalized E.164 phone numbers.
