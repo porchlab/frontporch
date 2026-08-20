@@ -251,17 +251,28 @@ class AsteriskConfigRenderer:
                         _endpoint_sort_identity(rule.target_endpoint),
                     ),
                 )
-                context_name = (
-                    f"frontporch-landline-inbound-"
-                    f"{public_number.public_phone_number_id}-{rule_index}"
-                )
-                restricted_contexts.append((context_name, caller_number, caller_rules))
+                if len(caller_rules) == 1:
+                    label = f"approved-landline-{canonical}-{rule_index}"
+                    destination = label
+                    target_endpoint = caller_rules[0].target_endpoint
+                    approved_branches.extend(
+                        self._render_labeled_target_call(label, target_endpoint)
+                    )
+                else:
+                    context_name = (
+                        f"frontporch-landline-inbound-"
+                        f"{public_number.public_phone_number_id}-{rule_index}"
+                    )
+                    destination = f"{context_name},s,1"
+                    restricted_contexts.append(
+                        (context_name, caller_number, caller_rules)
+                    )
 
                 for caller_id in caller_rules[0].caller_id_variants:
                     lines.append(
                         (
                             ' same => n,GotoIf($["${CALLERID(num)}" = '
-                            f'"{caller_id}"]?{context_name},s,1)'
+                            f'"{caller_id}"]?{destination})'
                         )
                     )
 

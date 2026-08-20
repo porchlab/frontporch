@@ -764,7 +764,7 @@ class AsteriskConfigurationBuilderTests(TestCase):
 
         self.assertDialplanContains(configuration, "101", "2222")
 
-    def test_landline_child_caller_gets_restricted_inbound_targets(self):
+    def test_landline_child_caller_only_gets_permitted_child_inbound_targets(self):
         public_number = PublicPhoneNumber.objects.get(normalized_number="+12025550199")
         public_number.is_active = True
         public_number.save()
@@ -793,10 +793,6 @@ class AsteriskConfigurationBuilderTests(TestCase):
             {
                 (public_number.id, "+12125550100", "101"),
                 (public_number.id, "+12125550100", "102"),
-                (public_number.id, "+12125550100", "201"),
-                (public_number.id, "+12125550100", "202"),
-                (public_number.id, "+12125550100", "301"),
-                (public_number.id, "+12125550100", "302"),
             },
         )
 
@@ -816,6 +812,8 @@ class AsteriskConfigurationBuilderTests(TestCase):
             external_phone_number=number,
             approved_by=self.maple_parent,
         )
+        self.approve_child_for_family(self.alex, self.maple)
+        self.approve_child_for_family(self.emma, self.river)
 
         configuration = build_asterisk_configuration()
 

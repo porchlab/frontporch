@@ -335,6 +335,39 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         self.assertIn("exten => 102,1,Dial(PJSIP/emma,30)", content)
         self.assertIn("exten => _X!,1,Hangup(21)", content)
 
+    def test_landline_caller_with_one_target_routes_directly(self):
+        configuration = AsteriskConfiguration(
+            endpoints=(self.alex_endpoint,),
+            landline_endpoints=(self.luca_landline,),
+            dialplan_rules=(),
+            inbound_landline_caller_rules=(
+                InboundLandlineCallerRule(
+                    public_phone_number_id=1,
+                    caller_endpoint=self.luca_landline,
+                    target_endpoint=self.alex_endpoint,
+                ),
+            ),
+            public_inbound_numbers=(
+                PublicInboundNumber(
+                    public_phone_number_id=1,
+                    normalized_number="+12025550199",
+                    label="Example shared FrontPorch DID",
+                ),
+            ),
+        )
+
+        content = self.renderer.render_extensions(configuration)
+
+        self.assertIn(
+            'same => n,GotoIf($["${CALLERID(num)}" = "6465550100"]?approved-landline-12025550199-1)',
+            content,
+        )
+        self.assertIn(
+            "same => n(approved-landline-12025550199-1),Dial(PJSIP/alex,30)",
+            content,
+        )
+        self.assertNotIn("[frontporch-landline-inbound-1-1]", content)
+
     def test_landline_caller_rules_take_precedence_over_external_contact_rules(self):
         configuration = AsteriskConfiguration(
             endpoints=(self.alex_endpoint, self.emma_endpoint),
@@ -366,7 +399,7 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         content = self.renderer.render_extensions(configuration)
 
         self.assertLess(
-            content.index("frontporch-landline-inbound-1-1,s,1"),
+            content.index("approved-landline-12025550199-1"),
             content.index("approved-12025550199-1"),
         )
 

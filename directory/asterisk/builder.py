@@ -323,7 +323,7 @@ def build_asterisk_configuration():
             continue
         for public_number in public_numbers:
             for target in routable_endpoints:
-                if caller == target:
+                if not target.child_id or caller.child_id == target.child_id:
                     continue
                 if _endpoints_may_call(caller, target, approved_child_family_pairs):
                     inbound_landline_rule_candidates.append(
