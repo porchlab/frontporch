@@ -24,9 +24,8 @@ from directory.asterisk.renderer import (
     AsteriskConfigRenderer,
 )
 from directory.asterisk.tts import (
-    MENU_DIAL_TEXT,
     MENU_EXTENSION_TEXT,
-    MENU_FOR_TEXT,
+    menu_shortcut_text,
     spoken_prompt,
     text_to_speech_settings,
 )
@@ -545,22 +544,14 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         self.assertIn("exten => 3,1,Dial(PJSIP/quinn-phone,30)", content)
 
         prompt_settings = text_to_speech_settings()
-        expected_rowan_menu = "&".join(
-            (
-                spoken_prompt(MENU_DIAL_TEXT, prompt_settings).sound_name,
-                "digits/1",
-                spoken_prompt(MENU_FOR_TEXT, prompt_settings).sound_name,
-                spoken_prompt("Rowan", prompt_settings).sound_name,
-            )
-        )
-        expected_quinn_menu = "&".join(
-            (
-                spoken_prompt(MENU_DIAL_TEXT, prompt_settings).sound_name,
-                "digits/3",
-                spoken_prompt(MENU_FOR_TEXT, prompt_settings).sound_name,
-                spoken_prompt("Quinn", prompt_settings).sound_name,
-            )
-        )
+        expected_rowan_menu = spoken_prompt(
+            menu_shortcut_text("1", "Rowan"),
+            prompt_settings,
+        ).sound_name
+        expected_quinn_menu = spoken_prompt(
+            menu_shortcut_text("3", "Quinn"),
+            prompt_settings,
+        ).sound_name
         expected_extension_prompt = spoken_prompt(
             MENU_EXTENSION_TEXT,
             prompt_settings,

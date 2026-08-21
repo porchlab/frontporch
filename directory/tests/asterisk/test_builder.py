@@ -959,9 +959,7 @@ class AsteriskConfigurationBuilderTests(TestCase):
         self.assertEqual(
             {prompt.text for prompt in first.spoken_prompts},
             {
-                "AL-eks",
-                "Dial",
-                "for",
+                "Dial 1 for AL-eks.",
                 "You may also enter an approved four digit extension.",
             },
         )

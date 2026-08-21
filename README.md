@@ -247,20 +247,25 @@ Deployment-private prompts belong in `ASTERISK_CUSTOM_SOUNDS_DIR`. Compose mount
 
 The official package is available from the [Asterisk sounds archive](https://downloads.asterisk.org/pub/telephony/sounds/). FrontPorch-specific prompt generation, including child names, is intentionally a separate step from installing the official sound library.
 
-FrontPorch generates those private prompts locally with the pinned [eSpeak NG](https://github.com/espeak-ng/espeak-ng) `en-us` voice and converts them with SoX to raw 8 kHz, mono μ-law audio matching the preferred PCMU codec. SoX dithering is disabled so identical inputs produce identical audio bytes. No prompt text or audio is sent to an external service. eSpeak NG is compact relative to neural TTS but sounds more synthetic; the pinned Debian tools and required libraries add about 37 MB to the web image. It is a GPL-3.0-or-later executable invoked by the Apache-2.0 FrontPorch application; it is not linked into the application. SoX and its Debian packaging retain their own licenses.
+FrontPorch generates those private prompts locally with [Piper](https://github.com/OHF-Voice/piper1-gpl) 1.7.0 and the female `en_US-ljspeech-medium` voice, then converts them with SoX to raw 8 kHz, mono μ-law audio matching the preferred PCMU codec. Complete shortcut sentences such as “Dial 1 for Rowan” are synthesized together for more natural rhythm. SoX dithering is disabled so identical inputs produce identical audio bytes. No prompt text or audio is sent to an external service, and names are passed to Piper over standard input rather than exposed in process arguments.
 
-The web image includes the required pinned tools. For a host-side render outside Docker, install compatible `espeak-ng` and `sox` executables first. The generation settings are explicit deployment inputs:
+The Piper package, immutable voice revision, model file, model configuration, and SoX package are pinned; the two downloaded voice artifacts are also verified by SHA-256 during the web-image build. Runtime prompt rendering never downloads a model. The LJSpeech voice is a single-speaker American English female voice trained from public-domain data. Piper is GPL-3.0 and the voice data is public domain; SoX and its Debian packaging retain their own licenses. This is substantially larger than eSpeak: the Piper runtime, numerical libraries, and voice model occupy roughly 210 MB before image-layer compression. The tradeoff is much more natural offline speech without sending private child data to a vendor.
+
+The web image includes Piper, the voice artifacts, and SoX. For a host-side render outside Docker, install the locked Python dependencies and compatible SoX, then put the exact model and adjacent `.onnx.json` configuration at `ASTERISK_TTS_MODEL_PATH`; the pinned URLs and checksums are in the root `Dockerfile`. The generation settings are explicit deployment inputs:
 
 ```dotenv
 ASTERISK_CUSTOM_SOUNDS_DIR=./asterisk/sounds
-ASTERISK_TTS_ENGINE_SIGNATURE=espeak-ng-1.51+dfsg-10+deb12u2_sox-14.4.2+git20190427-3.5
-ASTERISK_TTS_VOICE=en-us
-ASTERISK_TTS_SPEED=145
-ASTERISK_TTS_PITCH=50
-ASTERISK_TTS_AMPLITUDE=100
+ASTERISK_TTS_ENGINE_SIGNATURE=piper-tts-1.7.0_en_US-ljspeech-medium-f5a6e9094787_sox-14.4.2+git20190427-3.5
+ASTERISK_TTS_VOICE=en_US-ljspeech-medium
+ASTERISK_TTS_MODEL_PATH=/opt/frontporch/piper/en_US-ljspeech-medium.onnx
+ASTERISK_TTS_LENGTH_SCALE=1.0
+ASTERISK_TTS_NOISE_SCALE=0.667
+ASTERISK_TTS_NOISE_W_SCALE=0.8
+ASTERISK_TTS_RANDOM_SEED=1729
+ASTERISK_TTS_VOLUME=1.0
 ```
 
-Each prompt filename is a SHA-256 cache key over its text, voice, engine signature, generation settings, and output format. Rendering generates a prompt only when that exact nonempty cache file is absent. Changing the child's name or spoken-name override, voice, engine signature, speed, pitch, or amplitude creates a new private `.ulaw` file under `ASTERISK_CUSTOM_SOUNDS_DIR/tts/`; unchanged prompts are reused across every shortcut that speaks the same text. Old cache entries are deliberately not deleted automatically because the custom sounds directory is deployment-owned. Operators should treat the entire directory as private child data, exclude it from public repositories and images, restrict access, and remove retired cache files according to the deployment's data-retention policy.
+Each prompt filename is a SHA-256 cache key over its text, voice, engine signature, generation settings, and output format. The explicit random seed makes Piper's neural sampling repeatable, and rendering generates a prompt only when that exact nonempty cache file is absent. Changing the shortcut sentence, child's name or spoken-name override, voice, engine signature, length/noise controls, random seed, or volume creates a new private `.ulaw` file under `ASTERISK_CUSTOM_SOUNDS_DIR/tts/`; an identical complete sentence is reused anywhere it appears. Old cache entries are deliberately not deleted automatically because the custom sounds directory is deployment-owned. Operators should treat the entire directory as private child data, exclude it from public repositories and images, restrict access, and remove retired cache files according to the deployment's data-retention policy. If an operator changes the model bytes, they must also change `ASTERISK_TTS_ENGINE_SIGNATURE` so cached audio is regenerated.
 
 `render_asterisk_config` generates all required prompts before writing configuration. With `--reload`, AMI reload happens only after both prompt generation and configuration writes succeed:
 
@@ -268,7 +273,7 @@ Each prompt filename is a SHA-256 cache key over its text, voice, engine signatu
 docker compose run --rm web python manage.py render_asterisk_config --reload
 ```
 
-The generated menu reuses official Core Sounds for digits, retry guidance, and goodbye. Parent audio uploads, voice selection in the parent UI, and parent-facing prompt management remain out of scope.
+The generated menu reuses official Core Sounds for retry guidance and goodbye. Parent audio uploads, voice selection in the parent UI, and parent-facing prompt management remain out of scope.
 
 Run Django commands through the web service:
 

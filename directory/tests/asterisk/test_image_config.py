@@ -63,8 +63,22 @@ class AsteriskImageConfigTests(SimpleTestCase):
         compose = (BASE_DIR / "compose.yaml").read_text(encoding="utf-8")
 
         self.assertIn("FROM python:3.12-slim-bookworm", dockerfile)
-        self.assertIn("espeak-ng=1.51+dfsg-10+deb12u2", dockerfile)
+        self.assertIn("piper-tts==1.7.0", (BASE_DIR / "pyproject.toml").read_text())
+        self.assertIn(
+            "f5a6e9094787fd865d65cb024472f977f9c542b5",
+            dockerfile,
+        )
+        self.assertIn(
+            "6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22",
+            dockerfile,
+        )
+        self.assertIn(
+            "141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860",
+            dockerfile,
+        )
+        self.assertIn("sha256sum --check --strict", dockerfile)
         self.assertIn("sox=14.4.2+git20190427-3.5", dockerfile)
+        self.assertNotIn("espeak-ng=", dockerfile)
         self.assertIn(
             "ASTERISK_CUSTOM_SOUNDS_DIR: /var/lib/asterisk/sounds/frontporch",
             compose,

@@ -3,9 +3,8 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from directory.asterisk.tts import (
-    MENU_DIAL_TEXT,
     MENU_EXTENSION_TEXT,
-    MENU_FOR_TEXT,
+    menu_shortcut_text,
     spoken_prompt,
     text_to_speech_settings,
 )
@@ -506,14 +505,10 @@ class AsteriskConfigRenderer:
             child_name = (
                 rule.target_child_name or rule.target_endpoint.owner_display_name
             )
-            sounds = "&".join(
-                (
-                    spoken_prompt(MENU_DIAL_TEXT, prompt_settings).sound_name,
-                    f"digits/{digits}",
-                    spoken_prompt(MENU_FOR_TEXT, prompt_settings).sound_name,
-                    spoken_prompt(child_name, prompt_settings).sound_name,
-                )
-            )
+            sounds = spoken_prompt(
+                menu_shortcut_text(digits, child_name),
+                prompt_settings,
+            ).sound_name
             label = "(menu)" if is_first_prompt else ""
             lines.append(f" same => n{label},Background({sounds})")
             is_first_prompt = False

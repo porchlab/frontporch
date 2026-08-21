@@ -99,7 +99,7 @@ Unknown callers never reach children directly.
 
 Public connectivity should expose as little attack surface as practical.
 
-Spoken child names are deployment-private data. FrontPorch generates them locally and offline into the private custom sounds directory; prompt text and audio are never sent to a hosted TTS provider. Generated audio and deployment-specific dialplan files do not belong in the public repository.
+Spoken child names are deployment-private data. FrontPorch generates them locally and offline with the pinned Piper voice into the private custom sounds directory; prompt text and audio are never sent to a hosted TTS provider. Voice models are downloaded and verified only while building the deployment image, not while rendering private prompts. Generated audio and deployment-specific dialplan files do not belong in the public repository.
 
 ## Consequences
 

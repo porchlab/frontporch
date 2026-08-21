@@ -8,6 +8,7 @@ dependencies = [
     "django>=5.2,<6.0",
     "dj-database-url>=2.3,<3.0",
     "gunicorn>=23.0,<24.0",
+    "piper-tts==1.7.0",
     "phonenumbers>=8.13,<9.0",
     "psycopg[binary]>=3.2,<4.0",
     "whitenoise>=6.8,<7.0",

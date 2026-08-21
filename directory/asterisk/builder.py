@@ -14,9 +14,8 @@ from .domain import (
     SipEndpoint,
 )
 from .tts import (
-    MENU_DIAL_TEXT,
     MENU_EXTENSION_TEXT,
-    MENU_FOR_TEXT,
+    menu_shortcut_text,
     spoken_prompt,
     text_to_speech_settings,
 )
@@ -436,8 +435,8 @@ def build_asterisk_configuration():
     prompt_texts = set()
     if menu_keys:
         prompt_texts.add(MENU_EXTENSION_TEXT)
-    shortcut_names = {
-        rule.target_child_name
+    shortcut_prompt_texts = {
+        menu_shortcut_text(rule.digits, rule.target_child_name)
         for rule in inbound_landline_shortcut_rules
         if (
             rule.caller_endpoint.child_landline_id,
@@ -445,9 +444,7 @@ def build_asterisk_configuration():
         )
         in menu_keys
     }
-    if shortcut_names:
-        prompt_texts.update((MENU_DIAL_TEXT, MENU_FOR_TEXT))
-        prompt_texts.update(shortcut_names)
+    prompt_texts.update(shortcut_prompt_texts)
     spoken_prompts = tuple(
         sorted(
             (spoken_prompt(text, tts_settings) for text in prompt_texts),

@@ -8,9 +8,11 @@ from django.conf import settings
 from directory.asterisk.domain import SpokenPrompt, TextToSpeechSettings
 
 
-MENU_DIAL_TEXT = "Dial"
-MENU_FOR_TEXT = "for"
 MENU_EXTENSION_TEXT = "You may also enter an approved four digit extension."
+
+
+def menu_shortcut_text(digits, child_name):
+    return f"Dial {digits} for {child_name}."
 
 
 class TextToSpeechGenerationError(RuntimeError):
@@ -27,9 +29,11 @@ def text_to_speech_settings():
     return TextToSpeechSettings(
         engine_signature=settings.ASTERISK_TTS_ENGINE_SIGNATURE,
         voice=settings.ASTERISK_TTS_VOICE,
-        speed=settings.ASTERISK_TTS_SPEED,
-        pitch=settings.ASTERISK_TTS_PITCH,
-        amplitude=settings.ASTERISK_TTS_AMPLITUDE,
+        length_scale=settings.ASTERISK_TTS_LENGTH_SCALE,
+        noise_scale=settings.ASTERISK_TTS_NOISE_SCALE,
+        noise_w_scale=settings.ASTERISK_TTS_NOISE_W_SCALE,
+        random_seed=settings.ASTERISK_TTS_RANDOM_SEED,
+        volume=settings.ASTERISK_TTS_VOLUME,
     )
 
 
@@ -41,14 +45,16 @@ class TextToSpeechPromptGenerator:
     def __init__(
         self,
         custom_sounds_dir=None,
-        espeak_command=None,
+        python_command=None,
+        model_path=None,
         sox_command=None,
         runner=None,
     ):
         self.custom_sounds_dir = Path(
             custom_sounds_dir or settings.ASTERISK_CUSTOM_SOUNDS_DIR
         )
-        self.espeak_command = espeak_command or settings.ASTERISK_TTS_ESPEAK_COMMAND
+        self.python_command = python_command or settings.ASTERISK_TTS_PYTHON_COMMAND
+        self.model_path = model_path or settings.ASTERISK_TTS_MODEL_PATH
         self.sox_command = sox_command or settings.ASTERISK_TTS_SOX_COMMAND
         self.runner = runner or subprocess.run
 
@@ -75,27 +81,32 @@ class TextToSpeechPromptGenerator:
                 temporary_path = Path(temporary_directory)
                 wav_path = temporary_path / "prompt.wav"
                 ulaw_path = temporary_path / "prompt.ulaw"
-                with wav_path.open("wb") as wav_file:
-                    self.runner(
-                        [
-                            self.espeak_command,
-                            "--stdin",
-                            "-v",
-                            prompt.settings.voice,
-                            "-s",
-                            str(prompt.settings.speed),
-                            "-p",
-                            str(prompt.settings.pitch),
-                            "-a",
-                            str(prompt.settings.amplitude),
-                            "--stdout",
-                        ],
-                        input=prompt.text,
-                        text=True,
-                        stdout=wav_file,
-                        stderr=subprocess.PIPE,
-                        check=True,
-                    )
+                self.runner(
+                    [
+                        self.python_command,
+                        "-m",
+                        "directory.asterisk.piper_synthesizer",
+                        "--random-seed",
+                        str(prompt.settings.random_seed),
+                        "--model",
+                        self.model_path,
+                        "--output-file",
+                        str(wav_path),
+                        "--length-scale",
+                        str(prompt.settings.length_scale),
+                        "--noise-scale",
+                        str(prompt.settings.noise_scale),
+                        "--noise-w-scale",
+                        str(prompt.settings.noise_w_scale),
+                        "--volume",
+                        str(prompt.settings.volume),
+                    ],
+                    input=prompt.text,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=True,
+                )
                 sox_arguments = [self.sox_command]
                 if not prompt.settings.dither:
                     sox_arguments.append("--no-dither")

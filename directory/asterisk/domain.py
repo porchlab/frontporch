@@ -15,9 +15,11 @@ class BlackoutWindow:
 class TextToSpeechSettings:
     engine_signature: str
     voice: str
-    speed: int
-    pitch: int
-    amplitude: int
+    length_scale: float
+    noise_scale: float
+    noise_w_scale: float
+    random_seed: int
+    volume: float
     sample_rate: int = 8000
     channels: int = 1
     encoding: str = "mu-law"
@@ -32,16 +34,18 @@ class SpokenPrompt:
     @property
     def cache_key(self):
         payload = {
-            "amplitude": self.settings.amplitude,
             "channels": self.settings.channels,
             "dither": self.settings.dither,
             "encoding": self.settings.encoding,
             "engine_signature": self.settings.engine_signature,
-            "pitch": self.settings.pitch,
+            "length_scale": self.settings.length_scale,
+            "noise_scale": self.settings.noise_scale,
+            "noise_w_scale": self.settings.noise_w_scale,
+            "random_seed": self.settings.random_seed,
             "sample_rate": self.settings.sample_rate,
-            "speed": self.settings.speed,
             "text": self.text,
             "voice": self.settings.voice,
+            "volume": self.settings.volume,
         }
         serialized = json.dumps(
             payload,
