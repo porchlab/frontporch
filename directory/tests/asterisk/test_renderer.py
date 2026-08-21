@@ -454,8 +454,8 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         self.assertIn("[frontporch-landline-inbound-1-1]", content)
         self.assertIn("exten => s,1,NoOp(FrontPorch restricted inbound caller +16465550100)", content)
         self.assertIn(" same => n,WaitExten(10)", content)
-        self.assertIn("exten => 101,1,Dial(PJSIP/alex,30)", content)
-        self.assertIn("exten => 102,1,Dial(PJSIP/emma,30)", content)
+        self.assertIn("exten => 101,1,Dial(PJSIP/alex,30,r)", content)
+        self.assertIn("exten => 102,1,Dial(PJSIP/emma,30,r)", content)
         self.assertIn("exten => _X!,1,Hangup(21)", content)
 
     def test_landline_caller_can_dial_shortcut_or_approved_four_digit_extension(self):
@@ -533,15 +533,15 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         content = self.renderer.render_extensions(configuration)
 
         self.assertIn(
-            "exten => 1,1,Dial(PJSIP/rowan-phone&PJSIP/rowan-softphone,30)",
+            "exten => 1,1,Dial(PJSIP/rowan-phone&PJSIP/rowan-softphone,30,r)",
             content,
         )
         self.assertIn(
-            "exten => 3552,1,Dial(PJSIP/rowan-phone&PJSIP/rowan-softphone,30)",
+            "exten => 3552,1,Dial(PJSIP/rowan-phone&PJSIP/rowan-softphone,30,r)",
             content,
         )
-        self.assertIn("exten => 4663,1,Dial(PJSIP/quinn-phone,30)", content)
-        self.assertIn("exten => 3,1,Dial(PJSIP/quinn-phone,30)", content)
+        self.assertIn("exten => 4663,1,Dial(PJSIP/quinn-phone,30,r)", content)
+        self.assertIn("exten => 3,1,Dial(PJSIP/quinn-phone,30,r)", content)
 
         prompt_settings = text_to_speech_settings()
         expected_rowan_menu = spoken_prompt(
@@ -644,7 +644,7 @@ class AsteriskConfigRendererTests(SimpleTestCase):
             content,
         )
         self.assertIn(
-            "same => n(approved-landline-12025550199-1),Dial(PJSIP/alex,30)",
+            "same => n(approved-landline-12025550199-1),Dial(PJSIP/alex,30,r)",
             content,
         )
         self.assertNotIn("[frontporch-landline-inbound-1-1]", content)
@@ -693,7 +693,7 @@ class AsteriskConfigRendererTests(SimpleTestCase):
 
         self.assertIn("exten => 3,1,Set(CALLERID(num)=2025550199)", context)
         self.assertIn(
-            " same => n,Dial(PJSIP/13105550100@voipms-endpoint,30)",
+            " same => n,Dial(PJSIP/13105550100@voipms-endpoint,30,r)",
             context,
         )
         self.assertIn("exten => 4663,1,Set(CALLERID(num)=2025550199)", context)
@@ -739,7 +739,7 @@ class AsteriskConfigRendererTests(SimpleTestCase):
 
         self.assertIn(
             "same => n(approved-landline-12025550199-1),Dial("
-            "PJSIP/alex&PJSIP/alex-linphone,30)",
+            "PJSIP/alex&PJSIP/alex-linphone,30,r)",
             content,
         )
         self.assertNotIn("[frontporch-landline-inbound-1-1]", content)

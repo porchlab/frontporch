@@ -150,6 +150,7 @@ class AsteriskConfigRenderer:
         target_endpoints=(),
         dial_target=None,
         outbound_caller_id="",
+        generate_ringback=False,
     ):
         if target_endpoints:
             target_endpoint = target_endpoints[0]
@@ -165,8 +166,9 @@ class AsteriskConfigRenderer:
         if outbound_caller_id:
             outbound_setup.append(f"Set(CALLERID(num)={outbound_caller_id})")
 
+        dial_options = ",r" if generate_ringback else ""
         applications = blackout_checks + outbound_setup + [
-            f"Dial({dial_target},30)",
+            f"Dial({dial_target},30{dial_options})",
             "Hangup()",
         ]
         return (
@@ -306,6 +308,7 @@ class AsteriskConfigRenderer:
                             label,
                             targets,
                             configuration.outbound_caller_id,
+                            generate_ringback=True,
                         )
                     )
                 else:
@@ -466,6 +469,7 @@ class AsteriskConfigRenderer:
                             targets[0],
                             configuration.outbound_caller_id,
                         ),
+                        generate_ringback=is_spoken_landline_menu,
                     )
                 )
             for extension, target_rules in target_groups.items():
@@ -478,6 +482,7 @@ class AsteriskConfigRenderer:
                             targets[0],
                             configuration.outbound_caller_id,
                         ),
+                        generate_ringback=is_spoken_landline_menu,
                     )
                 )
             if is_spoken_landline_menu:
@@ -543,6 +548,7 @@ class AsteriskConfigRenderer:
         label,
         target_endpoints,
         outbound_caller_id="",
+        generate_ringback=False,
     ):
         return self._render_call_lines(
             f" same => n({label}),",
@@ -551,6 +557,7 @@ class AsteriskConfigRenderer:
                 target_endpoints[0],
                 outbound_caller_id,
             ),
+            generate_ringback=generate_ringback,
         )
 
     def render_files(self, configuration):
