@@ -12,11 +12,14 @@ RUN set -eux; \
     printf '%s  %s\n' "${archive_sha256}" "/tmp/${archive}" \
         | sha256sum --check --strict; \
     mkdir -p /opt/frontporch/asterisk-sounds/en; \
-    tar --extract --gzip --no-same-permissions \
+    tar --list --gzip --file "/tmp/${archive}" \
+        | grep -v '/$' > "/tmp/${archive}.files"; \
+    tar --extract --gzip --no-same-owner --no-same-permissions \
         --file "/tmp/${archive}" \
-        --directory /opt/frontporch/asterisk-sounds/en; \
+        --directory /opt/frontporch/asterisk-sounds/en \
+        --files-from "/tmp/${archive}.files"; \
     chown -R asterisk:asterisk /opt/frontporch/asterisk-sounds; \
-    rm "/tmp/${archive}"
+    rm "/tmp/${archive}" "/tmp/${archive}.files"
 
 COPY asterisk/core-sounds-entrypoint.sh /usr/local/bin/frontporch-core-sounds-entrypoint.sh
 
