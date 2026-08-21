@@ -50,6 +50,24 @@ class DirectoryAdminTests(TestCase):
         )
         self.client.force_login(self.admin_user)
 
+    def test_admin_can_set_child_spoken_name_without_changing_display_name(self):
+        response = self.client.post(
+            reverse("admin:directory_child_change", args=[self.target_child.id]),
+            {
+                "family": self.family.id,
+                "name": "Rowan",
+                "spoken_name": "ROH-wan",
+                "notes": "",
+                "_save": "Save",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.target_child.refresh_from_db()
+        self.assertEqual(self.target_child.name, "Rowan")
+        self.assertEqual(self.target_child.spoken_name, "ROH-wan")
+
     def test_admin_can_create_dial_shortcut_to_child_landline(self):
         self.assert_admin_can_create_dial_shortcut("_save")
 

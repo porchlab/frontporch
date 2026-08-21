@@ -50,3 +50,19 @@ class AsteriskImageConfigTests(SimpleTestCase):
         for ignore_file in (gitignore, dockerignore):
             self.assertIn("asterisk/sounds/*", ignore_file)
             self.assertIn("!asterisk/sounds/.empty", ignore_file)
+
+    def test_web_image_generates_private_prompts_with_pinned_offline_tools(self):
+        dockerfile = (BASE_DIR / "Dockerfile").read_text(encoding="utf-8")
+        compose = (BASE_DIR / "compose.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("FROM python:3.12-slim-bookworm", dockerfile)
+        self.assertIn("espeak-ng=1.51+dfsg-10+deb12u2", dockerfile)
+        self.assertIn("sox=14.4.2+git20190427-3.5", dockerfile)
+        self.assertIn(
+            "ASTERISK_CUSTOM_SOUNDS_DIR: /var/lib/asterisk/sounds/frontporch",
+            compose,
+        )
+        self.assertIn(
+            ":/var/lib/asterisk/sounds/frontporch\n",
+            compose,
+        )

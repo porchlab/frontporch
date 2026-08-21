@@ -10,7 +10,9 @@ from directory.asterisk.ami import (
     AsteriskManagerError,
     AsteriskManagerSettings,
 )
+from directory.asterisk.apply import apply_asterisk_configuration
 from directory.asterisk.domain import AsteriskConfiguration
+from directory.asterisk.tts import TextToSpeechGenerationResult
 
 
 class AsteriskManagerClientTests(SimpleTestCase):
@@ -121,6 +123,36 @@ class AsteriskManagerClientTests(SimpleTestCase):
 
 
 class RenderAsteriskConfigReloadTests(SimpleTestCase):
+    @patch("directory.asterisk.apply.reload_asterisk")
+    @patch("directory.asterisk.apply.AsteriskConfigRenderer")
+    @patch("directory.asterisk.apply.TextToSpeechPromptGenerator")
+    @patch("directory.asterisk.apply.build_asterisk_configuration")
+    def test_apply_generates_prompts_before_config_and_reload(
+        self,
+        build_configuration,
+        generator_class,
+        renderer_class,
+        reload_asterisk,
+    ):
+        events = []
+        configuration = AsteriskConfiguration(endpoints=(), dialplan_rules=())
+        build_configuration.return_value = configuration
+        generator_class.return_value.generate.side_effect = lambda prompts: (
+            events.append("prompts")
+            or TextToSpeechGenerationResult((), ())
+        )
+        renderer_class.return_value.write_files.side_effect = (
+            lambda rendered_configuration, output_path: events.append("config") or ()
+        )
+        reload_asterisk.side_effect = lambda: events.append("reload") or ()
+
+        apply_asterisk_configuration(output_dir=self.tmp_path, reload=True)
+
+        self.assertEqual(events, ["prompts", "config", "reload"])
+        generator_class.return_value.generate.assert_called_once_with(
+            configuration.spoken_prompts
+        )
+
     @override_settings(
         ASTERISK_AMI_HOST="100.64.0.10",
         ASTERISK_AMI_PORT=5038,

@@ -63,6 +63,14 @@ class Parent(TimeStampedModel):
 class Child(TimeStampedModel):
     family = models.ForeignKey(Family, on_delete=models.CASCADE, related_name="children")
     name = models.CharField(max_length=200)
+    spoken_name = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text=(
+            "Optional pronunciation spelling used only for generated spoken menus. "
+            "Leave blank to speak the child's name."
+        ),
+    )
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -76,6 +84,10 @@ class Child(TimeStampedModel):
 
     def __str__(self):
         return f"{self.name} ({self.family})"
+
+    @property
+    def spoken_menu_name(self):
+        return self.spoken_name.strip() or self.name
 
 
 class ChildBlackoutPeriod(TimeStampedModel):

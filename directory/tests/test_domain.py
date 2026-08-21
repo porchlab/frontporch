@@ -33,6 +33,19 @@ class DirectoryDomainTests(TestCase):
         self.river_parent = Parent.objects.create(family=self.family_a, display_name="Mara")
         self.maple_parent = Parent.objects.create(family=self.family_b, display_name="Nico")
 
+    def test_child_spoken_menu_name_uses_optional_pronunciation_override(self):
+        self.assertEqual(self.alex.spoken_menu_name, "Alex")
+
+        self.alex.spoken_name = "AL-eks"
+
+        self.assertEqual(self.alex.name, "Alex")
+        self.assertEqual(self.alex.spoken_menu_name, "AL-eks")
+
+    def test_child_spoken_menu_name_ignores_whitespace_only_override(self):
+        self.alex.spoken_name = "   "
+
+        self.assertEqual(self.alex.spoken_menu_name, "Alex")
+
     def test_phone_number_normalization_uses_e164(self):
         number = ExternalPhoneNumber.objects.create(normalized_number="(212) 555-0100")
 

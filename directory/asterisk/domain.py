@@ -1,4 +1,7 @@
 from dataclasses import dataclass
+import hashlib
+import json
+
 import phonenumbers
 
 
@@ -6,6 +9,55 @@ import phonenumbers
 class BlackoutWindow:
     time_range: str
     days: str
+
+
+@dataclass(frozen=True)
+class TextToSpeechSettings:
+    engine_signature: str
+    voice: str
+    speed: int
+    pitch: int
+    amplitude: int
+    sample_rate: int = 8000
+    channels: int = 1
+    encoding: str = "mu-law"
+    dither: bool = False
+
+
+@dataclass(frozen=True)
+class SpokenPrompt:
+    text: str
+    settings: TextToSpeechSettings
+
+    @property
+    def cache_key(self):
+        payload = {
+            "amplitude": self.settings.amplitude,
+            "channels": self.settings.channels,
+            "dither": self.settings.dither,
+            "encoding": self.settings.encoding,
+            "engine_signature": self.settings.engine_signature,
+            "pitch": self.settings.pitch,
+            "sample_rate": self.settings.sample_rate,
+            "speed": self.settings.speed,
+            "text": self.text,
+            "voice": self.settings.voice,
+        }
+        serialized = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    @property
+    def sound_name(self):
+        return f"frontporch/tts/{self.cache_key}"
+
+    @property
+    def relative_path(self):
+        return f"tts/{self.cache_key}.ulaw"
 
 
 @dataclass(frozen=True)
@@ -121,6 +173,7 @@ class InboundLandlineShortcutRule:
     caller_endpoint: LandlineChildEndpoint
     digits: str
     target_endpoint: SipEndpoint | LandlineChildEndpoint
+    target_child_name: str = ""
 
     @property
     def caller_normalized_number(self):
@@ -187,6 +240,8 @@ class AsteriskConfiguration:
     inbound_landline_shortcut_rules: tuple[InboundLandlineShortcutRule, ...] = ()
     shortcut_rules: tuple[DialShortcutRule, ...] = ()
     public_inbound_numbers: tuple[PublicInboundNumber, ...] = ()
+    spoken_prompts: tuple[SpokenPrompt, ...] = ()
+    text_to_speech_settings: TextToSpeechSettings | None = None
 
 
 def caller_id_variants_for_number(normalized_number):

@@ -102,3 +102,39 @@ class AsteriskAutoReloadSignalTests(TransactionTestCase):
         shortcut.delete()
 
         apply.assert_called_once_with(reload=True)
+
+    @override_settings(ASTERISK_AUTO_APPLY_CONFIG=True)
+    @patch("directory.asterisk.autoreload.apply_asterisk_configuration")
+    def test_child_landline_change_applies_configuration_and_private_prompts(
+        self,
+        apply,
+    ):
+        with override_settings(ASTERISK_AUTO_APPLY_CONFIG=False):
+            family = Family.objects.create(name="Maple House")
+            parent = Parent.objects.create(family=family, display_name="Nico")
+            child = Child.objects.create(family=family, name="Rowan")
+            number = ExternalPhoneNumber.objects.create(
+                normalized_number="+12125550100"
+            )
+            landline = ChildLandline.objects.create(
+                child=child,
+                external_phone_number=number,
+                approved_by=parent,
+            )
+
+        landline.is_active = False
+        landline.save()
+
+        apply.assert_called_once_with(reload=True)
+
+    @override_settings(ASTERISK_AUTO_APPLY_CONFIG=True)
+    @patch("directory.asterisk.autoreload.apply_asterisk_configuration")
+    def test_child_spoken_name_change_applies_configuration_and_prompts(self, apply):
+        with override_settings(ASTERISK_AUTO_APPLY_CONFIG=False):
+            family = Family.objects.create(name="River House")
+            child = Child.objects.create(family=family, name="Alex")
+
+        child.spoken_name = "AL-eks"
+        child.save()
+
+        apply.assert_called_once_with(reload=True)

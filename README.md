@@ -69,6 +69,7 @@ The generated Asterisk configuration flow is:
 ```text
 Django models
 -> FrontPorch Asterisk domain objects
+-> cached private spoken prompts
 -> generated Asterisk configuration
 -> Asterisk include files
 -> optional Asterisk Manager Interface reload
@@ -203,11 +204,15 @@ FrontPorch can represent an existing household landline as a child endpoint with
 
 For now, landline setup is staff-managed in Django Admin. Staff links a child to a normalized external phone number, assigns or accepts a four-digit FrontPorch extension, and records the approving parent or guardian.
 
+Each child also has an optional staff-managed **spoken name**. This is a plain pronunciation spelling used only for generated spoken menus; it does not change the child's displayed name. For example, a displayed name of `Rowan` could use `ROH-wan` if the default voice needs help. Leave the field blank to speak the normal child name. Changing either the displayed name or spoken name triggers the normal configuration-apply workflow when automatic application is enabled.
+
 Grandparents and other ordinary external contacts are managed as family contacts. Adding a family contact normalizes the phone number, creates or reuses its four-digit FrontPorch extension, and allows the children in that family to communicate with that number. Optional one-digit dial shortcuts still require parent or guardian approval.
 
 FrontPorch devices call that child by dialing the child's FrontPorch extension. Asterisk routes the call through the SIP trunk to the landline number.
 
-A child using the landline calls the shared or family-assigned FrontPorch public number. The generated dialplan checks the landline caller ID and derives destinations from existing child-to-family approvals. A single permitted child destination rings directly. With multiple permitted children, the caller may dial an Admin-configured shortcut from `2` through `9` or an approved four-digit extension. Shortcuts are rechecked against current reciprocal permissions whenever configuration is rendered; stale Admin rows remain visible but are omitted from Asterisk. This selector remains silent until spoken prompt generation is added.
+A child using the landline calls the shared or family-assigned FrontPorch public number. The generated dialplan checks the landline caller ID and derives destinations from existing child-to-family approvals. A single permitted child destination rings directly without answering into a menu. With multiple permitted children, FrontPorch answers and announces each active, currently authorized Admin-configured shortcut from `2` through `9`, followed by the option to enter an approved four-digit extension. The caller may use either form. Invalid or timed-out input replays the menu once; a second failure plays the official goodbye prompt and disconnects.
+
+Shortcuts and spoken names are rechecked against current reciprocal permissions whenever configuration is rendered. Stale Admin rows remain visible but are omitted from both Asterisk routes and the spoken menu. Calls ring every active SIP device that shares the selected child's extension. The child's active external landline is used only when that child has no active SIP device.
 
 FrontPorch does not control calls the child places directly from that landline outside the FrontPorch dial-in flow.
 
@@ -238,9 +243,32 @@ docker compose up -d --build
 
 The FrontPorch Asterisk image downloads the official English Asterisk Core Sounds 1.6.1 μ-law package during the image build, verifies its pinned SHA-256 digest, and installs it under `/var/lib/asterisk/sounds/en` when the container starts. μ-law matches the preferred PCMU/G.711 codec used by FrontPorch phones and avoids unnecessary prompt transcoding.
 
-Deployment-private prompts belong in `ASTERISK_CUSTOM_SOUNDS_DIR`. Compose mounts only that directory at `/var/lib/asterisk/sounds/frontporch`, preserving the official prompts bundled with the image. The repository ignores everything in `asterisk/sounds/` except its placeholder, so child-name recordings and future TTS output are not committed or included in Docker build context.
+Deployment-private prompts belong in `ASTERISK_CUSTOM_SOUNDS_DIR`. Compose mounts only that directory at `/var/lib/asterisk/sounds/frontporch`, read-only in Asterisk and writable in the Django web service, preserving the official prompts bundled with the image. The repository ignores everything in `asterisk/sounds/` except its placeholder, so generated child-name audio is not committed or included in Docker build context.
 
 The official package is available from the [Asterisk sounds archive](https://downloads.asterisk.org/pub/telephony/sounds/). FrontPorch-specific prompt generation, including child names, is intentionally a separate step from installing the official sound library.
+
+FrontPorch generates those private prompts locally with the pinned [eSpeak NG](https://github.com/espeak-ng/espeak-ng) `en-us` voice and converts them with SoX to raw 8 kHz, mono μ-law audio matching the preferred PCMU codec. SoX dithering is disabled so identical inputs produce identical audio bytes. No prompt text or audio is sent to an external service. eSpeak NG is compact relative to neural TTS but sounds more synthetic; the pinned Debian tools and required libraries add about 37 MB to the web image. It is a GPL-3.0-or-later executable invoked by the Apache-2.0 FrontPorch application; it is not linked into the application. SoX and its Debian packaging retain their own licenses.
+
+The web image includes the required pinned tools. For a host-side render outside Docker, install compatible `espeak-ng` and `sox` executables first. The generation settings are explicit deployment inputs:
+
+```dotenv
+ASTERISK_CUSTOM_SOUNDS_DIR=./asterisk/sounds
+ASTERISK_TTS_ENGINE_SIGNATURE=espeak-ng-1.51+dfsg-10+deb12u2_sox-14.4.2+git20190427-3.5
+ASTERISK_TTS_VOICE=en-us
+ASTERISK_TTS_SPEED=145
+ASTERISK_TTS_PITCH=50
+ASTERISK_TTS_AMPLITUDE=100
+```
+
+Each prompt filename is a SHA-256 cache key over its text, voice, engine signature, generation settings, and output format. Rendering generates a prompt only when that exact nonempty cache file is absent. Changing the child's name or spoken-name override, voice, engine signature, speed, pitch, or amplitude creates a new private `.ulaw` file under `ASTERISK_CUSTOM_SOUNDS_DIR/tts/`; unchanged prompts are reused across every shortcut that speaks the same text. Old cache entries are deliberately not deleted automatically because the custom sounds directory is deployment-owned. Operators should treat the entire directory as private child data, exclude it from public repositories and images, restrict access, and remove retired cache files according to the deployment's data-retention policy.
+
+`render_asterisk_config` generates all required prompts before writing configuration. With `--reload`, AMI reload happens only after both prompt generation and configuration writes succeed:
+
+```bash
+docker compose run --rm web python manage.py render_asterisk_config --reload
+```
+
+The generated menu reuses official Core Sounds for digits, retry guidance, and goodbye. Parent audio uploads, voice selection in the parent UI, and parent-facing prompt management remain out of scope.
 
 Run Django commands through the web service:
 

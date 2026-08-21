@@ -12,6 +12,7 @@ from directory.asterisk.ami import (
 )
 from directory.asterisk.builder import build_asterisk_configuration
 from directory.asterisk.renderer import AsteriskConfigRenderer
+from directory.asterisk.tts import TextToSpeechPromptGenerator
 
 
 ASTERISK_RELOAD_COMMANDS = ("module reload res_pjsip.so", "dialplan reload")
@@ -20,12 +21,17 @@ ASTERISK_RELOAD_COMMANDS = ("module reload res_pjsip.so", "dialplan reload")
 @dataclass(frozen=True)
 class AsteriskApplyResult:
     written_files: tuple[Path, ...]
+    generated_prompt_files: tuple[Path, ...] = ()
+    cached_prompt_files: tuple[Path, ...] = ()
     reload_results: tuple = ()
 
 
 def apply_asterisk_configuration(output_dir=None, reload=False):
     output_path = _asterisk_generated_config_dir(output_dir)
     configuration = build_asterisk_configuration()
+    prompt_result = TextToSpeechPromptGenerator().generate(
+        configuration.spoken_prompts
+    )
     written_files = AsteriskConfigRenderer().write_files(configuration, output_path)
 
     reload_results = ()
@@ -34,6 +40,8 @@ def apply_asterisk_configuration(output_dir=None, reload=False):
 
     return AsteriskApplyResult(
         written_files=written_files,
+        generated_prompt_files=prompt_result.generated_files,
+        cached_prompt_files=prompt_result.cached_files,
         reload_results=reload_results,
     )
 

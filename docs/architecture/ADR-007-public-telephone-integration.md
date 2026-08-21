@@ -50,7 +50,8 @@ Trusted callers are recognized by normalized phone number.
 Routing rules:
 
 - If the caller is approved for exactly one child, route directly to that child.
-- If a recognized child landline is approved for multiple children, accept an Admin-configured shortcut from `2` through `9` or an approved four-digit extension. A spoken menu will enumerate the configured shortcuts once prompt generation is added.
+- If a recognized child landline is approved for multiple children, answer with a spoken menu that enumerates only active, currently authorized Admin-configured shortcuts from `2` through `9`, then offers an approved four-digit extension as an alternative.
+- Replay the menu once after invalid input or timeout. After the second invalid input or timeout, play goodbye and disconnect.
 - Unknown callers may be routed to parents, routed to voicemail, or rejected, depending on future policy.
 
 External contacts are globally identified by normalized E.164 phone numbers.
@@ -98,6 +99,8 @@ Unknown callers never reach children directly.
 
 Public connectivity should expose as little attack surface as practical.
 
+Spoken child names are deployment-private data. FrontPorch generates them locally and offline into the private custom sounds directory; prompt text and audio are never sent to a hosted TTS provider. Generated audio and deployment-specific dialplan files do not belong in the public repository.
+
 ## Consequences
 
 This decision intentionally favors simplicity for the first production version while preserving flexibility for future evolution.
@@ -116,6 +119,8 @@ Tradeoffs:
 - one shared public number initially
 - parent mobile calls depend on the SIP provider
 - public telephone integration remains an external dependency
+- the compact local voice is less natural than a larger neural TTS model
+- generated child-name audio must be protected and retained or deleted as private deployment data
 
 ## Future Considerations
 

@@ -919,6 +919,8 @@ class AsteriskConfigurationBuilderTests(TestCase):
         )
         self.approve_child_for_family(self.luca, self.river)
         self.approve_child_for_family(self.alex, self.maple)
+        self.alex.spoken_name = "AL-eks"
+        self.alex.save()
         ChildLandlineDialShortcut.objects.create(
             source_landline=source,
             digits="2",
@@ -945,6 +947,22 @@ class AsteriskConfigurationBuilderTests(TestCase):
             {
                 rule.public_phone_number_id
                 for rule in first.inbound_landline_shortcut_rules
+            },
+        )
+        self.assertEqual(
+            {
+                rule.target_child_name
+                for rule in first.inbound_landline_shortcut_rules
+            },
+            {"AL-eks"},
+        )
+        self.assertEqual(
+            {prompt.text for prompt in first.spoken_prompts},
+            {
+                "AL-eks",
+                "Dial",
+                "for",
+                "You may also enter an approved four digit extension.",
             },
         )
 
@@ -1077,6 +1095,7 @@ class AsteriskConfigurationBuilderTests(TestCase):
 
         self.assertTrue(ChildLandlineDialShortcut.objects.filter(pk=shortcut.pk).exists())
         self.assertEqual(configuration.inbound_landline_shortcut_rules, ())
+        self.assertEqual(configuration.spoken_prompts, ())
 
     def test_inactive_child_landline_shortcut_is_omitted(self):
         public_number = PublicPhoneNumber.objects.get(normalized_number="+12025550199")

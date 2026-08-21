@@ -23,6 +23,13 @@ from directory.asterisk.renderer import (
     PJSIP_FILENAME,
     AsteriskConfigRenderer,
 )
+from directory.asterisk.tts import (
+    MENU_DIAL_TEXT,
+    MENU_EXTENSION_TEXT,
+    MENU_FOR_TEXT,
+    spoken_prompt,
+    text_to_speech_settings,
+)
 
 
 class AsteriskConfigRendererTests(SimpleTestCase):
@@ -508,6 +515,12 @@ class AsteriskConfigRendererTests(SimpleTestCase):
                     "2",
                     rowan_softphone,
                 ),
+                InboundLandlineShortcutRule(
+                    1,
+                    self.luca_landline,
+                    "3",
+                    quinn_phone,
+                ),
             ),
             public_inbound_numbers=(
                 PublicInboundNumber(
@@ -529,8 +542,80 @@ class AsteriskConfigRendererTests(SimpleTestCase):
             content,
         )
         self.assertIn("exten => 4663,1,Dial(PJSIP/quinn-phone,30)", content)
-        self.assertNotIn("exten => 3,1,Dial(", content)
-        self.assertIn("exten => _X!,1,Hangup(21)", content)
+        self.assertIn("exten => 3,1,Dial(PJSIP/quinn-phone,30)", content)
+
+        prompt_settings = text_to_speech_settings()
+        expected_rowan_menu = "&".join(
+            (
+                spoken_prompt(MENU_DIAL_TEXT, prompt_settings).sound_name,
+                "digits/2",
+                spoken_prompt(MENU_FOR_TEXT, prompt_settings).sound_name,
+                spoken_prompt("Rowan", prompt_settings).sound_name,
+            )
+        )
+        expected_quinn_menu = "&".join(
+            (
+                spoken_prompt(MENU_DIAL_TEXT, prompt_settings).sound_name,
+                "digits/3",
+                spoken_prompt(MENU_FOR_TEXT, prompt_settings).sound_name,
+                spoken_prompt("Quinn", prompt_settings).sound_name,
+            )
+        )
+        expected_extension_prompt = spoken_prompt(
+            MENU_EXTENSION_TEXT,
+            prompt_settings,
+        ).sound_name
+        self.assertIn(
+            f" same => n(menu),Background({expected_rowan_menu})",
+            content,
+        )
+        self.assertIn(f" same => n,Background({expected_quinn_menu})", content)
+        self.assertIn(f" same => n,Background({expected_extension_prompt})", content)
+        self.assertLess(
+            content.index(expected_rowan_menu),
+            content.index(expected_quinn_menu),
+        )
+        self.assertLess(
+            content.index(expected_quinn_menu),
+            content.index(expected_extension_prompt),
+        )
+
+        context = self.context_content(content, "frontporch-landline-inbound-1-1")
+        self.assertNotIn("exten => 4,1,Dial(", context)
+        self.assertNotIn("exten => _X!,1", context)
+
+    def test_landline_spoken_menu_replays_once_then_says_goodbye(self):
+        configuration = AsteriskConfiguration(
+            endpoints=(self.alex_endpoint, self.emma_endpoint),
+            landline_endpoints=(self.luca_landline,),
+            dialplan_rules=(),
+            inbound_landline_caller_rules=(
+                InboundLandlineCallerRule(1, self.luca_landline, self.alex_endpoint),
+                InboundLandlineCallerRule(1, self.luca_landline, self.emma_endpoint),
+            ),
+            public_inbound_numbers=(
+                PublicInboundNumber(1, "+12025550199", "Example shared FrontPorch DID"),
+            ),
+        )
+
+        content = self.renderer.render_extensions(configuration)
+        context = self.context_content(content, "frontporch-landline-inbound-1-1")
+
+        self.assertIn(" same => n,Set(FRONTPORCH_MENU_ATTEMPT=1)", context)
+        self.assertIn(" same => n,WaitExten(10)", context)
+        self.assertIn(
+            'exten => i,1,GotoIf($["${FRONTPORCH_MENU_ATTEMPT}" = "1"]?retry,1:goodbye,1)',
+            context,
+        )
+        self.assertIn(
+            'exten => t,1,GotoIf($["${FRONTPORCH_MENU_ATTEMPT}" = "1"]?retry,1:goodbye,1)',
+            context,
+        )
+        self.assertIn("exten => retry,1,Set(FRONTPORCH_MENU_ATTEMPT=2)", context)
+        self.assertIn(" same => n,Playback(please-try-again)", context)
+        self.assertIn(" same => n,Goto(s,menu)", context)
+        self.assertIn("exten => goodbye,1,Playback(goodbye)", context)
+        self.assertIn(" same => n,Hangup(21)", context)
 
     def test_landline_caller_with_one_target_routes_directly(self):
         configuration = AsteriskConfiguration(
@@ -573,6 +658,54 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         )
         self.assertNotIn("[frontporch-landline-inbound-1-1]", content)
         self.assertNotIn("exten => 2,1,Dial(", content)
+
+    def test_landline_menu_uses_external_child_landline_fallback(self):
+        quinn_landline = LandlineChildEndpoint(
+            child_landline_id=202,
+            owner_type="child",
+            owner_id=4,
+            owner_display_name="Quinn",
+            family_id=1,
+            extension="4663",
+            normalized_number="+13105550100",
+            child_id=4,
+        )
+        configuration = AsteriskConfiguration(
+            endpoints=(self.alex_endpoint,),
+            landline_endpoints=(self.luca_landline, quinn_landline),
+            dialplan_rules=(),
+            outbound_caller_id="2025550199",
+            inbound_landline_caller_rules=(
+                InboundLandlineCallerRule(
+                    1,
+                    self.luca_landline,
+                    self.alex_endpoint,
+                ),
+                InboundLandlineCallerRule(1, self.luca_landline, quinn_landline),
+            ),
+            inbound_landline_shortcut_rules=(
+                InboundLandlineShortcutRule(
+                    1,
+                    self.luca_landline,
+                    "3",
+                    quinn_landline,
+                    "Quinn",
+                ),
+            ),
+            public_inbound_numbers=(
+                PublicInboundNumber(1, "+12025550199", "Example shared FrontPorch DID"),
+            ),
+        )
+
+        content = self.renderer.render_extensions(configuration)
+        context = self.context_content(content, "frontporch-landline-inbound-1-1")
+
+        self.assertIn("exten => 3,1,Set(CALLERID(num)=2025550199)", context)
+        self.assertIn(
+            " same => n,Dial(PJSIP/13105550100@voipms-endpoint,30)",
+            context,
+        )
+        self.assertIn("exten => 4663,1,Set(CALLERID(num)=2025550199)", context)
 
     def test_landline_caller_rings_shared_extension_devices_directly(self):
         alex_softphone = SipEndpoint(
@@ -781,3 +914,7 @@ class AsteriskConfigRendererTests(SimpleTestCase):
             modes = [stat.S_IMODE(path.stat().st_mode) for path in paths]
 
         self.assertEqual(modes, [0o644, 0o644])
+
+    def context_content(self, content, context_name):
+        context = content.split(f"[{context_name}]\n", 1)[1]
+        return context.split("\n[", 1)[0]

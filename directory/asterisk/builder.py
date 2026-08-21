@@ -13,6 +13,13 @@ from .domain import (
     PublicInboundNumber,
     SipEndpoint,
 )
+from .tts import (
+    MENU_DIAL_TEXT,
+    MENU_EXTENSION_TEXT,
+    MENU_FOR_TEXT,
+    spoken_prompt,
+    text_to_speech_settings,
+)
 from directory.models import (
     AllowedChildFamilyRelationship,
     ChildBlackoutPeriod,
@@ -403,6 +410,7 @@ def build_asterisk_configuration():
                     caller_endpoint=caller,
                     digits=shortcut.digits,
                     target_endpoint=target,
+                    target_child_name=shortcut.target_child.spoken_menu_name,
                 )
                 for target in targets
             )
@@ -416,6 +424,34 @@ def build_asterisk_configuration():
                 rule.target_endpoint.extension,
                 _endpoint_sort_identity(rule.target_endpoint),
             ),
+        )
+    )
+
+    tts_settings = text_to_speech_settings()
+    menu_keys = {
+        key
+        for key, child_ids in authorized_inbound_children_by_source_and_number.items()
+        if len(child_ids) > 1
+    }
+    prompt_texts = set()
+    if menu_keys:
+        prompt_texts.add(MENU_EXTENSION_TEXT)
+    shortcut_names = {
+        rule.target_child_name
+        for rule in inbound_landline_shortcut_rules
+        if (
+            rule.caller_endpoint.child_landline_id,
+            rule.public_phone_number_id,
+        )
+        in menu_keys
+    }
+    if shortcut_names:
+        prompt_texts.update((MENU_DIAL_TEXT, MENU_FOR_TEXT))
+        prompt_texts.update(shortcut_names)
+    spoken_prompts = tuple(
+        sorted(
+            (spoken_prompt(text, tts_settings) for text in prompt_texts),
+            key=lambda prompt: prompt.cache_key,
         )
     )
 
@@ -497,6 +533,8 @@ def build_asterisk_configuration():
         inbound_external_caller_rules=inbound_external_caller_rules,
         inbound_landline_caller_rules=inbound_landline_caller_rules,
         inbound_landline_shortcut_rules=inbound_landline_shortcut_rules,
+        spoken_prompts=spoken_prompts,
+        text_to_speech_settings=tts_settings,
         shortcut_rules=tuple(shortcut_rules),
         dialplan_rules=tuple(
             sorted(

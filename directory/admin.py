@@ -36,9 +36,9 @@ class ParentAdmin(admin.ModelAdmin):
 
 @admin.register(Child)
 class ChildAdmin(admin.ModelAdmin):
-    list_display = ("name", "family", "created_at")
+    list_display = ("name", "spoken_name", "family", "created_at")
     list_filter = ("family",)
-    search_fields = ("name", "family__name", "notes")
+    search_fields = ("name", "spoken_name", "family__name", "notes")
     ordering = ("family__name", "name")
 
 
