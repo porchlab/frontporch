@@ -12,7 +12,7 @@ RUN set -eux; \
     printf '%s  %s\n' "${archive_sha256}" "/tmp/${archive}" \
         | sha256sum --check --strict; \
     mkdir -p /opt/frontporch/asterisk-sounds/en; \
-    tar --extract --gzip \
+    tar --extract --gzip --no-same-permissions \
         --file "/tmp/${archive}" \
         --directory /opt/frontporch/asterisk-sounds/en; \
     chown -R asterisk:asterisk /opt/frontporch/asterisk-sounds; \

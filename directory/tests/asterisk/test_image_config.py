@@ -20,6 +20,7 @@ class AsteriskImageConfigTests(SimpleTestCase):
             dockerfile,
         )
         self.assertIn("sha256sum --check --strict", dockerfile)
+        self.assertIn("tar --extract --gzip --no-same-permissions", dockerfile)
         self.assertIn("/opt/frontporch/asterisk-sounds/en", dockerfile)
         self.assertIn(
             'ENTRYPOINT ["/usr/local/bin/frontporch-core-sounds-entrypoint.sh"]',
