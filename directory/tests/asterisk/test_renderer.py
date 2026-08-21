@@ -92,7 +92,7 @@ class AsteriskConfigRendererTests(SimpleTestCase):
             shortcut_rules=(
                 DialShortcutRule(
                     source_endpoint=self.alex_endpoint,
-                    digits="2",
+                    digits="1",
                     target_endpoint=self.emma_endpoint,
                 ),
                 DialShortcutRule(
@@ -160,7 +160,7 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         self.assertIn("[frontporch-alex]", content)
         self.assertIn("include => frontporch-diagnostics", content)
         self.assertIn("exten => 100,1,Goto(frontporch-diagnostics,100,1)", content)
-        self.assertIn("exten => 2,1,Dial(PJSIP/emma,30)", content)
+        self.assertIn("exten => 1,1,Dial(PJSIP/emma,30)", content)
         self.assertIn("exten => 102,1,Dial(PJSIP/emma,30)", content)
         self.assertIn("exten => 2222,1,Dial(PJSIP/12125550100@voipms-endpoint,30)", content)
         self.assertIn("exten => 4,1,Dial(PJSIP/16465550100@voipms-endpoint,30)", content)

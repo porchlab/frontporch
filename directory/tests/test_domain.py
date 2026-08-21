@@ -276,14 +276,14 @@ class DirectoryDomainTests(TestCase):
                 approved_by=self.river_parent,
             )
 
-    def test_child_landline_shortcut_accepts_digits_two_through_nine(self):
+    def test_child_landline_shortcut_accepts_digits_one_through_nine(self):
         source = self._create_landline(self.alex, self.river_parent)
         target = Child.objects.create(family=self.family_a, name="Rowan")
         self._create_child_device(target, "3552", "rowan")
 
         shortcut = ChildLandlineDialShortcut.objects.create(
             source_landline=source,
-            digits="2",
+            digits="1",
             target_child=target,
             approved_by=self.river_parent,
             label="Rowan",
@@ -292,7 +292,7 @@ class DirectoryDomainTests(TestCase):
         self.assertEqual(shortcut.target_child, target)
         invalid = ChildLandlineDialShortcut(
             source_landline=source,
-            digits="1",
+            digits="0",
             target_child=target,
             approved_by=self.river_parent,
         )
@@ -621,7 +621,7 @@ class DirectoryDomainTests(TestCase):
         self.assertEqual(blackout.asterisk_days, "sat-sun")
         self.assertEqual(blackout.asterisk_time_range, "22:00-23:59")
 
-    def test_dial_shortcut_digits_are_limited_to_two_through_nine(self):
+    def test_dial_shortcut_digits_are_limited_to_one_through_nine(self):
         device = Device.objects.create(
             assigned_child=self.alex,
             friendly_name="Alex bedroom phone",
@@ -637,10 +637,20 @@ class DirectoryDomainTests(TestCase):
             sip_secret="secret-m",
         )
 
-        with self.assertRaises(ValidationError):
+        shortcut = DialShortcut.objects.create(
+            source_device=device,
+            digits="1",
+            internal_target_device=target,
+        )
+
+        self.assertEqual(shortcut.digits, "1")
+        with self.assertRaisesMessage(
+            ValidationError,
+            "Shortcut digits must be one of 1 through 9.",
+        ):
             DialShortcut.objects.create(
                 source_device=device,
-                digits="1",
+                digits="0",
                 internal_target_device=target,
             )
 

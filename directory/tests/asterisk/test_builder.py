@@ -576,7 +576,7 @@ class AsteriskConfigurationBuilderTests(TestCase):
     def test_shortcut_rules_are_scoped_to_source_device(self):
         DialShortcut.objects.create(
             source_device=self.alex_device,
-            digits="2",
+            digits="1",
             internal_target_device=self.river_parent_device,
             approved_by=self.river_parent,
         )
@@ -585,7 +585,7 @@ class AsteriskConfigurationBuilderTests(TestCase):
 
         self.assertEqual(len(configuration.shortcut_rules), 1)
         self.assertEqual(configuration.shortcut_rules[0].source_endpoint.extension, "101")
-        self.assertEqual(configuration.shortcut_rules[0].digits, "2")
+        self.assertEqual(configuration.shortcut_rules[0].digits, "1")
         self.assertEqual(
             configuration.shortcut_rules[0].target_endpoint.extension,
             "201",

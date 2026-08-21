@@ -818,8 +818,8 @@ class DialShortcut(TimeStampedModel):
 
     def clean(self):
         errors = {}
-        if self.digits not in {"2", "3", "4", "5", "6", "7", "8", "9"}:
-            errors["digits"] = "Shortcut digits must be one of 2 through 9."
+        if self.digits not in {"1", "2", "3", "4", "5", "6", "7", "8", "9"}:
+            errors["digits"] = "Shortcut digits must be one of 1 through 9."
 
         target_count = sum(
             target is not None
@@ -919,8 +919,8 @@ class ChildLandlineDialShortcut(TimeStampedModel):
 
     def clean(self):
         errors = {}
-        if self.digits not in {"2", "3", "4", "5", "6", "7", "8", "9"}:
-            errors["digits"] = "Shortcut digits must be one of 2 through 9."
+        if self.digits not in {"1", "2", "3", "4", "5", "6", "7", "8", "9"}:
+            errors["digits"] = "Shortcut digits must be one of 1 through 9."
 
         if self.source_landline_id:
             if self.is_active and not self.source_landline.is_active:

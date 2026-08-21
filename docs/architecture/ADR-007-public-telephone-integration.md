@@ -50,7 +50,7 @@ Trusted callers are recognized by normalized phone number.
 Routing rules:
 
 - If the caller is approved for exactly one child, route directly to that child.
-- If a recognized child landline is approved for multiple children, answer with a spoken menu that enumerates only active, currently authorized Admin-configured shortcuts from `2` through `9`, then offers an approved four-digit extension as an alternative.
+- If a recognized child landline is approved for multiple children, answer with a spoken menu that enumerates only active, currently authorized Admin-configured shortcuts from `1` through `9`, then offers an approved four-digit extension as an alternative.
 - Replay the menu once after invalid input or timeout. After the second invalid input or timeout, play goodbye and disconnect.
 - Unknown callers may be routed to parents, routed to voicemail, or rejected, depending on future policy.
 

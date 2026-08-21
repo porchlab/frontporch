@@ -31,7 +31,7 @@ FrontPorch will model a child-owned landline as a child participant with:
 
 The landline does not receive a SIP endpoint, SIP credentials, AOR, or device registration.
 
-Calls from FrontPorch devices to the landline child use the existing SIP trunk outbound path. Calls from the landline child into FrontPorch use caller ID on the shared or family-assigned public number. One permitted child rings directly without entering a menu. Multiple permitted children enter a restricted spoken selector that accepts an Admin-configured digit from `2` through `9` or an approved four-digit extension.
+Calls from FrontPorch devices to the landline child use the existing SIP trunk outbound path. Calls from the landline child into FrontPorch use caller ID on the shared or family-assigned public number. One permitted child rings directly without entering a menu. Multiple permitted children enter a restricted spoken selector that accepts an Admin-configured digit from `1` through `9` or an approved four-digit extension.
 
 The restricted selector announces each active, currently authorized shortcut as “Dial [digit] for [child name],” then tells the caller that an approved four-digit extension may be entered. Invalid or timed-out input replays the complete menu once. The second invalid input or timeout plays goodbye and disconnects.
 
