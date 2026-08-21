@@ -166,7 +166,7 @@ class AsteriskConfigRenderer:
         if outbound_caller_id:
             outbound_setup.append(f"Set(CALLERID(num)={outbound_caller_id})")
 
-        dial_options = ",r" if generate_ringback else ""
+        dial_options = ",r(ring)" if generate_ringback else ""
         applications = blackout_checks + outbound_setup + [
             f"Dial({dial_target},30{dial_options})",
             "Hangup()",

@@ -9,6 +9,16 @@ ASTERISK_ETC = Path(settings.BASE_DIR) / "asterisk" / "etc"
 
 
 class VoipMsStaticConfigTests(SimpleTestCase):
+    def test_north_american_tone_zone_supports_in_band_ringback(self):
+        indications = (ASTERISK_ETC / "indications.conf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("[general]", indications)
+        self.assertIn("country=us", indications)
+        self.assertIn("[us]", indications)
+        self.assertIn("ring = 440+480/2000,0/4000", indications)
+
     def test_voipms_include_hooks_are_present(self):
         pjsip = (ASTERISK_ETC / "pjsip.conf").read_text(encoding="utf-8")
         extensions = (ASTERISK_ETC / "extensions.conf").read_text(encoding="utf-8")
