@@ -506,13 +506,13 @@ class AsteriskConfigRendererTests(SimpleTestCase):
                 InboundLandlineShortcutRule(
                     1,
                     self.luca_landline,
-                    "2",
+                    "1",
                     rowan_phone,
                 ),
                 InboundLandlineShortcutRule(
                     1,
                     self.luca_landline,
-                    "2",
+                    "1",
                     rowan_softphone,
                 ),
                 InboundLandlineShortcutRule(
@@ -534,7 +534,7 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         content = self.renderer.render_extensions(configuration)
 
         self.assertIn(
-            "exten => 2,1,Dial(PJSIP/rowan-phone&PJSIP/rowan-softphone,30)",
+            "exten => 1,1,Dial(PJSIP/rowan-phone&PJSIP/rowan-softphone,30)",
             content,
         )
         self.assertIn(
@@ -548,7 +548,7 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         expected_rowan_menu = "&".join(
             (
                 spoken_prompt(MENU_DIAL_TEXT, prompt_settings).sound_name,
-                "digits/2",
+                "digits/1",
                 spoken_prompt(MENU_FOR_TEXT, prompt_settings).sound_name,
                 spoken_prompt("Rowan", prompt_settings).sound_name,
             )

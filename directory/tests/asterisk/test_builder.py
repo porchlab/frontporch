@@ -923,7 +923,7 @@ class AsteriskConfigurationBuilderTests(TestCase):
         self.alex.save()
         ChildLandlineDialShortcut.objects.create(
             source_landline=source,
-            digits="2",
+            digits="1",
             target_child=self.alex,
             approved_by=self.maple_parent,
         )
@@ -934,8 +934,8 @@ class AsteriskConfigurationBuilderTests(TestCase):
         self.assertEqual(
             self.inbound_shortcut_tuples(first),
             {
-                (shared_number.id, "+12125550100", "2", "101", self.alex_device.id),
-                (maple_number.id, "+12125550100", "2", "101", self.alex_device.id),
+                (shared_number.id, "+12125550100", "1", "101", self.alex_device.id),
+                (maple_number.id, "+12125550100", "1", "101", self.alex_device.id),
             },
         )
         self.assertEqual(

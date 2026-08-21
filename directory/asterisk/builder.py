@@ -380,7 +380,7 @@ def build_asterisk_configuration():
     for shortcut in (
         ChildLandlineDialShortcut.objects.filter(
             is_active=True,
-            digits__in=("2", "3", "4", "5", "6", "7", "8", "9"),
+            digits__in=("1", "2", "3", "4", "5", "6", "7", "8", "9"),
         )
         .select_related("source_landline", "target_child", "approved_by")
         .order_by("source_landline_id", "digits", "target_child_id", "id")
