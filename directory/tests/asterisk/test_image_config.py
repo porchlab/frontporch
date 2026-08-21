@@ -28,6 +28,10 @@ class AsteriskImageConfigTests(SimpleTestCase):
             'ENTRYPOINT ["/usr/local/bin/frontporch-core-sounds-entrypoint.sh"]',
             dockerfile,
         )
+        self.assertIn(
+            'CMD ["/usr/sbin/asterisk", "-vvvdddf", "-T", "-W", "-U", "asterisk", "-p"]',
+            dockerfile,
+        )
 
         entrypoint = (
             BASE_DIR / "asterisk" / "core-sounds-entrypoint.sh"

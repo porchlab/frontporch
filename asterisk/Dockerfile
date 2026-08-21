@@ -26,3 +26,4 @@ COPY asterisk/core-sounds-entrypoint.sh /usr/local/bin/frontporch-core-sounds-en
 RUN chmod 0755 /usr/local/bin/frontporch-core-sounds-entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/frontporch-core-sounds-entrypoint.sh"]
+CMD ["/usr/sbin/asterisk", "-vvvdddf", "-T", "-W", "-U", "asterisk", "-p"]
