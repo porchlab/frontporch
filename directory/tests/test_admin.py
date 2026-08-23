@@ -124,6 +124,45 @@ class DirectoryAdminTests(TestCase):
         self.assertEqual(len(group.dial_extension), 4)
         self.assertEqual(group.ring_timeout_seconds, 25)
 
+    def test_admin_can_create_dial_shortcut_to_conference_group(self):
+        child_device = Device.objects.create(
+            assigned_child=self.child,
+            friendly_name="Alex bedroom phone",
+            sip_extension="101",
+            sip_username="alex-101",
+            sip_secret="secret-alex",
+        )
+        group = ConferenceGroup.objects.create(
+            name="Friends",
+            approved_by=self.parent,
+            calling_enabled=True,
+            dial_extension="4444",
+        )
+        group.members.set([self.child, self.target_child])
+
+        response = self.client.post(
+            reverse("admin:directory_dialshortcut_add"),
+            {
+                "source_device": child_device.id,
+                "digits": "3",
+                "internal_target_device": "",
+                "external_target_extension": "",
+                "parent_phone_target": "",
+                "child_landline_target": "",
+                "conference_group_target": group.id,
+                "label": "Friends",
+                "approved_by": self.parent.id,
+                "is_active": "on",
+                "notes": "",
+                "_save": "Save",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        shortcut = DialShortcut.objects.get(source_device=child_device, digits="3")
+        self.assertEqual(shortcut.conference_group_target, group)
+
     def assert_admin_can_create_dial_shortcut(self, submit_name):
         response = self.client.post(
             reverse("admin:directory_dialshortcut_add"),
@@ -134,6 +173,7 @@ class DirectoryAdminTests(TestCase):
                 "external_target_extension": "",
                 "parent_phone_target": "",
                 "child_landline_target": self.landline.id,
+                "conference_group_target": "",
                 "label": "Alex landline",
                 "approved_by": self.parent.id,
                 "is_active": "on",

@@ -130,6 +130,12 @@ class AsteriskConfigRenderer:
 
     def _render_shortcut_rules(self, rules, outbound_caller_id=""):
         rule = rules[0]
+        if rule.is_conference:
+            return self._render_conference_entry(
+                rule.conference_route,
+                rule.source_endpoint,
+                dialed_extension=rule.digits,
+            )
         if rule.is_external:
             dial_target = f"PJSIP/{rule.outbound_number}@voipms-endpoint"
             target_endpoint = None
@@ -229,14 +235,21 @@ class AsteriskConfigRenderer:
             "",
         ]
 
-    def _render_conference_entry(self, conference, source_endpoint):
+    def _render_conference_entry(
+        self,
+        conference,
+        source_endpoint,
+        dialed_extension=None,
+    ):
         member = conference.member_for_child(source_endpoint.child_id)
         if member is None:
             return []
 
+        dialed_extension = dialed_extension or conference.dial_extension
+
         lines = [
             (
-                f"exten => {conference.dial_extension},1,"
+                f"exten => {dialed_extension},1,"
                 f"NoOp(Joining FrontPorch conference {conference.name})"
             ),
         ]

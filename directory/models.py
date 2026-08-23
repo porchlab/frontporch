@@ -803,6 +803,13 @@ class DialShortcut(TimeStampedModel):
         null=True,
         blank=True,
     )
+    conference_group_target = models.ForeignKey(
+        "ConferenceGroup",
+        on_delete=models.CASCADE,
+        related_name="targeted_by_shortcuts",
+        null=True,
+        blank=True,
+    )
     label = models.CharField(max_length=200, blank=True)
     approved_by = models.ForeignKey(
         Parent,
@@ -828,24 +835,35 @@ class DialShortcut(TimeStampedModel):
                         & models.Q(external_target_extension__isnull=True)
                         & models.Q(parent_phone_target__isnull=True)
                         & models.Q(child_landline_target__isnull=True)
+                        & models.Q(conference_group_target__isnull=True)
                     )
                     | (
                         models.Q(internal_target_device__isnull=True)
                         & models.Q(external_target_extension__isnull=False)
                         & models.Q(parent_phone_target__isnull=True)
                         & models.Q(child_landline_target__isnull=True)
+                        & models.Q(conference_group_target__isnull=True)
                     )
                     | (
                         models.Q(internal_target_device__isnull=True)
                         & models.Q(external_target_extension__isnull=True)
                         & models.Q(parent_phone_target__isnull=False)
                         & models.Q(child_landline_target__isnull=True)
+                        & models.Q(conference_group_target__isnull=True)
                     )
                     | (
                         models.Q(internal_target_device__isnull=True)
                         & models.Q(external_target_extension__isnull=True)
                         & models.Q(parent_phone_target__isnull=True)
                         & models.Q(child_landline_target__isnull=False)
+                        & models.Q(conference_group_target__isnull=True)
+                    )
+                    | (
+                        models.Q(internal_target_device__isnull=True)
+                        & models.Q(external_target_extension__isnull=True)
+                        & models.Q(parent_phone_target__isnull=True)
+                        & models.Q(child_landline_target__isnull=True)
+                        & models.Q(conference_group_target__isnull=False)
                     )
                 ),
                 name="dial_shortcut_has_exactly_one_target",
@@ -867,6 +885,7 @@ class DialShortcut(TimeStampedModel):
                 self.external_target_extension,
                 self.parent_phone_target,
                 self.child_landline_target,
+                self.conference_group_target,
             )
         )
         if target_count != 1:
@@ -906,6 +925,24 @@ class DialShortcut(TimeStampedModel):
                 errors[
                     "child_landline_target"
                 ] = "Source device is not allowed to call this child landline."
+            if self.conference_group_target_id:
+                group = self.conference_group_target
+                source_child_id = self.source_device.assigned_child_id
+                if (
+                    not group.is_active
+                    or not group.calling_enabled
+                    or not group.dial_extension
+                    or group.members.count() < 2
+                ):
+                    errors["conference_group_target"] = (
+                        "Conference group must be active and dialable."
+                    )
+                elif not source_child_id or not group.members.filter(
+                    id=source_child_id
+                ).exists():
+                    errors["conference_group_target"] = (
+                        "Source device's child must be a member of this conference group."
+                    )
 
         if errors:
             raise ValidationError(errors)

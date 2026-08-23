@@ -263,6 +263,8 @@ class DialShortcutAdmin(admin.ModelAdmin):
         "child_landline_target__child__family__name",
         "child_landline_target__dial_extension",
         "child_landline_target__external_phone_number__normalized_number",
+        "conference_group_target__name",
+        "conference_group_target__dial_extension",
         "approved_by__display_name",
         "notes",
     )
@@ -275,6 +277,7 @@ class DialShortcutAdmin(admin.ModelAdmin):
             or obj.external_target_extension
             or obj.parent_phone_target
             or obj.child_landline_target
+            or obj.conference_group_target
         )
 
 

@@ -774,6 +774,78 @@ class DirectoryDomainTests(TestCase):
 
         self.assertEqual(shortcut.child_landline_target, landline)
 
+    def test_dial_shortcut_can_target_childs_dialable_conference_group(self):
+        source = Device.objects.create(
+            assigned_child=self.alex,
+            friendly_name="Alex bedroom phone",
+            sip_extension="101",
+            sip_username="alex-101",
+            sip_secret="secret-a",
+        )
+        group = ConferenceGroup.objects.create(
+            name="Friends",
+            calling_enabled=True,
+            dial_extension="4444",
+        )
+        group.members.set([self.alex, self.emma])
+
+        shortcut = DialShortcut.objects.create(
+            source_device=source,
+            digits="3",
+            conference_group_target=group,
+            approved_by=self.river_parent,
+        )
+
+        self.assertEqual(shortcut.conference_group_target, group)
+
+    def test_dial_shortcut_rejects_conference_group_for_nonmember(self):
+        source = Device.objects.create(
+            assigned_child=self.luca,
+            friendly_name="Luca bedroom phone",
+            sip_extension="103",
+            sip_username="luca-103",
+            sip_secret="secret-l",
+        )
+        group = ConferenceGroup.objects.create(
+            name="Friends",
+            calling_enabled=True,
+            dial_extension="4444",
+        )
+        group.members.set([self.alex, self.emma])
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "Source device's child must be a member of this conference group.",
+        ):
+            DialShortcut.objects.create(
+                source_device=source,
+                digits="3",
+                conference_group_target=group,
+                approved_by=self.maple_parent,
+            )
+
+    def test_dial_shortcut_rejects_conference_group_that_is_not_dialable(self):
+        source = Device.objects.create(
+            assigned_child=self.alex,
+            friendly_name="Alex bedroom phone",
+            sip_extension="101",
+            sip_username="alex-101",
+            sip_secret="secret-a",
+        )
+        group = ConferenceGroup.objects.create(name="Friends")
+        group.members.set([self.alex, self.emma])
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "Conference group must be active and dialable.",
+        ):
+            DialShortcut.objects.create(
+                source_device=source,
+                digits="3",
+                conference_group_target=group,
+                approved_by=self.river_parent,
+            )
+
     def test_dial_shortcut_rejects_unapproved_child_landline(self):
         source = Device.objects.create(
             assigned_child=self.alex,

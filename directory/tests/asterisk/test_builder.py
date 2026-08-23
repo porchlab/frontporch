@@ -626,6 +626,47 @@ class AsteriskConfigurationBuilderTests(TestCase):
             "201",
         )
 
+    def test_conference_group_shortcut_targets_existing_conference_route(self):
+        group = ConferenceGroup.objects.create(
+            name="Friends",
+            calling_enabled=True,
+            dial_extension="4444",
+        )
+        group.members.set([self.alex, self.emma])
+        DialShortcut.objects.create(
+            source_device=self.alex_device,
+            digits="3",
+            conference_group_target=group,
+            approved_by=self.river_parent,
+        )
+
+        configuration = build_asterisk_configuration()
+
+        self.assertEqual(len(configuration.shortcut_rules), 1)
+        shortcut = configuration.shortcut_rules[0]
+        self.assertEqual(shortcut.digits, "3")
+        self.assertTrue(shortcut.is_conference)
+        self.assertEqual(shortcut.conference_route.conference_group_id, group.id)
+
+    def test_conference_group_shortcut_is_omitted_after_membership_revocation(self):
+        group = ConferenceGroup.objects.create(
+            name="Friends",
+            calling_enabled=True,
+            dial_extension="4444",
+        )
+        group.members.set([self.alex, self.emma])
+        DialShortcut.objects.create(
+            source_device=self.alex_device,
+            digits="3",
+            conference_group_target=group,
+            approved_by=self.river_parent,
+        )
+        group.members.set([self.emma, self.luca])
+
+        configuration = build_asterisk_configuration()
+
+        self.assertEqual(configuration.shortcut_rules, ())
+
     def test_internal_shortcut_targets_every_device_on_shared_extension(self):
         Device.objects.create(
             assigned_parent=self.river_parent,

@@ -209,6 +209,51 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         )
         self.assertIn("Dial(PJSIP/emma,25)", content)
 
+    def test_conference_shortcut_uses_same_member_only_entry_route(self):
+        conference = ConferenceRoute(
+            conference_group_id=7,
+            name="Friends",
+            dial_extension="4444",
+            ring_timeout_seconds=25,
+            members=(
+                ConferenceMember(1, "Alex", ("101",), (self.alex_endpoint,)),
+                ConferenceMember(2, "Emma", ("102",), (self.emma_endpoint,)),
+            ),
+        )
+        configuration = AsteriskConfiguration(
+            endpoints=(self.alex_endpoint, self.emma_endpoint),
+            dialplan_rules=(),
+            conference_routes=(conference,),
+            shortcut_rules=(
+                DialShortcutRule(
+                    source_endpoint=self.alex_endpoint,
+                    digits="3",
+                    conference_route=conference,
+                ),
+            ),
+        )
+
+        content = self.renderer.render_extensions(configuration)
+
+        self.assertIn(
+            "exten => 3,1,NoOp(Joining FrontPorch conference Friends)",
+            content,
+        )
+        self.assertIn(
+            "Originate(Local/2@frontporch-conference-7-ring/n,"
+            "exten,frontporch-conference-7-join,2,1,25,a)",
+            content,
+        )
+        self.assertIn(
+            "ConfBridge(frontporch-7,frontporch-bridge,frontporch-user,frontporch-menu)",
+            content,
+        )
+        self.assertNotIn(
+            "exten => 3,1,NoOp(Joining FrontPorch conference Friends)\n"
+            " same => n,Hangup(21)",
+            content,
+        )
+
     def test_conference_redial_only_exposes_member_extensions(self):
         conference = ConferenceRoute(
             conference_group_id=7,

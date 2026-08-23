@@ -160,6 +160,11 @@ Unanswered invitations stop after the group's timeout. A member who dials the gr
 extension while the bridge is active joins it without ringing the whole group again.
 The bridge plays a generic tone when participants enter or leave.
 
+Staff may also assign a one-digit shortcut from `1` through `9` to a group for an
+individual member's device. The shortcut follows the same member-only conference
+route as the four-digit group extension and is omitted from generated configuration
+if the group is disabled or the source child is no longer a member.
+
 During the call, press `*`, enter another group member's normal extension, and press
 `#` to retry that member. Generated per-group allowlists reject extensions belonging
 to nonmembers, and a member who is already in the bridge is not rung again.

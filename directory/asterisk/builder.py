@@ -151,6 +151,9 @@ def build_asterisk_configuration():
                 members=tuple(members),
             )
         )
+    conference_routes_by_id = {
+        route.conference_group_id: route for route in conference_routes
+    }
 
     approved_child_family_pairs = set(
         AllowedChildFamilyRelationship.objects.filter(
@@ -501,6 +504,7 @@ def build_asterisk_configuration():
             "external_target_extension__external_phone_number",
             "parent_phone_target",
             "child_landline_target",
+            "conference_group_target",
         )
         .order_by("source_device_id", "digits", "id")
     ):
@@ -557,6 +561,21 @@ def build_asterisk_configuration():
                     source_endpoint=source,
                     digits=shortcut.digits,
                     target_endpoint=target,
+                )
+            )
+        elif shortcut.conference_group_target_id:
+            conference_route = conference_routes_by_id.get(
+                shortcut.conference_group_target_id
+            )
+            if not conference_route or not conference_route.member_for_child(
+                source.child_id
+            ):
+                continue
+            shortcut_rules.append(
+                DialShortcutRule(
+                    source_endpoint=source,
+                    digits=shortcut.digits,
+                    conference_route=conference_route,
                 )
             )
 

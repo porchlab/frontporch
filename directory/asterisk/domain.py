@@ -191,10 +191,15 @@ class DialShortcutRule:
     target_endpoint: SipEndpoint | LandlineChildEndpoint | None = None
     external_number_extension_id: int | None = None
     normalized_number: str = ""
+    conference_route: "ConferenceRoute | None" = None
 
     @property
     def is_external(self):
         return bool(self.normalized_number)
+
+    @property
+    def is_conference(self):
+        return self.conference_route is not None
 
     @property
     def outbound_number(self):
