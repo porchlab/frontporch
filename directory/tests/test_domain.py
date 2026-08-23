@@ -930,3 +930,63 @@ class DirectoryDomainTests(TestCase):
         group.save()
 
         self.assertTrue(children_may_conference([self.alex, self.emma, self.luca]))
+
+    def test_conference_calling_assigns_unused_four_digit_extension(self):
+        group = ConferenceGroup.objects.create(
+            name="Saturday cousins",
+            calling_enabled=True,
+        )
+
+        self.assertEqual(len(group.dial_extension), 4)
+        self.assertTrue(group.dial_extension.isdigit())
+        self.assertEqual(group.ring_timeout_seconds, 30)
+
+    def test_disabled_conference_group_does_not_assign_extension(self):
+        group = ConferenceGroup.objects.create(name="Saturday cousins")
+
+        self.assertIsNone(group.dial_extension)
+
+    def test_conference_extension_rejects_device_collision(self):
+        Device.objects.create(
+            assigned_child=self.alex,
+            friendly_name="Alex bedroom phone",
+            sip_extension="4444",
+            sip_username="alex-4444",
+            sip_secret="secret",
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "This extension is already assigned to a device.",
+        ):
+            ConferenceGroup.objects.create(
+                name="Saturday cousins",
+                calling_enabled=True,
+                dial_extension="4444",
+            )
+
+    def test_device_rejects_conference_extension_collision(self):
+        ConferenceGroup.objects.create(
+            name="Saturday cousins",
+            calling_enabled=True,
+            dial_extension="4444",
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "This extension is already assigned to a conference group.",
+        ):
+            Device.objects.create(
+                assigned_child=self.alex,
+                friendly_name="Alex bedroom phone",
+                sip_extension="4444",
+                sip_username="alex-4444",
+                sip_secret="secret",
+            )
+
+    def test_conference_ring_timeout_is_bounded(self):
+        with self.assertRaises(ValidationError):
+            ConferenceGroup.objects.create(
+                name="Saturday cousins",
+                ring_timeout_seconds=4,
+            )

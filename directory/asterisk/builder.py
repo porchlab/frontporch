@@ -3,6 +3,8 @@ from django.conf import settings
 from .domain import (
     AsteriskConfiguration,
     BlackoutWindow,
+    ConferenceMember,
+    ConferenceRoute,
     DialplanRule,
     DialShortcutRule,
     ExternalDialplanRule,
@@ -24,6 +26,7 @@ from directory.models import (
     ChildBlackoutPeriod,
     ChildLandline,
     ChildLandlineDialShortcut,
+    ConferenceGroup,
     Device,
     DialShortcut,
     ExternalContactPermission,
@@ -111,6 +114,42 @@ def build_asterisk_configuration():
         )
         preferred_inbound_endpoints_by_child_id[child_id] = (
             sip_targets or tuple(child_endpoints)
+        )
+
+    conference_routes = []
+    for group in (
+        ConferenceGroup.objects.filter(
+            is_active=True,
+            calling_enabled=True,
+            dial_extension__isnull=False,
+        )
+        .prefetch_related("members")
+        .order_by("dial_extension", "id")
+    ):
+        children = tuple(group.members.order_by("family__name", "name", "id"))
+        if len(children) < 2:
+            continue
+        members = []
+        for child in children:
+            child_endpoints = tuple(routable_endpoints_by_child_id.get(child.id, ()))
+            members.append(
+                ConferenceMember(
+                    child_id=child.id,
+                    display_name=str(child),
+                    extensions=tuple(
+                        sorted({endpoint.extension for endpoint in child_endpoints})
+                    ),
+                    endpoints=child_endpoints,
+                )
+            )
+        conference_routes.append(
+            ConferenceRoute(
+                conference_group_id=group.id,
+                name=group.name,
+                dial_extension=group.dial_extension,
+                ring_timeout_seconds=group.ring_timeout_seconds,
+                members=tuple(members),
+            )
         )
 
     approved_child_family_pairs = set(
@@ -533,6 +572,7 @@ def build_asterisk_configuration():
         spoken_prompts=spoken_prompts,
         text_to_speech_settings=tts_settings,
         shortcut_rules=tuple(shortcut_rules),
+        conference_routes=tuple(conference_routes),
         dialplan_rules=tuple(
             sorted(
                 rules,

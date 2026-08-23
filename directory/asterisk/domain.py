@@ -202,6 +202,53 @@ class DialShortcutRule:
 
 
 @dataclass(frozen=True)
+class ConferenceMember:
+    child_id: int
+    display_name: str
+    extensions: tuple[str, ...]
+    endpoints: tuple[SipEndpoint | LandlineChildEndpoint, ...]
+
+
+@dataclass(frozen=True)
+class ConferenceRoute:
+    conference_group_id: int
+    name: str
+    dial_extension: str
+    ring_timeout_seconds: int
+    members: tuple[ConferenceMember, ...]
+
+    @property
+    def bridge_name(self):
+        return f"frontporch-{self.conference_group_id}"
+
+    @property
+    def ring_context_name(self):
+        return f"frontporch-conference-{self.conference_group_id}-ring"
+
+    @property
+    def join_context_name(self):
+        return f"frontporch-conference-{self.conference_group_id}-join"
+
+    @property
+    def invite_context_name(self):
+        return f"frontporch-conference-{self.conference_group_id}-invite"
+
+    @property
+    def session_group_name(self):
+        return f"frontporch-{self.conference_group_id}"
+
+    @property
+    def presence_category(self):
+        return f"frontporch-conference-{self.conference_group_id}"
+
+    def member_for_child(self, child_id):
+        return next(
+            (member for member in self.members if member.child_id == child_id),
+            None,
+        )
+
+
+@dataclass(frozen=True)
 class PublicInboundNumber:
     public_phone_number_id: int
     normalized_number: str
@@ -243,6 +290,7 @@ class AsteriskConfiguration:
     inbound_landline_caller_rules: tuple[InboundLandlineCallerRule, ...] = ()
     inbound_landline_shortcut_rules: tuple[InboundLandlineShortcutRule, ...] = ()
     shortcut_rules: tuple[DialShortcutRule, ...] = ()
+    conference_routes: tuple[ConferenceRoute, ...] = ()
     public_inbound_numbers: tuple[PublicInboundNumber, ...] = ()
     spoken_prompts: tuple[SpokenPrompt, ...] = ()
     text_to_speech_settings: TextToSpeechSettings | None = None

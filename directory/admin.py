@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django import forms
 
 from .models import (
     AllowedChildFamilyRelationship,
@@ -315,16 +316,51 @@ class ChildLandlineDialShortcutAdmin(admin.ModelAdmin):
 
 @admin.register(ConferenceGroup)
 class ConferenceGroupAdmin(admin.ModelAdmin):
-    list_display = ("name", "approved_by", "is_active", "member_count", "created_at")
-    list_filter = ("is_active",)
+    class ConferenceGroupAdminForm(forms.ModelForm):
+        class Meta:
+            model = ConferenceGroup
+            fields = "__all__"
+
+        def clean_members(self):
+            members = self.cleaned_data["members"]
+            if self.cleaned_data.get("calling_enabled") and members.count() < 2:
+                raise forms.ValidationError(
+                    "Choose at least two children before enabling calling."
+                )
+            return members
+
+        def clean(self):
+            cleaned_data = super().clean()
+            if cleaned_data.get("calling_enabled") and not cleaned_data.get(
+                "is_active"
+            ):
+                self.add_error(
+                    "calling_enabled",
+                    "Calling cannot be enabled for an inactive conference group.",
+                )
+            return cleaned_data
+
+    form = ConferenceGroupAdminForm
+    list_display = (
+        "name",
+        "dial_extension",
+        "calling_enabled",
+        "ring_timeout_seconds",
+        "approved_by",
+        "is_active",
+        "member_count",
+        "created_at",
+    )
+    list_filter = ("calling_enabled", "is_active")
     search_fields = (
         "name",
+        "dial_extension",
         "members__name",
         "members__family__name",
         "approved_by__display_name",
     )
     filter_horizontal = ("members",)
-    ordering = ("name",)
+    ordering = ("dial_extension", "name")
 
     @admin.display(description="Members")
     def member_count(self, obj):

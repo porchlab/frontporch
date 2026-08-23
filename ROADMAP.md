@@ -87,11 +87,11 @@ Goal: support carefully controlled calls to external numbers.
 
 Goal: support group calls without weakening direct-call controls.
 
-- Keep conference calls default-deny except for explicit parent-approved conference groups.
-- Add explicit parent-approved conference groups.
-- Prevent unapproved participants from joining through dialplan shortcuts.
-- Log conference membership and policy changes.
-- Test conference generation and denial cases.
+- [x] Keep conference calls default-deny except for explicit parent-approved conference groups.
+- [x] Add explicit parent-approved conference groups.
+- [x] Prevent unapproved participants from joining through generated conference contexts.
+- [x] Log conference membership and policy changes.
+- [x] Test conference generation and denial cases.
 
 ## Version 0.9: Neighborhood Network Services
 

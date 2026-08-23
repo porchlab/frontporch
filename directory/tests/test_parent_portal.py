@@ -1,5 +1,6 @@
 from datetime import time
 
+from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -341,3 +342,46 @@ class ParentPortalTests(TestCase):
         group = ConferenceGroup.objects.get(name="Siblings")
         self.assertEqual(group.approved_by, self.parent)
         self.assertEqual(set(group.members.values_list("id", flat=True)), {self.child.id, sibling.id})
+        self.assertFalse(group.calling_enabled)
+        self.assertIsNone(group.dial_extension)
+        self.assertTrue(
+            LogEntry.objects.filter(
+                user=self.user,
+                object_id=str(group.id),
+                action_flag=ADDITION,
+            ).exists()
+        )
+
+    def test_parent_update_preserves_staff_calling_fields_and_is_audited(self):
+        sibling = Child.objects.create(family=self.family, name="Noah")
+        group = ConferenceGroup.objects.create(
+            name="Siblings",
+            calling_enabled=True,
+            dial_extension="4444",
+            ring_timeout_seconds=25,
+        )
+        group.members.set([self.child, sibling])
+        self.login()
+
+        response = self.client.post(
+            reverse("directory:conference_group_update", args=[group.id]),
+            {
+                "name": "Kids",
+                "members": [self.child.id, sibling.id],
+                "is_active": "on",
+                "notes": "Updated",
+            },
+        )
+
+        self.assertRedirects(response, reverse("directory:dashboard"))
+        group.refresh_from_db()
+        self.assertTrue(group.calling_enabled)
+        self.assertEqual(group.dial_extension, "4444")
+        self.assertEqual(group.ring_timeout_seconds, 25)
+        self.assertTrue(
+            LogEntry.objects.filter(
+                user=self.user,
+                object_id=str(group.id),
+                action_flag=CHANGE,
+            ).exists()
+        )

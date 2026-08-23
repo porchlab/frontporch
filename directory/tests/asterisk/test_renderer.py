@@ -7,6 +7,8 @@ from django.test import SimpleTestCase
 from directory.asterisk.domain import (
     AsteriskConfiguration,
     BlackoutWindow,
+    ConferenceMember,
+    ConferenceRoute,
     DialplanRule,
     DialShortcutRule,
     ExternalDialplanRule,
@@ -169,6 +171,136 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         self.assertNotIn("exten => 101,1,Dial(PJSIP/alex,30)", content)
         self.assertIn("exten => _X!,1,Hangup(21)", content)
         self.assertIn("[frontporch-blackout]", content)
+
+    def test_conference_first_call_rings_members_and_joins_bridge(self):
+        conference = ConferenceRoute(
+            conference_group_id=7,
+            name="Friends",
+            dial_extension="4444",
+            ring_timeout_seconds=25,
+            members=(
+                ConferenceMember(1, "Alex", ("101",), (self.alex_endpoint,)),
+                ConferenceMember(2, "Emma", ("102",), (self.emma_endpoint,)),
+            ),
+        )
+        configuration = AsteriskConfiguration(
+            endpoints=(self.alex_endpoint, self.emma_endpoint),
+            dialplan_rules=(),
+            conference_routes=(conference,),
+        )
+
+        content = self.renderer.render_extensions(configuration)
+
+        self.assertEqual(content.count("exten => 4444,1,"), 2)
+        self.assertIn("${LOCK(frontporch-7)}", content)
+        self.assertIn(
+            "Set(FRONTPORCH_CONFERENCE_PARTIES="
+            "${GROUP_COUNT(frontporch-7@frontporch-conference-session)})",
+            content,
+        )
+        self.assertIn(
+            "Originate(Local/2@frontporch-conference-7-ring/n,"
+            "exten,frontporch-conference-7-join,2,1,25,a)",
+            content,
+        )
+        self.assertIn(
+            "ConfBridge(frontporch-7,frontporch-bridge,frontporch-user,frontporch-menu)",
+            content,
+        )
+        self.assertIn("Dial(PJSIP/emma,25)", content)
+
+    def test_conference_redial_only_exposes_member_extensions(self):
+        conference = ConferenceRoute(
+            conference_group_id=7,
+            name="Friends",
+            dial_extension="4444",
+            ring_timeout_seconds=30,
+            members=(
+                ConferenceMember(1, "Alex", ("101",), (self.alex_endpoint,)),
+                ConferenceMember(2, "Emma", ("102",), (self.emma_endpoint,)),
+            ),
+        )
+        content = self.renderer.render_extensions(
+            AsteriskConfiguration(
+                endpoints=(self.alex_endpoint, self.emma_endpoint),
+                dialplan_rules=(),
+                conference_routes=(conference,),
+            )
+        )
+
+        self.assertIn("[frontporch-conference-7-invite]", content)
+        self.assertIn("exten => 102,1,NoOp(Retrying Emma for Friends)", content)
+        self.assertIn("[frontporch-conference-redial]", content)
+        self.assertIn("ReadExten(FRONTPORCH_RETRY_EXTENSION", content)
+        self.assertNotIn("exten => 9999,1,NoOp(Retrying", content)
+
+    def test_nonmember_context_cannot_dial_conference_extension(self):
+        nonmember = SipEndpoint(
+            device_id=103,
+            owner_type="child",
+            owner_id=3,
+            owner_display_name="Luca",
+            family_id=3,
+            extension="103",
+            username="luca",
+            secret="luca-secret",
+            child_id=3,
+        )
+        conference = ConferenceRoute(
+            conference_group_id=7,
+            name="Friends",
+            dial_extension="4444",
+            ring_timeout_seconds=30,
+            members=(
+                ConferenceMember(1, "Alex", ("101",), (self.alex_endpoint,)),
+                ConferenceMember(2, "Emma", ("102",), (self.emma_endpoint,)),
+            ),
+        )
+        content = self.renderer.render_extensions(
+            AsteriskConfiguration(
+                endpoints=(self.alex_endpoint, self.emma_endpoint, nonmember),
+                dialplan_rules=(),
+                conference_routes=(conference,),
+            )
+        )
+
+        nonmember_context = content.split("[frontporch-luca]", 1)[1].split("[", 1)[0]
+        self.assertNotIn("exten => 4444,1,", nonmember_context)
+        self.assertIn("exten => _X!,1,Hangup(21)", nonmember_context)
+
+    def test_child_landline_member_gets_restricted_group_extension(self):
+        conference = ConferenceRoute(
+            conference_group_id=7,
+            name="Friends",
+            dial_extension="4444",
+            ring_timeout_seconds=30,
+            members=(
+                ConferenceMember(1, "Alex", ("101",), (self.alex_endpoint,)),
+                ConferenceMember(3, "Luca", ("2222",), (self.luca_landline,)),
+            ),
+        )
+        configuration = AsteriskConfiguration(
+            endpoints=(self.alex_endpoint,),
+            landline_endpoints=(self.luca_landline,),
+            dialplan_rules=(),
+            conference_routes=(conference,),
+            public_inbound_numbers=(
+                PublicInboundNumber(
+                    public_phone_number_id=1,
+                    normalized_number="+12025550199",
+                    label="Shared",
+                ),
+            ),
+        )
+
+        content = self.renderer.render_extensions(configuration)
+
+        self.assertIn("frontporch-landline-inbound-1-1,s,1", content)
+        self.assertIn(
+            "exten => 4444,1,NoOp(Joining FrontPorch conference Friends)",
+            content,
+        )
+        self.assertIn("Dial(PJSIP/16465550100@voipms-endpoint,30)", content)
 
     def test_shared_extension_rings_separate_device_credentials_simultaneously(self):
         emma_softphone = SipEndpoint(

@@ -55,6 +55,10 @@ class AsteriskConfigRenderer:
                 rule.source_endpoint.context_name,
                 [],
             ).append(rule)
+        conferences_by_child_id = {}
+        for conference in configuration.conference_routes:
+            for member in conference.members:
+                conferences_by_child_id.setdefault(member.child_id, []).append(conference)
 
         lines = [GENERATED_HEADER.rstrip(), ""]
 
@@ -68,6 +72,10 @@ class AsteriskConfigRenderer:
                     "",
                 ]
             )
+            for conference in conferences_by_child_id.get(endpoint.child_id, ()):
+                lines.extend(
+                    self._render_conference_entry(conference, endpoint)
+                )
             shortcut_groups = _group_rules_by_value(
                 shortcut_rules_by_context.get(endpoint.context_name, []),
                 lambda rule: rule.digits,
@@ -115,6 +123,8 @@ class AsteriskConfigRenderer:
 
         lines.extend(self._render_blackout_context())
         lines.extend(self._render_public_inbound_context(configuration))
+        lines.extend(self._render_conference_contexts(configuration))
+        lines.extend(self._render_conference_redial_context())
 
         return "\n".join(lines).rstrip() + "\n"
 
@@ -219,6 +229,204 @@ class AsteriskConfigRenderer:
             "",
         ]
 
+    def _render_conference_entry(self, conference, source_endpoint):
+        member = conference.member_for_child(source_endpoint.child_id)
+        if member is None:
+            return []
+
+        lines = [
+            (
+                f"exten => {conference.dial_extension},1,"
+                f"NoOp(Joining FrontPorch conference {conference.name})"
+            ),
+        ]
+        lines.extend(
+            f" same => n,{application}"
+            for application in self._call_blackout_checks(source_endpoint, None)
+        )
+        lines.extend(
+            [
+                f" same => n,Set(FRONTPORCH_CONFERENCE_ID={conference.conference_group_id})",
+                (
+                    " same => n,Set(FRONTPORCH_CONFERENCE_LOCK="
+                    f"${{LOCK({conference.bridge_name})}})"
+                ),
+                (
+                    " same => n,Set(FRONTPORCH_CONFERENCE_PARTIES="
+                    f"${{GROUP_COUNT({conference.session_group_name}"
+                    "@frontporch-conference-session)})"
+                ),
+                (
+                    " same => n,Set(GROUP(frontporch-conference-session)="
+                    f"{conference.session_group_name})"
+                ),
+                (
+                    f" same => n,Set(GROUP({conference.presence_category})="
+                    f"child-{member.child_id})"
+                ),
+            ]
+        )
+        for target_member in conference.members:
+            if target_member.child_id == member.child_id or not target_member.endpoints:
+                continue
+            lines.append(
+                (
+                    ' same => n,ExecIf($["${FRONTPORCH_CONFERENCE_PARTIES}" = "0"]?'
+                    "Originate("
+                    f"Local/{target_member.child_id}@{conference.ring_context_name}/n,"
+                    f"exten,{conference.join_context_name},{target_member.child_id},1,"
+                    f"{conference.ring_timeout_seconds},a))"
+                )
+            )
+        lines.extend(
+            [
+                (
+                    " same => n,Set(FRONTPORCH_CONFERENCE_UNLOCK="
+                    f"${{UNLOCK({conference.bridge_name})}})"
+                ),
+                (
+                    f" same => n,ConfBridge({conference.bridge_name},"
+                    "frontporch-bridge,frontporch-user,frontporch-menu)"
+                ),
+                " same => n,Hangup()",
+                "",
+            ]
+        )
+        return lines
+
+    def _render_conference_contexts(self, configuration):
+        lines = []
+        for conference in configuration.conference_routes:
+            lines.append(f"[{conference.ring_context_name}]")
+            for member in conference.members:
+                if not member.endpoints:
+                    continue
+                target = member.endpoints[0]
+                lines.extend(
+                    [
+                        (
+                            f"exten => {member.child_id},1,"
+                            f"NoOp(Ringing {member.display_name} for {conference.name})"
+                        ),
+                        (
+                            " same => n,GotoIf($[${GROUP_COUNT("
+                            f"child-{member.child_id}@{conference.presence_category}"
+                            ")} > 0]?already-present)"
+                        ),
+                    ]
+                )
+                lines.extend(
+                    f" same => n,{application}"
+                    for application in self._call_blackout_checks(None, target)
+                )
+                if configuration.outbound_caller_id and any(
+                    hasattr(endpoint, "child_landline_id")
+                    for endpoint in member.endpoints
+                ):
+                    lines.append(
+                        " same => n,Set(CALLERID(num)="
+                        f"{configuration.outbound_caller_id})"
+                    )
+                dial_targets = "&".join(
+                    endpoint.dial_target for endpoint in member.endpoints
+                )
+                lines.extend(
+                    [
+                        f" same => n,Dial({dial_targets},{conference.ring_timeout_seconds})",
+                        " same => n,Hangup()",
+                        " same => n(already-present),Hangup()",
+                        "",
+                    ]
+                )
+
+            lines.append(f"[{conference.join_context_name}]")
+            for member in conference.members:
+                if not member.endpoints:
+                    continue
+                lines.extend(
+                    [
+                        (
+                            f"exten => {member.child_id},1,"
+                            f"Set(FRONTPORCH_CONFERENCE_ID={conference.conference_group_id})"
+                        ),
+                        (
+                            " same => n,Set(GROUP(frontporch-conference-session)="
+                            f"{conference.session_group_name})"
+                        ),
+                        (
+                            f" same => n,Set(GROUP({conference.presence_category})="
+                            f"child-{member.child_id})"
+                        ),
+                        (
+                            f" same => n,ConfBridge({conference.bridge_name},"
+                            "frontporch-bridge,frontporch-user,frontporch-menu)"
+                        ),
+                        " same => n,Hangup()",
+                        "",
+                    ]
+                )
+
+            lines.append(f"[{conference.invite_context_name}]")
+            for member in conference.members:
+                for extension in member.extensions:
+                    lines.extend(
+                        [
+                            (
+                                f"exten => {extension},1,"
+                                f"NoOp(Retrying {member.display_name} for {conference.name})"
+                            ),
+                            (
+                                " same => n,GotoIf($[${GROUP_COUNT("
+                                f"child-{member.child_id}@{conference.presence_category}"
+                                ")} > 0]?already-present)"
+                            ),
+                            (
+                                " same => n,Originate("
+                                f"Local/{member.child_id}@{conference.ring_context_name}/n,"
+                                f"exten,{conference.join_context_name},{member.child_id},1,"
+                                f"{conference.ring_timeout_seconds},a)"
+                            ),
+                            " same => n,Playback(beep)",
+                            " same => n,NoOp(Returning to conference)",
+                            " same => n(already-present),PlayTones(busy)",
+                            " same => n,Wait(1)",
+                            " same => n,StopPlayTones()",
+                            "",
+                        ]
+                    )
+            lines.extend(
+                [
+                    "exten => i,1,PlayTones(congestion)",
+                    " same => n,Wait(1)",
+                    " same => n,StopPlayTones()",
+                    "",
+                ]
+            )
+        return lines
+
+    def _render_conference_redial_context(self):
+        return [
+            "[frontporch-conference-redial]",
+            "exten => s,1,NoOp(Collecting conference member extension)",
+            (
+                " same => n,ReadExten(FRONTPORCH_RETRY_EXTENSION,beep,"
+                "frontporch-conference-${FRONTPORCH_CONFERENCE_ID}-invite,p,8)"
+            ),
+            (
+                ' same => n,GotoIf($["${READEXTENSTATUS}" = "OK"]?'
+                "valid:invalid)"
+            ),
+            (
+                " same => n(valid),Goto(frontporch-conference-"
+                "${FRONTPORCH_CONFERENCE_ID}-invite,"
+                "${FRONTPORCH_RETRY_EXTENSION},1)"
+            ),
+            " same => n(invalid),PlayTones(congestion)",
+            " same => n,Wait(1)",
+            " same => n,StopPlayTones()",
+            "",
+        ]
+
     def _render_public_inbound_context(self, configuration):
         inbound_context_name = "frontporch-public-inbound"
         if configuration.public_inbound_numbers:
@@ -244,6 +452,10 @@ class AsteriskConfigRenderer:
                 rule.public_phone_number_id,
                 [],
             ).append(rule)
+        conferences_by_child_id = {}
+        for conference in configuration.conference_routes:
+            for member in conference.members:
+                conferences_by_child_id.setdefault(member.child_id, []).append(conference)
 
         lines = [f"[{inbound_context_name}]"]
         restricted_contexts = []
@@ -274,6 +486,15 @@ class AsteriskConfigRenderer:
                     rule.caller_normalized_number,
                     [],
                 ).append(rule)
+            conference_landline_callers = {
+                endpoint.normalized_number: endpoint
+                for endpoint in configuration.landline_endpoints
+                if conferences_by_child_id.get(endpoint.child_id)
+                and (
+                    public_number.family_id is None
+                    or public_number.family_id == endpoint.family_id
+                )
+            }
 
             lines.extend(
                 [
@@ -284,10 +505,14 @@ class AsteriskConfigRenderer:
                 ]
             )
             approved_branches = []
-            for rule_index, (caller_number, caller_rules) in enumerate(
-                sorted(landline_caller_groups.items()),
+            landline_caller_numbers = sorted(
+                set(landline_caller_groups) | set(conference_landline_callers)
+            )
+            for rule_index, caller_number in enumerate(
+                landline_caller_numbers,
                 start=1,
             ):
+                caller_rules = landline_caller_groups.get(caller_number, [])
                 caller_rules = sorted(
                     caller_rules,
                     key=lambda rule: (
@@ -299,7 +524,14 @@ class AsteriskConfigRenderer:
                     caller_rules,
                     lambda rule: rule.target_endpoint.extension,
                 )
-                if len(target_groups) == 1:
+                caller_endpoint = conference_landline_callers.get(caller_number)
+                if caller_endpoint is None and caller_rules:
+                    caller_endpoint = caller_rules[0].caller_endpoint
+                caller_conferences = conferences_by_child_id.get(
+                    caller_endpoint.child_id,
+                    (),
+                )
+                if len(target_groups) == 1 and not caller_conferences:
                     label = f"approved-landline-{canonical}-{rule_index}"
                     destination = label
                     targets = _unique_targets(next(iter(target_groups.values())))
@@ -324,10 +556,11 @@ class AsteriskConfigRenderer:
                             caller_rules,
                             landline_shortcut_groups.get(caller_number, ()),
                             True,
+                            caller_endpoint,
                         )
                     )
 
-                for caller_id in caller_rules[0].caller_id_variants:
+                for caller_id in caller_endpoint.caller_id_variants:
                     lines.append(
                         (
                             ' same => n,GotoIf($["${CALLERID(num)}" = '
@@ -368,7 +601,7 @@ class AsteriskConfigRenderer:
                     )
                     destination = f"{context_name},s,1"
                     restricted_contexts.append(
-                        (context_name, caller_number, caller_rules, (), False)
+                        (context_name, caller_number, caller_rules, (), False, None)
                     )
 
                 for caller_id in caller_rules[0].caller_id_variants:
@@ -419,6 +652,7 @@ class AsteriskConfigRenderer:
             caller_rules,
             shortcut_rules,
             is_spoken_landline_menu,
+            caller_endpoint,
         ) in restricted_contexts:
             target_groups = _group_rules_by_value(
                 caller_rules,
@@ -485,6 +719,14 @@ class AsteriskConfigRenderer:
                         generate_ringback=is_spoken_landline_menu,
                     )
                 )
+            if caller_endpoint is not None:
+                for conference in conferences_by_child_id.get(
+                    caller_endpoint.child_id,
+                    (),
+                ):
+                    lines.extend(
+                        self._render_conference_entry(conference, caller_endpoint)
+                    )
             if is_spoken_landline_menu:
                 lines.extend(self._render_spoken_menu_retry_rules())
             else:

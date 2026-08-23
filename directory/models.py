@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 import phonenumbers
 import random
@@ -292,6 +293,16 @@ class Device(TimeStampedModel):
             errors["sip_extension"] = (
                 "This extension is already assigned to a child landline."
             )
+        if (
+            self.sip_extension
+            and "ConferenceGroup" in globals()
+            and ConferenceGroup.objects.filter(
+                dial_extension=self.sip_extension,
+            ).exists()
+        ):
+            errors["sip_extension"] = (
+                "This extension is already assigned to a conference group."
+            )
         if errors:
             raise ValidationError(errors)
 
@@ -435,6 +446,15 @@ class ExternalNumberExtension(TimeStampedModel):
                 errors[
                     "dial_extension"
                 ] = "This extension is already assigned to an external number."
+            elif (
+                "ConferenceGroup" in globals()
+                and ConferenceGroup.objects.filter(
+                    dial_extension=self.dial_extension,
+                ).exists()
+            ):
+                errors[
+                    "dial_extension"
+                ] = "This extension is already assigned to a conference group."
         if errors:
             raise ValidationError(errors)
 
@@ -464,6 +484,11 @@ class ExternalNumberExtension(TimeStampedModel):
                     dial_extension=candidate,
                     is_active=True,
                 ).exists()
+            ):
+                continue
+            if (
+                "ConferenceGroup" in globals()
+                and ConferenceGroup.objects.filter(dial_extension=candidate).exists()
             ):
                 continue
             return candidate
@@ -540,6 +565,15 @@ class ChildLandline(TimeStampedModel):
                 errors[
                     "dial_extension"
                 ] = "This extension is already assigned to a child landline."
+            elif (
+                "ConferenceGroup" in globals()
+                and ConferenceGroup.objects.filter(
+                    dial_extension=self.dial_extension,
+                ).exists()
+            ):
+                errors[
+                    "dial_extension"
+                ] = "This extension is already assigned to a conference group."
         if errors:
             raise ValidationError(errors)
 
@@ -560,6 +594,11 @@ class ChildLandline(TimeStampedModel):
             if ExternalNumberExtension.objects.filter(dial_extension=candidate).exists():
                 continue
             if cls.objects.filter(dial_extension=candidate, is_active=True).exists():
+                continue
+            if (
+                "ConferenceGroup" in globals()
+                and ConferenceGroup.objects.filter(dial_extension=candidate).exists()
+            ):
                 continue
             return candidate
         raise ValidationError("Could not assign an unused child landline extension.")
@@ -1080,6 +1119,22 @@ class ConferenceGroup(TimeStampedModel):
         related_name="approved_conference_groups",
     )
     is_active = models.BooleanField(default=True)
+    calling_enabled = models.BooleanField(
+        default=False,
+        help_text="Staff must enable calling before this group becomes dialable.",
+    )
+    dial_extension = models.CharField(
+        max_length=4,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text="Leave blank to assign an unused four-digit extension when enabled.",
+    )
+    ring_timeout_seconds = models.PositiveSmallIntegerField(
+        default=30,
+        validators=[MinValueValidator(5), MaxValueValidator(120)],
+        help_text="How long unanswered member phones ring, from 5 to 120 seconds.",
+    )
     notes = models.TextField(blank=True)
 
     class Meta:
@@ -1087,3 +1142,58 @@ class ConferenceGroup(TimeStampedModel):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        errors = {}
+        if self.dial_extension:
+            if not self.dial_extension.isdigit() or len(self.dial_extension) != 4:
+                errors["dial_extension"] = (
+                    "Conference group extension must be four digits."
+                )
+            elif ExternalNumberExtension._extension_is_reserved(self.dial_extension):
+                errors["dial_extension"] = "This extension is reserved."
+            elif Device.objects.filter(sip_extension=self.dial_extension).exists():
+                errors["dial_extension"] = "This extension is already assigned to a device."
+            elif ExternalNumberExtension.objects.filter(
+                dial_extension=self.dial_extension
+            ).exists():
+                errors["dial_extension"] = (
+                    "This extension is already assigned to an external number."
+                )
+            elif ChildLandline.objects.filter(
+                dial_extension=self.dial_extension,
+            ).exists():
+                errors["dial_extension"] = (
+                    "This extension is already assigned to a child landline."
+                )
+            elif ConferenceGroup.objects.filter(
+                dial_extension=self.dial_extension,
+            ).exclude(pk=self.pk).exists():
+                errors["dial_extension"] = (
+                    "This extension is already assigned to a conference group."
+                )
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.calling_enabled and not self.dial_extension:
+            self.dial_extension = self._assign_extension()
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def _assign_extension(cls):
+        for _ in range(100):
+            candidate = _random_four_digit_extension()
+            if ExternalNumberExtension._extension_is_reserved(candidate):
+                continue
+            if Device.objects.filter(sip_extension=candidate).exists():
+                continue
+            if ExternalNumberExtension.objects.filter(dial_extension=candidate).exists():
+                continue
+            if ChildLandline.objects.filter(dial_extension=candidate).exists():
+                continue
+            if cls.objects.filter(dial_extension=candidate).exists():
+                continue
+            return candidate
+        raise ValidationError("Could not assign an unused conference group extension.")

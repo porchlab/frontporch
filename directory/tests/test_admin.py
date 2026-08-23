@@ -6,6 +6,7 @@ from directory.models import (
     Child,
     ChildLandline,
     ChildLandlineDialShortcut,
+    ConferenceGroup,
     Device,
     DialShortcut,
     ExternalPhoneNumber,
@@ -99,6 +100,29 @@ class DirectoryAdminTests(TestCase):
             digits="2",
         )
         self.assertEqual(shortcut.target_child, self.target_child)
+
+    def test_admin_can_enable_conference_calling_with_auto_extension(self):
+        response = self.client.post(
+            reverse("admin:directory_conferencegroup_add"),
+            {
+                "name": "Friends",
+                "members": [self.child.id, self.target_child.id],
+                "approved_by": self.parent.id,
+                "is_active": "on",
+                "calling_enabled": "on",
+                "dial_extension": "",
+                "ring_timeout_seconds": "25",
+                "notes": "",
+                "_save": "Save",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        group = ConferenceGroup.objects.get(name="Friends")
+        self.assertTrue(group.calling_enabled)
+        self.assertEqual(len(group.dial_extension), 4)
+        self.assertEqual(group.ring_timeout_seconds, 25)
 
     def assert_admin_can_create_dial_shortcut(self, submit_name):
         response = self.client.post(

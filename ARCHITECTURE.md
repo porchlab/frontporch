@@ -63,9 +63,16 @@ Permissions belong to the relationship between a child and an external number, n
 The default conference policy is restrictive:
 
 - A conference call is allowed for a single child or when parents explicitly create an approved conference group.
+- Staff must separately enable PBX calling and assign or accept the group's four-digit extension.
+- Only child members may dial or join that group's generated conference bridge.
+- The first caller rings the other members for the configured timeout; later callers join the active bridge directly.
+- In-conference retries use `*`, a member extension, and `#`; generated allowlists prevent inviting nonmembers.
 - Conference membership and permission changes must be auditable.
 
 Group calling should not become a loophole around direct-call restrictions.
+The static `confbridge.conf` file defines only generic bridge mechanics and tones.
+Django-generated dialplan owns membership, extension access, ringing targets,
+blackout enforcement, and retry permissions.
 
 ## PBX Integration
 

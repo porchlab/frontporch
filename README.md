@@ -28,6 +28,7 @@ The current model is built around these rules:
 - Cross-family child calling requires explicit approved relationships.
 - External PSTN calling is allowlist-based through approved external contacts.
 - Conference calling requires an explicit approved conference group.
+- Conference extensions stay disabled until staff enables them in Django Admin.
 - Asterisk configuration should be generated from Django state so business rules stay centralized and testable.
 
 Security-sensitive changes should include denial-case tests. A change that broadens discovery, inbound routing, outbound dialing, or child profile visibility should be treated as a safety-sensitive design change.
@@ -145,6 +146,23 @@ ASTERISK_GENERATED_CONFIG_DIR=/etc/asterisk/conf.d uv run python manage.py rende
 ```
 
 The generated files may contain SIP usernames, secrets, public numbers, caller IDs, and family-specific routing. Do not commit generated config from a real deployment.
+
+### Group Calls
+
+Conference groups remain child-only and default-deny. Parents may continue to manage
+the group membership exposed in the parent portal, but a staff member must enable
+calling in Django Admin. Enabling calling assigns an unused four-digit extension when
+one is not supplied and exposes a configurable 5-to-120-second ring timeout.
+
+The first member to dial the group extension enters an Asterisk `ConfBridge` while
+every other member's active devices and configured child landline ring concurrently.
+Unanswered invitations stop after the group's timeout. A member who dials the group
+extension while the bridge is active joins it without ringing the whole group again.
+The bridge plays a generic tone when participants enter or leave.
+
+During the call, press `*`, enter another group member's normal extension, and press
+`#` to retry that member. Generated per-group allowlists reject extensions belonging
+to nonmembers, and a member who is already in the bridge is not rung again.
 
 ### Multiple Devices on One Extension
 

@@ -7,6 +7,7 @@ from directory.models import (
     Child,
     ChildLandline,
     ChildLandlineDialShortcut,
+    ConferenceGroup,
     Device,
     ExternalNumberExtension,
     ExternalPhoneNumber,
@@ -62,6 +63,23 @@ class AsteriskAutoReloadSignalTests(TransactionTestCase):
             external_phone_number=number,
             label="Grandparent",
         )
+
+        apply.assert_called_once_with(reload=True)
+
+    @override_settings(ASTERISK_AUTO_APPLY_CONFIG=True)
+    @patch("directory.asterisk.autoreload.apply_asterisk_configuration")
+    def test_conference_save_and_membership_change_coalesce_after_commit(self, apply):
+        with override_settings(ASTERISK_AUTO_APPLY_CONFIG=False):
+            family = Family.objects.create(name="River House")
+            alex = Child.objects.create(family=family, name="Alex")
+            emma = Child.objects.create(family=family, name="Emma")
+
+        with transaction.atomic():
+            group = ConferenceGroup.objects.create(
+                name="Friends",
+                calling_enabled=True,
+            )
+            group.members.set([alex, emma])
 
         apply.assert_called_once_with(reload=True)
 

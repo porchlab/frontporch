@@ -1,6 +1,8 @@
 from django.contrib import messages
+from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
+from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -33,6 +35,17 @@ def _require_parent(request):
         messages.error(request, "This account is not connected to a FrontPorch family.")
         return None
     return parent
+
+
+def _log_parent_conference_group_action(request, group, action_flag, message):
+    LogEntry.objects.create(
+        user_id=request.user.pk,
+        content_type=ContentType.objects.get_for_model(ConferenceGroup),
+        object_id=str(group.pk),
+        object_repr=str(group),
+        action_flag=action_flag,
+        change_message=message,
+    )
 
 
 def register(request):
@@ -372,6 +385,17 @@ def conference_group_create(request):
             group.approved_by = parent
             group.save()
             form.save_m2m()
+            member_names = ", ".join(
+                group.members.order_by("family__name", "name").values_list(
+                    "name", flat=True
+                )
+            )
+            _log_parent_conference_group_action(
+                request,
+                group,
+                ADDITION,
+                f"Created in parent portal with members: {member_names}",
+            )
             messages.success(request, f"{group.name} was created.")
             return redirect("directory:dashboard")
     else:
@@ -395,6 +419,17 @@ def conference_group_update(request, group_id):
             updated.approved_by = parent
             updated.save()
             form.save_m2m()
+            member_names = ", ".join(
+                updated.members.order_by("family__name", "name").values_list(
+                    "name", flat=True
+                )
+            )
+            _log_parent_conference_group_action(
+                request,
+                updated,
+                CHANGE,
+                f"Updated in parent portal; members: {member_names}",
+            )
             messages.success(request, f"{updated.name} was updated.")
             return redirect("directory:dashboard")
     else:

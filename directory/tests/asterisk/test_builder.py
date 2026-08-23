@@ -9,6 +9,7 @@ from directory.models import (
     ChildBlackoutPeriod,
     ChildLandline,
     ChildLandlineDialShortcut,
+    ConferenceGroup,
     Device,
     DialShortcut,
     ExternalContactPermission,
@@ -160,6 +161,40 @@ class AsteriskConfigurationBuilderTests(TestCase):
         self.assertEqual(endpoints_by_extension["301"].owner_type, "family")
         self.assertEqual(endpoints_by_extension["201"].family_id, self.river.id)
         self.assertEqual(endpoints_by_extension["301"].family_id, self.river.id)
+
+    def test_enabled_conference_becomes_child_member_route(self):
+        group = ConferenceGroup.objects.create(
+            name="Friends",
+            calling_enabled=True,
+            dial_extension="4444",
+            ring_timeout_seconds=25,
+        )
+        group.members.set([self.alex, self.emma])
+
+        configuration = build_asterisk_configuration()
+
+        self.assertEqual(len(configuration.conference_routes), 1)
+        route = configuration.conference_routes[0]
+        self.assertEqual(route.dial_extension, "4444")
+        self.assertEqual(route.ring_timeout_seconds, 25)
+        self.assertEqual(
+            [(member.child_id, member.extensions) for member in route.members],
+            [(self.emma.id, ("102",)), (self.alex.id, ("101",))],
+        )
+
+    def test_disabled_or_single_member_conference_is_not_rendered(self):
+        disabled = ConferenceGroup.objects.create(name="Disabled")
+        disabled.members.set([self.alex, self.emma])
+        single = ConferenceGroup.objects.create(
+            name="Single",
+            calling_enabled=True,
+            dial_extension="4444",
+        )
+        single.members.set([self.alex])
+
+        configuration = build_asterisk_configuration()
+
+        self.assertEqual(configuration.conference_routes, ())
 
     def test_active_child_landlines_become_non_sip_routable_endpoints(self):
         number, _ = ExternalPhoneNumber.objects.get_or_create_normalized("+1 212 555 0100")
