@@ -20,6 +20,10 @@ Cobalt blue for actions, deep ink for text, white work surfaces, and warm yellow
 6. **Extended family:** add a private family contact → approve calls both ways for all children by saving → use its automatically assigned extension or a shortcut on each child’s phone.
 7. **Dial shortcuts:** open a child's phone → choose a key from 1–9 → select an already approved destination → optionally label it. Edit, move, pause, or remove assignments independently for each phone.
 
+## Setup checklist visibility
+
+Guardians can dismiss the overview checklist at any point, including after completion. Dismissal only changes a display preference; family details, phones, connections, and completion progress stay intact. **Family settings → Show setup checklist** restores it on the overview with current progress. The demo stores the preference for the current tab; a new family or Reset starts with setup visible. Production should persist this preference per guardian rather than hiding setup for everyone in the family.
+
 ## Domain alignment
 
 - Keep connections child-specific. Accepting an invitation connects the named invited child with the local children shown in the review. Local children are initially included and can be changed before accepting. There is no blanket family-wide permission.

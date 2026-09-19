@@ -170,3 +170,12 @@
 .contact-approval-summary h3{font-size:.9375rem;line-height:1.5;color:#335d46}
 .contact-approval-summary p{font-size:.875rem;line-height:1.65;color:#617b6b;margin-top:8px}
 @media(max-width:760px){.family-contacts-banner{padding:18px;gap:12px}.family-contacts-banner h2{font-size:1rem}.family-contacts-banner p{font-size:.875rem}.contacts-table{min-width:0}.contacts-table thead{display:none}.contacts-table tbody{display:block}.contacts-table tbody tr{display:grid;grid-template-columns:1fr auto;gap:17px;padding:20px;border-top:1px solid var(--line)}.contacts-table tbody tr:first-child{border-top:0}.contacts-table tbody th,.contacts-table tbody td{padding:0;border:0}.contacts-table tbody th{grid-column:1/-1;min-width:0}.contacts-table tbody .person-line>div>span{white-space:normal}.contact-extension-cell{grid-column:1}.contact-access-cell{grid-column:2;text-align:right}.contact-edit-cell{grid-column:1/-1;border-top:1px solid var(--line)!important;padding-top:9px!important}.contact-edit-cell>.text-button{width:100%;justify-content:space-between}.contact-approval-summary{padding:16px}.contact-dial-summary{padding:15px}}
+
+/* Setup can be dismissed without clearing progress. */
+.setup-banner-intro{flex-wrap:wrap}
+.setup-copy{flex:1 1 230px;min-width:0}
+.setup-controls{display:flex;align-items:center;gap:16px;margin-left:auto}
+.setup-controls .setup-count{margin-left:0}
+.setup-dismiss{font-size:.8125rem;color:#657797;white-space:nowrap;min-height:40px;padding:7px 0}
+.setup-dismiss>.icon{width:15px;height:15px}
+@media(max-width:760px){.setup-copy{flex-basis:190px}.setup-controls{margin-top:-4px}.setup-dismiss{min-height:36px}}

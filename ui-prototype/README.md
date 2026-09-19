@@ -12,12 +12,14 @@ python3 -m http.server 4173 --bind 127.0.0.1 --directory dist
 
 Open <http://127.0.0.1:4173/>. Use **Explore family** to open the populated Maple family, or **Set up your family** to explore onboarding from an empty state. The small design toolbar provides **Welcome**, **Explore family**, and **Reset** throughout the prototype.
 
+Use **Dismiss setup** to hide the onboarding checklist. Bring it back through **Family settings → Show setup checklist**. Dismissing keeps your progress; the choice lasts for the current demo tab, and **Reset** shows the checklist again.
+
 Changes persist in `sessionStorage` for the current browser tab. **Reset** restores the fictional seed data. Passwords are never stored. Different devices and tabs do not share data.
 
 ## Prototype surfaces
 
 - Welcome, login, and signup dialogs.
-- Family overview and a three-step setup checklist.
+- Family overview and a dismissible three-step setup checklist.
 - Child creation, phone names, extension registration, and quiet hours.
 - Per-phone dial shortcuts using keys 1–9, with approved-person selection, labels, pause, and removal.
 - Child-specific family connections with two-way calling after an invitation is accepted.
