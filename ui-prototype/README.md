@@ -22,7 +22,7 @@ Changes persist in `sessionStorage` for the current browser tab. **Reset** resto
 - Per-phone dial shortcuts using keys 1–9, with approved-person selection, labels, pause, and removal.
 - Child-specific family connections with two-way calling after an invitation is accepted.
 - Received, sent, and historical invitations, including child selection and a single accept action, plus decline and cancel actions.
-- Private external contacts, separate calling directions, and an outside-calling control.
+- Family-wide external contacts with two-way approval and automatically assigned dial extensions.
 - Searchable parent directory showing opted-in family and guardian names.
 - Directory visibility during signup and in family settings, with a listing preview.
 - Invite codes for reaching unlisted families, plus a copyable demo family code.
@@ -38,13 +38,21 @@ Your family starts **unlisted**. Change **Family settings → Directory visibili
 
 **Use an invite code** accepts `WILLOW-3R7J` for a listed sample family or `PINE-7K2M` for an unlisted one. Codes are fictional and resolve only within the prototype fixtures. The current family’s code can be copied, but browser-tab state is not shared across devices. Neither browsing nor code lookup sends a real invitation.
 
+## Explore family contacts
+
+Open **External contacts → Add a contact**. Saving a name and phone number approves calls both ways for all children in your family, including children added later. No child selection or outside-calling switch is needed. The contact's name stays private to your family.
+
+Each saved number receives a four-digit extension automatically. Children can dial that extension or use their own phone's shortcut assignment. Editing the label keeps the number's extension; changing the number selects an extension for the new number and leaves shortcuts to the previous number unavailable until updated. Removing a contact revokes family-wide access and makes its saved shortcuts unavailable. Re-adding the same number restores its extension and eligibility.
+
+Existing demo sessions preserve contacts, labels, and shortcut assignments while migrating to family-wide approval. Older per-child contact selections and the outside-calling toggle are retired. Contact extensions avoid children's registered extensions. All changes remain simulations in this tab.
+
 ## Explore dial shortcuts
 
 Go to **Children & phones → Dial shortcuts** on a registered child's card, or open **Manage phone & permissions → Manage shortcuts**. Choose an empty key from **1–9**, pick an approved person, and optionally give the shortcut a familiar short name. Casey's sample phone starts with **2 → Alex**.
 
 Edit an assigned key to change the person, move it to a free key, rename it, pause it, or remove it. Each phone has its own assignments; the same digit can call different people on different phones. Register a child's phone before assigning shortcuts.
 
-The picker includes other registered phones in your family, approved child connections, and approved outgoing external contacts while outside calling is enabled. Shortcuts do not grant permissions. A saved destination becomes unavailable if its permission is removed or outside calling is disabled; the draft keeps it visible for editing. Quiet hours still apply. These controls are simulated and do not configure a physical phone.
+The picker includes other registered phones in your family, approved child connections, and every saved family contact. Shortcuts do not grant permissions. A saved destination becomes unavailable if its family connection is revoked or its number is removed from family contacts; the draft keeps it visible for editing. Quiet hours still apply. These controls are simulated and do not configure a physical phone.
 
 ## Explore guardian invitations
 
