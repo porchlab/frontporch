@@ -1,0 +1,20 @@
+/* Demo-only controls and dialog adaptations. Product styling is exported from Django. */
+.prototype-bar { flex-wrap: wrap; }
+.prototype-bar > div { flex-wrap: wrap; }
+.demo-control-row { margin-top: 18px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.dialog-body .field { margin: 20px 0; }
+.dialog-body .field > label { display: block; }
+.dialog-body .field input[type="checkbox"] { width: 20px; height: 20px; }
+.dialog-body fieldset { margin: 20px 0; }
+.dialog-body .demo-notice { margin-bottom: 20px; }
+.dialog-body > .button { margin-top: 10px; }
+.dialog-body h3.spaced { margin-top: 25px; }
+.dialog-heading h2 { overflow-wrap: anywhere; }
+.demo-notice { overflow-wrap: anywhere; }
+.settings-panel .person-line > .pill { margin-left: auto; }
+@media (max-width: 760px) {
+  .prototype-bar { justify-content: center; gap: 5px; }
+  .prototype-bar > div { justify-content: center; gap: 12px; }
+  .prototype-bar button { font-size: .75rem; }
+  .dialog-footer { flex-wrap: wrap; }
+}

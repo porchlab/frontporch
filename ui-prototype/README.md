@@ -1,91 +1,105 @@
-# FrontPorch UI design lab
+# FrontPorch browser demo
 
-The real Django implementation and its resolved backend decisions are documented in
-[the parent portal guide](../docs/parent-ui-implementation.md). The proposal and
-fictional browser behavior below remain design reference material.
-
-A standalone, single-page prototype for exploring the parent experience before implementation in Django. All interactions use fictional data and run in the browser. There is no backend, real authentication, phone provisioning, email delivery, or telephony integration.
-
-Maintained in `ui-prototype/` in [porchlab/frontporch](https://github.com/porchlab/frontporch). Run the commands below from this prototype directory.
+A shareable, standalone demo of the Django parent portal. Visitors explore a
+fictional family in their own browser tab, without creating an account. Changes
+persist across refreshes in `sessionStorage`; **Reset** restores the sample family.
+No requests are sent to Django, email services, or phone systems. Passwords are
+never saved. Use fictional details throughout.
 
 ## Explore locally
 
+From the repository root:
+
 ```sh
-python3 -m http.server 4173 --bind 127.0.0.1 --directory dist
+python3 -m http.server 4173 --bind 127.0.0.1 --directory ui-prototype/dist
 ```
 
-Open <http://127.0.0.1:4173/>. Use **Explore family** to open the populated Maple family, or **Set up your family** to explore onboarding from an empty state. The small design toolbar provides **Welcome**, **Explore family**, and **Reset** throughout the prototype.
+Open <http://127.0.0.1:4173/>. **Explore family** opens a populated Maple household.
+**Start from scratch** lets you try signup and an empty household. **Welcome** and
+**Reset** remain available in the demo toolbar. Duplicated tabs can start with a
+copy of the original tab's session, but subsequent changes are independent.
 
-Use **Dismiss setup** to hide the onboarding checklist. Bring it back through **Family settings → Show setup checklist**. Dismissing keeps your progress; the choice lasts for the current demo tab, and **Reset** shows the checklist again.
+## Things to try
 
-A red notice at the top of every page states that FrontPorch cannot call 911. **Dismiss** hides it for the current demo tab, independently of the setup checklist. Restore it from **Family settings → Show 911 notice**, or use **Reset**. The footer and family settings retain their emergency-calling reminder.
+- Add children, reserve several phones per child, rename phones, and assign keys
+  1–9 independently on each phone. Extensions are automatic; new phones start
+  **Setup pending**.
+- Open **Demo tools** to simulate installer activation. **Enabled** describes
+  configuration, not observed phone registration. Pending phones can have saved
+  shortcuts, but only enabled destination phones appear in the picker.
+- Add, edit, and pause multiple quiet-hour schedules. The fictional phone system
+  uses **America/New_York**, explicitly shown on screen, independent of your browser.
+- Review the Cedar invitation and select children. Each selected sender child is
+  connected to each selected receiver child. Excluded and newly added children
+  stay unapproved. Remove individual pairs in **Family connections**.
+- Send an invitation, then use **Demo: preview receiving parent** to choose the
+  other family's children and accept. Sending alone never enables calling.
+- Opt your family into the directory and separately choose whether your guardian
+  name appears. Search shows only listed families and visible guardian names.
+- Try **WILLOW-3R7J**, or **PINE-7K2M** for a fictional unlisted family. Family
+  settings can copy or replace your household code. Codes cannot connect visitors
+  across browser sessions.
+- Add a family contact. Its normalized number gets an extension and is approved
+  for all current and future children. Removing it makes saved shortcuts to that
+  number unavailable. Restoring it reuses the extension.
+- Invite a guardian, use **Demo: preview recipient**, then use **Demo tools** to
+  explore as that guardian. Only the primary guardian manages membership. Each
+  guardian controls their own directory visibility. Invitations expire after
+  seven days; resend replaces the old invitation, and cancellation invalidates it.
+- Create a group with at least two children. Group calling requires simulated
+  installer activation and only becomes a shortcut destination for its members.
 
-Changes persist in `sessionStorage` for the current browser tab. **Reset** restores the fictional seed data. Passwords are never stored. Different devices and tabs do not share data.
+Old saved prototype sessions (versions 1–6) migrate to the new per-device model,
+retaining household details, contacts, connections, shortcuts, and quiet hours.
 
-## Prototype surfaces
+## Keeping Django and the demo aligned
 
-- Welcome, login, and signup dialogs.
-- Family overview and a dismissible three-step setup checklist.
-- Child creation, phone names, extension registration, and quiet hours.
-- Per-phone dial shortcuts using keys 1–9, with approved-person selection, labels, pause, and removal.
-- Child-specific family connections with two-way calling after an invitation is accepted.
-- Received, sent, and historical invitations, including child selection and a single accept action, plus decline and cancel actions.
-- Family-wide external contacts with two-way approval and automatically assigned dial extensions.
-- Searchable parent directory showing opted-in family and guardian names.
-- Directory visibility during signup and in family settings, with a listing preview.
-- Invite codes for reaching unlisted families, plus a copyable demo family code.
-- Family and guardian details, with primary-guardian invitations and a recipient join preview.
+Django is the source of truth for the product. The demo consumes generated copies
+of its **complete stylesheet, fonts, favicon, icons, form definitions, and welcome
+page content**. Form labels, required flags, lengths, help, options, and defaults
+come from the real Django forms. For example, changing “Guardian name” in Django
+updates the demo after exporting; there is no second label to edit.
 
-All views live in one document and use hash navigation, including `#family/overview`, `#family/children`, `#family/circle`, `#family/directory`, `#family/invites`, `#family/contacts`, and `#family/settings`.
+From an installed project environment, with `DATABASE_URL` set as for normal
+Django development:
 
-## Explore family discovery
+```sh
+uv run --frozen python manage.py export_browser_demo
+uv run --frozen python manage.py export_browser_demo --check
+node --test ui-prototype/tests/*.test.cjs
+uv run --frozen python manage.py test directory.tests.test_browser_demo
+```
 
-Open **Family directory** to browse the fictional families who have opted in. Search matches only family and guardian names. The cards distinguish connected families, incoming invitations, and sent invitations. **Request a connection** opens the child-specific invitation form; browsing and requesting never grant call permissions.
+The export command reads source presentation only; it does not query the database
+or export deployment configuration, household records, or secrets. Generated
+files are committed so static hosting still requires **no build step**.
 
-Your family starts **unlisted**. Change **Family settings → Directory visibility**, or opt in during new-family setup. The directory shows your own listing when enabled. Hiding it removes the listing while preserving connections and invitations.
+The GitHub **Browser demo parity** workflow checks every PR for stale exports,
+exercises browser state transitions, and compares selected connections and
+revoked shortcut destinations against actual Django model outcomes. The export
+check also runs in Django's normal test suite. The cross-runtime test needs Node;
+CI installs it explicitly.
 
-**Use an invite code** accepts `WILLOW-3R7J` for a listed sample family or `PINE-7K2M` for an unlisted one. Codes are fictional and resolve only within the prototype fixtures. The current family’s code can be copied, but browser-tab state is not shared across devices. Neither browsing nor code lookup sends a real invitation.
+| File | Ownership |
+| --- | --- |
+| `dist/styles.css`, `dist/fonts/`, `dist/favicon.svg` | Generated from Django static assets; do not edit here |
+| `dist/portal-contract.js` | Generated icons, forms, and welcome content; do not edit |
+| `dist/model.js` | Fictional state, transitions, storage, and old-session migration |
+| `dist/app.js` | Browser rendering and interactions |
+| `dist/demo.css`, `dist/index.html` | Demo toolbar, preview controls, and dialog adaptations |
+| `tests/` | Browser state and cross-runtime scenario checks |
 
-## Explore family contacts
+See [design and parity decisions](DESIGN.md) for intentional differences and the
+workflow for changing parent-facing features.
 
-Open **External contacts → Add a contact**. Saving a name and phone number approves calls both ways for all children in your family, including children added later. No child selection or outside-calling switch is needed. The contact's name stays private to your family.
+## Hosting
 
-Each saved number receives a four-digit extension automatically. Children can dial that extension or use their own phone's shortcut assignment. Editing the label keeps the number's extension; changing the number selects an extension for the new number and leaves shortcuts to the previous number unavailable until updated. Removing a contact revokes family-wide access and makes its saved shortcuts unavailable. Re-adding the same number restores its extension and eligibility.
+Publish the contents of `dist/` to static HTTPS hosting, using the existing
+[Cloudflare Pages instructions](deploy/cloudflare-pages.md). Run the checks above
+before publishing. No Django server or shared database is required. The public
+demo remains separate from the real parent portal.
 
-Existing demo sessions preserve contacts, labels, and shortcut assignments while migrating to family-wide approval. Older per-child contact selections and the outside-calling toggle are retired. Contact extensions avoid children's registered extensions. All changes remain simulations in this tab.
-
-## Explore dial shortcuts
-
-Go to **Children & phones → Dial shortcuts** on a registered child's card, or open **Manage phone & permissions → Manage shortcuts**. Choose an empty key from **1–9**, pick an approved person, and optionally give the shortcut a familiar short name. Casey's sample phone starts with **2 → Alex**.
-
-Edit an assigned key to change the person, move it to a free key, rename it, pause it, or remove it. Each phone has its own assignments; the same digit can call different people on different phones. Register a child's phone before assigning shortcuts.
-
-The picker includes other registered phones in your family, approved child connections, and every saved family contact. Shortcuts do not grant permissions. A saved destination becomes unavailable if its family connection is revoked or its number is removed from family contacts; the draft keeps it visible for editing. Quiet hours still apply. These controls are simulated and do not configure a physical phone.
-
-## Explore guardian invitations
-
-Go to **Family settings → Parents & guardians → Invite a guardian**. Enter a fictional name and email, then choose **Send invitation**. This creates a pending invitation in the current demo family; no email is sent and no guardian is added yet.
-
-Use **Preview invitation** on the confirmation or pending invitation to try the recipient’s **Create an account** or **I already have an account** flow. The invitation fixes the recipient email. Completing the form adds a guardian to the existing demo family and returns to the primary guardian’s view. It preserves the family’s children, phones, contacts, connections, and visibility preference. Passwords are discarded.
-
-The draft supports seven-day expiry, resending with a replacement invitation, cancellation, and removing an added guardian. Accepted, cancelled, replaced, and expired invitations cannot be used to join. The primary guardian cannot be removed through this flow. Pending and joined guardian emails never appear in the family directory.
-
-## Iterate
-
-- `dist/index.html`: page shell and prototype toolbar.
-- `dist/styles.css`: design tokens, responsive layouts, and component styling.
-- `dist/app.js`: fictional data, view templates, and interactions.
-- `dist/fonts/`: self-hosted DM Sans and its SIL Open Font License.
-- [DESIGN.md](DESIGN.md): product decisions, domain alignment, and unresolved questions.
-
-There is no install or build step. Edit the source files and reload. The site makes no external network requests. Syntax can be checked with `node --check dist/app.js`.
-
-## Public demo hosting
-
-Use [Cloudflare Pages](deploy/cloudflare-pages.md) to publish `dist/` with HTTPS and a custom domain. The Pages `_headers` file preserves the prototype's security headers and asks search engines not to index it. The demo remains publicly accessible to anyone with the URL.
-
-## Private hosting
-
-The `dist/` directory can be served by any static HTTP server. For a Tailscale deployment, bind the server or container-published port specifically to the host's private Tailscale IP. Keep the prototype separate from the Django app and mount the static assets read-only. `deploy/nginx.conf` is a minimal static-server configuration for that purpose.
-
-Deployment hostnames, private IPs, credentials, and operational paths belong outside this repository. No production FrontPorch services need to be rebuilt or reloaded to update this prototype.
+The `_headers` file prohibits outbound connections and asks search engines not
+to index the site; it is still accessible to anyone with its URL. For a private
+preview, `deploy/nginx.conf` remains available. Deployment hostnames and credentials
+belong outside the repository.

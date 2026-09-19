@@ -16,6 +16,21 @@ Only upload `dist/`. The rest of this repository is documentation and server con
 
 ## Update the demo
 
+Before publishing, run these checks from the repository root with the normal
+development `DATABASE_URL` configured:
+
+```sh
+uv run --frozen python manage.py export_browser_demo
+uv run --frozen python manage.py export_browser_demo --check
+node --test ui-prototype/tests/*.test.cjs
+uv run --frozen python manage.py test directory.tests.test_browser_demo
+```
+
+Review and commit refreshed assets alongside the Django change that required
+them. Upload every file in `dist/`, including `portal-contract.js`, `model.js`,
+`demo.css`, `_headers`, and `fonts/`. No Python or Node runtime is needed on the
+static host. The Browser demo parity CI workflow also checks these files.
+
 The dashboard's **Create a new deployment** flow accepts a fresh copy of `dist/`. Choose **Production** to update the custom domain.
 
 Alternatively, use Cloudflare's Wrangler CLI (Node.js 22 or newer for the version below):
