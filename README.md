@@ -14,6 +14,10 @@ The repository currently contains a Django project, foundational domain models, 
 
 Use this repository as application source and public examples only. Real neighborhood configuration belongs outside the public repo.
 
+## Parent UI Design Prototype
+
+The standalone [parent UI prototype](ui-prototype/README.md) explores onboarding, children’s phones and dial shortcuts (1–9), child-specific connections, an opt-in parent directory, guardian invitations, and external contacts. It uses fictional browser-local data and runs separately from Django. See its [design notes](ui-prototype/DESIGN.md) for proposed behavior and backend integration gaps.
+
 ## Safety Model
 
 FrontPorch should default to deny.
