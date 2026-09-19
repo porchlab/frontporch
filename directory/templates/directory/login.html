@@ -13,7 +13,10 @@
                 {% icon 'arrow' %}
             </button>
         </form>
-        <p class="auth-footnote">New to the neighborhood? <a href="{% url 'directory:register' %}">Set up your family</a>
-        </p>
+        {% if portal_allow_registration %}
+            <p class="auth-footnote">New to the neighborhood? <a href="{% url 'directory:register' %}">Set up your family</a></p>
+        {% else %}
+            <p class="auth-footnote">New to FrontPorch? Ask your neighborhood organizer to help your family get started.</p>
+        {% endif %}
     </section>
 {% endblock %}

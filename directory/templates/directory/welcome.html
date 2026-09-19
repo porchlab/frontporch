@@ -18,7 +18,11 @@
                     Give your kids the freedom to call their favorite people, with you close by.
                 </p>
                 <div class="hero-actions">
-                    <a class="button large" href="{% url 'directory:register' %}">Set up your family {% icon 'arrow' %}</a>
+                    {% if portal_allow_registration %}
+                        <a class="button large" href="{% url 'directory:register' %}">Set up your family {% icon 'arrow' %}</a>
+                    {% else %}
+                        <a class="button large" href="{% url 'login' %}">Log in to your family {% icon 'arrow' %}</a>
+                    {% endif %}
                     <a class="text-button" href="#how-it-works">How it works</a>
                 </div>
                 <div class="hero-proof">{% icon 'shield' %} Parent-approved. Private by design.</div>

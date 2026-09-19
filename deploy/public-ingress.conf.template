@@ -1,0 +1,59 @@
+# This listener has no host port. Only cloudflared is on the tunnel network.
+# Cloudflare overwrites CF-Connecting-IP and X-Forwarded-Proto at its edge.
+set_real_ip_from 0.0.0.0/0;
+set_real_ip_from ::/0;
+real_ip_header CF-Connecting-IP;
+
+# Limit POSTs on account entry points, including encoded/normalized paths.
+# Shared-memory zones enforce one budget across all nginx workers.
+map "$request_method:$uri" $account_limit_key {
+    default "";
+    ~^POST:/accounts/login/?$ $binary_remote_addr;
+    ~^POST:/register/?$ $binary_remote_addr;
+    ~^POST:/guardians/join/ $binary_remote_addr;
+}
+limit_req_zone $account_limit_key zone=account_entry:10m rate=5r/m;
+
+# Never log request paths: guardian invitation URLs contain bearer tokens.
+log_format portal_access '$remote_addr $request_method $status $body_bytes_sent $request_time';
+
+server {
+    listen 8080 default_server;
+    server_name _;
+    return 404;
+}
+
+server {
+    listen 8080;
+    server_name ${FRONTPORCH_PUBLIC_HOST};
+    server_tokens off;
+    access_log /var/log/nginx/access.log portal_access;
+    # nginx errors can include the request URL; keep invitation tokens out of logs.
+    error_log /var/log/nginx/error.log crit;
+    client_max_body_size 1m;
+    limit_req zone=account_entry burst=5 nodelay;
+    limit_req_status 429;
+
+    if ($http_x_forwarded_proto != "https") {
+        return 301 https://${FRONTPORCH_PUBLIC_HOST}$request_uri;
+    }
+
+    location ~* ^/admin(?:/|$) {
+        return 404;
+    }
+
+    location / {
+        # Resolve Docker DNS on each refresh so a recreated portal is reachable.
+        resolver 127.0.0.11 valid=10s ipv6=off;
+        set $portal_upstream portal:8000;
+        proxy_pass http://$portal_upstream;
+        proxy_set_header Host ${FRONTPORCH_PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Host "";
+        proxy_set_header Forwarded "";
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+        proxy_read_timeout 65s;
+    }
+}

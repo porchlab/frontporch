@@ -16,9 +16,13 @@ The application is the source of truth. Asterisk should never become the primary
 ```mermaid
 flowchart LR
     Phone["Analog corded phone"] --> ATA["Grandstream HT802 ATA"]
-    ATA --> Gateway["GL.iNet gateway running Tailscale"]
-    Gateway --> Tailnet["Private Tailscale network"]
-    Tailnet --> Asterisk["Asterisk PBX"]
+    ATA --> Gateway["Family gateway running WireGuard"]
+    Gateway --> WireGuard["Private WireGuard network"]
+    WireGuard --> Asterisk["Asterisk PBX"]
+    Operator["Operator"] --> Tailscale["Private Tailscale network"]
+    Tailscale --> Admin["Private Django admin and server maintenance"]
+    Parent["Parent browser"] --> Tunnel["Cloudflare Tunnel"]
+    Tunnel --> Portal["HTTPS parent portal, no admin routes"]
     Django["Django application"] --> Config["Generated Asterisk configuration"]
     Config --> Asterisk
     Django --> Audit["Audit log"]
@@ -104,21 +108,23 @@ The hand-written configuration under `asterisk/etc/` provides local scaffolding 
 
 ## Networking
 
-FrontPorch runs over Tailscale.
+ATA gateways use WireGuard to reach Asterisk. Operators use Tailscale for the
+private web service, Django admin, and server maintenance. Parents may use the
+public HTTPS portal without a VPN; see [ADR-011](docs/architecture/ADR-011-public-parent-portal.md).
 
 Design assumptions:
 
 - SIP is not exposed to the public Internet.
 - Homes do not configure port forwarding.
 - Each family has a dedicated gateway on the private network.
-- PBX services are reachable only over the tailnet or equivalent private infrastructure.
+- Family SIP and media traffic reaches the PBX over WireGuard.
 - Device identity should be tied to provisioned hardware, not to user-entered secrets alone.
 
-The preferred home gateway is a small GL.iNet router running Tailscale. It connects to the family's existing Internet service and provides private connectivity for the ATA and future neighborhood services.
+The preferred home gateway is a small GL.iNet router running WireGuard. It connects to the family's existing Internet service and provides private connectivity for the ATA and future neighborhood services.
 
 The same gateway may later provide a private Wi-Fi network for community applications such as Minecraft, shared file storage, AI services, or local web apps.
 
-Future gateway provisioning should be automatable from FrontPorch. The long-term direction is for FrontPorch to create or track gateway inventory, family assignment, device naming, Tailscale tags, auth key lifecycle, provisioning status, SIP credentials, and generated gateway artifacts. Early releases may use manually created Tailscale auth keys, but the architecture should not require administrators or families to perform interactive Tailscale login on each gateway.
+Future gateway provisioning should be automatable from FrontPorch. The long-term direction is to track gateway inventory, family assignment, device naming, WireGuard peers and key lifecycle, provisioning status, SIP credentials, and generated gateway artifacts. Families should not have to manage VPN configuration themselves.
 
 ## Security Model
 
@@ -145,6 +151,6 @@ FrontPorch should continue to grow in layers:
 3. Expand reliable deployment automation without exposing SIP publicly.
 4. Add reliable appliance provisioning for home gateways and ATAs.
 5. Reuse the private neighborhood network for additional community services.
-6. Evolve FrontPorch into the control plane for gateway onboarding, Tailscale tag management, key lifecycle, and provisioning status.
+6. Evolve FrontPorch into the control plane for gateway onboarding, WireGuard peer management, key lifecycle, and provisioning status.
 
 The architectural boundary should remain stable: the application owns policy, and infrastructure enforces the generated result.

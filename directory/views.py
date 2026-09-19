@@ -1,10 +1,12 @@
 from django.contrib import messages
+from django.conf import settings
 from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.http import Http404
 from .services import record_activity
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.debug import sensitive_post_parameters
@@ -59,6 +61,8 @@ def _success(request, message):
 
 @sensitive_post_parameters("password1", "password2")
 def register(request):
+    if not settings.FRONTPORCH_ALLOW_REGISTRATION:
+        raise Http404
     if request.user.is_authenticated and _current_parent(request.user):
         return redirect("directory:dashboard")
     if request.method == "POST":

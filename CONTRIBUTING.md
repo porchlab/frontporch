@@ -116,7 +116,7 @@ Infrastructure changes should be:
 - Reviewable
 - Documented
 - Conservative about public exposure
-- Compatible with private networking over Tailscale
+- Compatible with WireGuard for ATAs and Tailscale for administration
 
 Do not introduce public SIP exposure, port forwarding requirements, or vendor-specific lock-in without explicit architectural discussion.
 

@@ -318,7 +318,11 @@ docker compose run --rm web python manage.py createsuperuser
 docker compose run --rm web python manage.py render_asterisk_config
 ```
 
-Do not expose SIP, AMI, PostgreSQL, or the parent/admin UI to the public Internet.
+Keep SIP, AMI, PostgreSQL, and Django admin private. ATA gateways connect through
+WireGuard; operators use Tailscale for the private portal and server maintenance.
+The optional [public parent portal](docs/operations/public-portal.md) uses Cloudflare
+Tunnel at `front.porchlab.app`, with a separate Django process that has no admin
+routes. The default Compose deployment remains private.
 
 ## Running Tests
 

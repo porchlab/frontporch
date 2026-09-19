@@ -44,7 +44,8 @@ Respect these boundaries:
 - Asterisk is the PBX runtime for SIP registration, call routing, and media.
 - Asterisk configuration should be generated from Django state.
 - Asterisk should not become the primary place where business rules are edited.
-- Communication should occur over Tailscale or equivalent private networking.
+- ATA SIP/media uses WireGuard; administration and maintenance use Tailscale.
+- The optional public parent portal uses Cloudflare Tunnel and the isolated public settings/URL configuration. Django admin remains private (ADR-011).
 - Public SIP exposure and port forwarding are outside the intended design.
 
 If a requested change violates these constraints, call that out clearly before proceeding.

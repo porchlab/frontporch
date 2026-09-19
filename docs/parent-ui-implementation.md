@@ -42,9 +42,11 @@ approved scope, upgrade semantics, and deployment assumptions.
    existing automatic apply workflow. Old cross-family parent/shared-device grants
    are intentionally retired; current child pairs are preserved by migration.
 5. Configure SMTP and a real sender in private deployment configuration. The
-   variables are documented in `.env.example`. Set `FRONTPORCH_PUBLIC_URL` to the canonical private HTTPS portal origin so
+   variables are documented in `.env.example`. Set `FRONTPORCH_PUBLIC_URL` to the canonical HTTPS portal origin so
    emailed links remain correct behind a reverse proxy. No production
    email service or phone hardware is provisioned by this change.
+   The optional [public portal deployment](operations/public-portal.md) uses
+   `https://front.porchlab.app` and keeps Django admin on Tailscale.
 6. Collect static assets as part of the existing build/deploy process. The bundled
    font license remains alongside the fonts.
 

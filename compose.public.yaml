@@ -1,0 +1,67 @@
+# Opt-in public parent portal. Requires Docker Compose >= 2.24.0 for !reset.
+# docker compose -f compose.yaml -f compose.public.yaml up -d --build
+services:
+  web:
+    # The base command finishes migrations before starting Gunicorn. Waiting
+    # for its listener prevents a first-start race with the public process.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+
+  portal:
+    extends:
+      file: compose.yaml
+      service: web
+    # Migrate once through the private web service before starting this process.
+    command: >
+      sh -c "python manage.py collectstatic --noinput &&
+             exec gunicorn frontporch.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --threads ${GUNICORN_THREADS:-4} --timeout ${GUNICORN_TIMEOUT:-60}"
+    environment:
+      DJANGO_SETTINGS_MODULE: frontporch.public_settings
+      FRONTPORCH_PUBLIC_HOST: ${FRONTPORCH_PUBLIC_HOST:-front.porchlab.app}
+    ports: !reset []
+    networks:
+      - default
+      - portal_backend
+    depends_on:
+      web:
+        condition: service_healthy
+
+  public-ingress:
+    image: nginx@sha256:ef8676b33d681f272ba429b27658bdd7e640963279714c96bddf1dc76307f7b6
+    environment:
+      FRONTPORCH_PUBLIC_HOST: ${FRONTPORCH_PUBLIC_HOST:-front.porchlab.app}
+      NGINX_ENVSUBST_FILTER: ^FRONTPORCH_PUBLIC_HOST$
+    volumes:
+      - ./deploy/public-ingress.conf.template:/etc/nginx/templates/default.conf.template:ro
+    networks:
+      - portal_backend
+      - tunnel
+    depends_on:
+      - portal
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared@sha256:b269e8abd07a5bf6f3f4be65d5050b2174eca89c56a0241a8ff32a16aec454e4
+    command: tunnel --no-autoupdate run --token-file /run/secrets/cloudflare_tunnel_token
+    secrets:
+      - cloudflare_tunnel_token
+    networks:
+      - tunnel
+    depends_on:
+      - public-ingress
+    restart: unless-stopped
+
+networks:
+  portal_backend:
+    internal: true
+  # Only ingress shares the connector's Docker network. Keep Cloudflare's
+  # service URL fixed to public-ingress:8080; this is not an egress firewall.
+  tunnel:
+
+secrets:
+  cloudflare_tunnel_token:
+    file: ${CLOUDFLARE_TUNNEL_TOKEN_FILE:-./.local/cloudflare-tunnel-token}

@@ -96,7 +96,9 @@
                 </a>
                 <nav aria-label="Welcome">
                     <a href="{% url 'login' %}">Log in</a>
-                    <a class="button small" href="{% url 'directory:register' %}">Set up your family</a>
+                    {% if portal_allow_registration %}
+                        <a class="button small" href="{% url 'directory:register' %}">Set up your family</a>
+                    {% endif %}
                 </nav>
             </header>
         {% endif %}

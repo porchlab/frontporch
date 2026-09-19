@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR-011](ADR-011-public-parent-portal.md). The private voice-network
+boundary remains; ATA connectivity uses WireGuard and administration uses Tailscale.
 
 ## Date
 
@@ -47,4 +48,3 @@ FrontPorch becomes partly dependent on Tailscale behavior, availability, and acc
 Future ADRs should define device enrollment, gateway ownership, key rotation, subnet routing, and operator access.
 
 If FrontPorch adopts another private networking system, that decision should supersede this ADR while preserving the no-public-SIP and no-port-forwarding constraints.
-
