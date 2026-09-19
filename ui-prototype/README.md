@@ -14,6 +14,8 @@ Open <http://127.0.0.1:4173/>. Use **Explore family** to open the populated Mapl
 
 Use **Dismiss setup** to hide the onboarding checklist. Bring it back through **Family settings → Show setup checklist**. Dismissing keeps your progress; the choice lasts for the current demo tab, and **Reset** shows the checklist again.
 
+A red notice at the top of every page states that FrontPorch cannot call 911. **Dismiss** hides it for the current demo tab, independently of the setup checklist. Restore it from **Family settings → Show 911 notice**, or use **Reset**. The footer and family settings retain their emergency-calling reminder.
+
 Changes persist in `sessionStorage` for the current browser tab. **Reset** restores the fictional seed data. Passwords are never stored. Different devices and tabs do not share data.
 
 ## Prototype surfaces

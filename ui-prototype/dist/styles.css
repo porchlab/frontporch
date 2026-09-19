@@ -179,3 +179,15 @@
 .setup-dismiss{font-size:.8125rem;color:#657797;white-space:nowrap;min-height:40px;padding:7px 0}
 .setup-dismiss>.icon{width:15px;height:15px}
 @media(max-width:760px){.setup-copy{flex-basis:190px}.setup-controls{margin-top:-4px}.setup-dismiss{min-height:36px}}
+
+/* Emergency calling limitation is visible before entering the prototype. */
+.emergency-banner{display:flex;align-items:center;gap:15px;background:#a5222e;color:white;padding:12px 30px;border-bottom:1px solid #891b25}
+.emergency-banner[hidden]{display:none}
+.emergency-banner>p{flex:1;min-width:0;font-size:.9375rem;line-height:1.6}
+.emergency-banner strong{font-weight:700;margin-right:6px}
+.emergency-banner>.icon{flex-shrink:0}
+.emergency-dismiss{display:inline-flex;align-items:center;justify-content:center;gap:10px;flex-shrink:0;min-width:44px;min-height:44px;padding:8px 12px;border:1px solid #ffffff70;border-radius:7px;color:white;font-size:.8125rem;font-weight:600}
+.emergency-dismiss:hover{background:#ffffff1a;border-color:white}
+.emergency-dismiss:focus-visible,.emergency-banner:focus-visible{outline:3px solid white;outline-offset:-5px}
+@media(max-width:760px){.emergency-banner{align-items:flex-start;padding:14px 18px;gap:12px}.emergency-banner>.icon{margin-top:3px}.emergency-banner>p{font-size:.875rem}.emergency-banner strong{display:block;margin:0 0 3px}.emergency-dismiss{padding:8px}}
+@media(max-width:480px){.emergency-dismiss>span{display:none}.emergency-banner{gap:10px;padding:13px 14px}.emergency-banner>.icon{width:20px;height:20px}}

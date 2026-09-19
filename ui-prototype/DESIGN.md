@@ -24,6 +24,10 @@ Cobalt blue for actions, deep ink for text, white work surfaces, and warm yellow
 
 Guardians can dismiss the overview checklist at any point, including after completion. Dismissal only changes a display preference; family details, phones, connections, and completion progress stay intact. **Family settings → Show setup checklist** restores it on the overview with current progress. The demo stores the preference for the current tab; a new family or Reset starts with setup visible. Production should persist this preference per guardian rather than hiding setup for everyone in the family.
 
+## Emergency calling notice
+
+A red, dismissible banner precedes the PORCHLAB toolbar on the welcome page and every family view. It explicitly states that FrontPorch cannot call 911 and tells families to keep another phone available for emergencies. This represents the current limitation described in ADR-008; dismissal does not indicate emergency capability or consent to a service change. The preference is independent of setup visibility and lasts for the demo tab. Family settings can restore the banner, and Reset or a new family shows it again. Existing footer and settings reminders remain visible.
+
 ## Domain alignment
 
 - Keep connections child-specific. Accepting an invitation connects the named invited child with the local children shown in the review. Local children are initially included and can be changed before accepting. There is no blanket family-wide permission.
