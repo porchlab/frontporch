@@ -1,0 +1,7 @@
+{% load portal_tags %}
+<a href="{% url route %}"
+   class="nav-item {% if section == key %}active{% endif %}"
+   {% if section == key %}aria-current="page"{% endif %}>
+    {% icon symbol %}
+    <span>{{ name }}</span>
+</a>

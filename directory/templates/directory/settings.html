@@ -1,0 +1,113 @@
+{% extends "directory/base.html" %}
+{% load portal_tags %}
+{% block content %}
+    {% include "directory/heading.html" with heading="Make yourself at home." subtitle="Your family details and the parents who keep things running." %}
+    <div class="settings-grid">
+        <section class="panel settings-panel">
+            <h2>Your family</h2>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="form" value="family">
+                {% include "directory/fields.html" with form=family_form %}
+                <p class="form-note">Listing shows only your family name and guardian names that each guardian chooses to share. Hiding your family preserves existing connections.</p>
+                <button class="button">Save family details</button>
+            </form>
+            <form class="spaced"
+                  method="post"
+                  action="{% url 'directory:preference' 'setup' %}">
+                {% csrf_token %}
+                <input type="hidden" name="dismissed" value="false">
+                <button class="text-button blue-text">Show setup checklist</button>
+            </form>
+        </section>
+        <section class="panel settings-panel">
+            <h2>Your guardian profile</h2>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="form" value="profile">
+                {% include "directory/fields.html" with form=profile_form %}
+                <button class="button">Save your profile</button>
+            </form>
+        </section>
+        <section class="panel settings-panel">
+            <div class="section-heading">
+                <h2>Parents & guardians</h2>
+            </div>
+            {% for guardian in guardians %}
+                <div class="device-row">
+                    <div class="person-line">
+                        <span class="avatar yellow small-avatar">{{ guardian.display_name|first|upper }}</span>
+                        <div>
+                            <strong>{{ guardian.display_name }}</strong>
+                            <span>{{ guardian.email }}</span>
+                        </div>
+                        <span class="pill neutral">
+                            {% if guardian.is_primary %}Primary guardian{% elif guardian.is_guardian %}Guardian{% else %}No portal access{% endif %}
+                        </span>
+                    </div>
+                    {% if portal_parent.is_primary and guardian.is_guardian and not guardian.is_primary %}
+                        <form class="spaced"
+                              method="post"
+                              action="{% url 'directory:guardian_remove' guardian.id %}"
+                              data-confirm="Remove this guardian’s family access? Existing calling approvals will stay in place.">
+                            {% csrf_token %}
+                            <button class="text-button danger-text">Remove guardian access</button>
+                        </form>
+                    {% endif %}
+                </div>
+            {% endfor %}
+            {% if portal_parent.is_primary %}
+                <a class="button secondary spaced"
+                   href="{% url 'directory:guardian_invite' %}">Invite a guardian</a>
+                {% for invitation in guardian_invitations %}
+                    <div class="device-row">
+                        <h3>{{ invitation.display_name }}</h3>
+                        <p>{{ invitation.email }} · {% if invitation.available %}Pending until {{ invitation.expires_at|date:'M j' }}{% else %}Expired{% endif %}
+                        </p>
+                        <div class="inline-actions">
+                            <form method="post"
+                                  action="{% url 'directory:guardian_invitation_action' invitation.id 'resend' %}">
+                                {% csrf_token %}
+                                <button class="text-button blue-text">Resend invitation</button>
+                            </form>
+                            <form method="post"
+                                  action="{% url 'directory:guardian_invitation_action' invitation.id 'cancel' %}">
+                                {% csrf_token %}
+                                <button class="text-button">Cancel invitation</button>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="form-note">The primary guardian manages membership invitations.</p>
+            {% endif %}
+        </section>
+        <section class="panel settings-panel">
+            <h2>A hello by invitation.</h2>
+            <p class="dialog-intro">Share this code privately with another parent to help them find your family, even when you’re unlisted. It never grants calling permission.</p>
+            <code class="family-code" id="family-code">{{ portal_parent.family.invite_code }}</code>
+            <button class="button secondary" type="button" data-copy="family-code">{% icon 'copy' %} Copy code</button>
+            <p class="copy-status" role="status"></p>
+            <form method="post"
+                  action="{% url 'directory:preference' 'code' %}"
+                  data-confirm="Replace your code? The previous code will stop working.">
+                {% csrf_token %}
+                <button class="text-button blue-text">Replace code</button>
+            </form>
+        </section>
+        <section class="safety-panel">
+            <span class="icon-tile">{% icon 'info' %}</span>
+            <div>
+                <h3>Keep another phone for emergencies.</h3>
+                <p>FrontPorch does not support emergency calls. Your family needs another way to reach emergency services.</p>
+                {% if portal_parent.emergency_notice_dismissed %}
+                    <form method="post" action="{% url 'directory:preference' 'emergency' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="dismissed" value="false">
+                        <button class="text-button">Show 911 notice</button>
+                    </form>
+                {% endif %}
+            </div>
+        </section>
+    </div>
+{% endblock %}

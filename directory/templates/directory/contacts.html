@@ -1,0 +1,67 @@
+{% extends "directory/base.html" %}
+{% load portal_tags %}
+{% block content %}
+    {% include "directory/heading.html" with heading="Familiar voices, near and far." subtitle="A private address book for the people outside FrontPorch." action_url="directory:contact_create" action_label="Add a contact" %}
+    <section class="family-contacts-banner">
+        <span class="icon-tile">{% icon 'users' %}</span>
+        <div>
+            <h2>Familiar voices for the whole family.</h2>
+            <p>Adding a contact approves calls both ways with all your children, including children you add later.</p>
+        </div>
+    </section>
+    {% if contacts %}
+        <div class="contacts-table-wrap">
+            <table class="contacts-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Contact</th>
+                        <th scope="col">Dial extension</th>
+                        <th scope="col">Calling access</th>
+                        <th scope="col">
+                            <span class="sr-only">Manage</span>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for contact in contacts %}
+                        <tr>
+                            <th scope="row">
+                                <div class="person-line">
+                                    <span class="avatar lavender small-avatar">{{ contact.label|first|upper }}</span>
+                                    <div>
+                                        <strong>{{ contact.label }}</strong>
+                                        <span>{{ contact.external_phone_number.normalized_number }}</span>
+                                    </div>
+                                </div>
+                            </th>
+                            <td>
+                                <span class="contact-extension">{{ contact.dial_extension.dial_extension }}</span>
+                                <small class="contact-detail">Automatically assigned</small>
+                            </td>
+                            <td>
+                                <span class="pill green">All children</span>
+                                <small class="contact-detail">Calls both ways{% if not contact.dial_extension.is_active %} · Outbound extension disabled{% endif %}
+                                </small>
+                            </td>
+                            <td>
+                                <a class="text-button blue-text"
+                                   href="{% url 'directory:contact_edit' contact.id %}">Edit <span class="sr-only">{{ contact.label }}</span>
+                                    {% icon 'chevron' %}
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <h3>Keep a familiar voice close.</h3>
+            <p>Add a trusted person to approve calling with every child in your family.</p>
+            <a class="button" href="{% url 'directory:contact_create' %}">Add a contact</a>
+        </div>
+    {% endif %}
+    <p class="section-footnote">
+    {% icon 'lock' %} Contact names are private to your family. Removing a contact revokes this family approval for all children.</p>
+    <p class="section-footnote">Outside calls require a configured telephone provider and inbound number. Your installer manages these.</p>
+{% endblock %}

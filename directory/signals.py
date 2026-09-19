@@ -5,6 +5,7 @@ from directory.asterisk.autoreload import schedule_asterisk_configuration_apply
 from directory.models import (
     AllowedChildFamilyRelationship,
     Child,
+    ChildConnection,
     ChildBlackoutPeriod,
     ChildLandline,
     ChildLandlineDialShortcut,
@@ -21,6 +22,8 @@ from directory.models import (
 )
 
 
+@receiver(post_save, sender=ChildConnection)
+@receiver(post_delete, sender=ChildConnection)
 @receiver(post_save, sender=Family)
 @receiver(post_save, sender=Parent)
 @receiver(post_save, sender=Child)

@@ -1,0 +1,74 @@
+{% extends "directory/base.html" %}
+{% load portal_tags %}
+{% block content %}
+    {% include "directory/heading.html" with heading="A hello worth opening." subtitle="Review who wants to connect, and keep track of your invitations." action_url="directory:family_directory" action_label="Connect a family" %}
+    <nav class="tab-list" aria-label="Invitation type">
+        <a href="?tab=received"
+           {% if tab == 'received' %}class="selected" aria-current="page"{% endif %}>Received</a>
+        <a href="?tab=sent"
+           {% if tab == 'sent' %}class="selected" aria-current="page"{% endif %}>Sent</a>
+        <a href="?tab=history"
+           {% if tab == 'history' %}class="selected" aria-current="page"{% endif %}>History</a>
+    </nav>
+    <div class="invite-list">
+        {% for invitation in invitations %}
+            <article class="invite-card">
+                <div class="invite-card-top">
+                    <div class="person-line">
+                        <span class="avatar lavender">{% icon 'mail' %}</span>
+                        <div>
+                            <h2>The {% if invitation.source_family_id == portal_parent.family_id %}{{ invitation.target_family.name }}{% else %}{{ invitation.source_family.name }}{% endif %} family</h2>
+                            <span>{{ invitation.created_at|date:'M j, Y' }}</span>
+                        </div>
+                    </div>
+                    <span class="pill {% if invitation.status == 'accepted' %}green{% elif invitation.status == 'pending' %}amber{% else %}neutral{% endif %}">{{ invitation.get_status_display }}</span>
+                </div>
+                <p>
+                    {% for child in invitation.source_children.all %}
+                        <strong>{{ child.name }}</strong>
+                        {% if not forloop.last %},{% endif %}
+                    {% endfor %}
+                    {% if invitation.status == "accepted" %}connected with {% for child in invitation.accepted_children.all %}
+                        <strong>{{ child.name }}</strong>
+                        {% if not forloop.last %},{% endif %}
+                    {% endfor %}.{% else %}would like to connect for calls both ways.{% endif %}
+                </p>
+                {% if invitation.message %}
+                    <blockquote>
+                        {{ invitation.message }}
+                    </blockquote>
+                {% endif %}
+                <div class="invite-card-bottom">
+                    <span>
+                        {% icon 'shield' %}
+                        {% if invitation.status == "pending" %}Calling stays off until both families approve.{% else %}Manage current permissions in Family connections.{% endif %}
+                    </span>
+                    {% if invitation.status == "pending" %}
+                        <div>
+                            {% if invitation.target_family_id == portal_parent.family_id %}
+                                <form method="post"
+                                      action="{% url 'directory:invitation_action' invitation.id 'decline' %}">
+                                    {% csrf_token %}
+                                    <button class="button secondary">Decline</button>
+                                </form>
+                                <a class="button"
+                                   href="{% url 'directory:connection_review' invitation.id %}">Review invitation</a>
+                            {% else %}
+                                <form method="post"
+                                      action="{% url 'directory:invitation_action' invitation.id 'cancel' %}">
+                                    {% csrf_token %}
+                                    <button class="button secondary">Cancel invitation</button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+            </article>
+        {% empty %}
+            <div class="empty-state">
+                <h3>You’re all caught up.</h3>
+                <p>Your invitations will appear here.</p>
+            </div>
+        {% endfor %}
+    </div>
+{% endblock %}

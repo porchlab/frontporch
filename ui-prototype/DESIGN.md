@@ -1,5 +1,9 @@
 # Draft 01: a parent’s front porch
 
+The real Django implementation and its resolved backend decisions are documented in
+[the parent portal guide](../docs/parent-ui-implementation.md). The proposal and
+fictional browser behavior below remain design reference material.
+
 ## Grounding
 
 Reviewed the FrontPorch README, architecture, roadmap, contributor and assistant guidance, test-family documentation, ADRs 001, 005, 007, and 008, and the existing parent forms, dashboard, permission services, and related domain models. The draft was developed in a standalone workspace using the FrontPorch Django checkout as its reference. It is maintained separately from the application in `ui-prototype/`.

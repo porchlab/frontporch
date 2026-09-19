@@ -6,6 +6,7 @@ from django.test import TestCase
 from directory.models import (
     AllowedChildFamilyRelationship,
     Child,
+    ChildConnection,
     ChildBlackoutPeriod,
     ChildLandline,
     ChildLandlineDialShortcut,
@@ -351,7 +352,7 @@ class DirectoryDomainTests(TestCase):
                 approved_by=self.river_parent,
             )
 
-    def test_child_landline_shortcut_requires_reciprocal_cross_family_permission(self):
+    def test_child_landline_shortcut_requires_explicit_child_connection(self):
         source = self._create_landline(self.alex, self.river_parent)
         self._create_child_device(self.emma, "3552", "emma")
 
@@ -372,7 +373,7 @@ class DirectoryDomainTests(TestCase):
                 approved_by=self.river_parent,
             )
 
-        self._approve_child_for_family(self.emma, self.family_a)
+        self._connect_children(self.alex, self.emma)
         shortcut = ChildLandlineDialShortcut.objects.create(
             source_landline=source,
             digits="2",
@@ -411,8 +412,7 @@ class DirectoryDomainTests(TestCase):
     def test_child_landline_shortcut_detects_permission_revocation(self):
         source = self._create_landline(self.alex, self.river_parent)
         self._create_child_device(self.emma, "3552", "emma")
-        self._approve_child_for_family(self.alex, self.family_b)
-        reciprocal = self._approve_child_for_family(self.emma, self.family_a)
+        reciprocal = self._connect_children(self.alex, self.emma)
         shortcut = ChildLandlineDialShortcut.objects.create(
             source_landline=source,
             digits="2",
@@ -446,6 +446,11 @@ class DirectoryDomainTests(TestCase):
             sip_username=username,
             sip_secret="secret",
         )
+
+    def _connect_children(self, first, second):
+        a, b = sorted((first, second), key=lambda child: child.pk)
+        return ChildConnection.objects.create(child_a=a, child_b=b,
+            approved_by_a=a.family.parents.first(), approved_by_b=b.family.parents.first())
 
     def _approve_child_for_family(self, child, target_family):
         return AllowedChildFamilyRelationship.objects.create(

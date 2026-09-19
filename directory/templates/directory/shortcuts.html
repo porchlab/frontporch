@@ -1,0 +1,51 @@
+{% extends "directory/base.html" %}
+{% load portal_tags %}
+{% block content %}
+    <div class="page-heading">
+        <div>
+            <div class="eyebrow">DIAL SHORTCUTS · EXTENSION {{ device.sip_extension }}</div>
+            <h1>One key. A familiar voice.</h1>
+            <p>{{ device.friendly_name }} · Choose the people on this phone’s keys.</p>
+        </div>
+    </div>
+    <div class="info-strip">
+        <p>Shortcuts use existing calling permissions. Quiet hours still apply. {% if not device.is_active %}This phone is awaiting installer activation.{% endif %}
+        </p>
+    </div>
+    <div class="dial-grid">
+        {% for slot in slots %}
+            <article class="dial-slot">
+                <span class="dial-digit">{{ slot.digit }}</span>
+                {% if slot.shortcut %}
+                    <h2>{{ slot.shortcut.label|default:slot.target_label }}</h2>
+                    <p>{{ slot.target_label }}</p>
+                    <span class="pill {% if not slot.allowed %}amber{% elif slot.shortcut.is_active %}green{% else %}neutral{% endif %}">
+                        {% if not slot.allowed %}Unavailable{% elif not slot.shortcut.is_active %}Paused{% else %}Enabled{% endif %}
+                    </span>
+                    <div class="inline-actions">
+                        <a class="text-button blue-text"
+                           href="{% url 'directory:shortcut_edit' device.id slot.shortcut.id %}">Edit</a>
+                        {% if slot.shortcut.is_active %}
+                            <form method="post"
+                                  action="{% url 'directory:shortcut_action' slot.shortcut.id 'pause' %}">
+                                {% csrf_token %}
+                                <button class="text-button">Pause</button>
+                            </form>
+                        {% endif %}
+                        <form method="post"
+                              action="{% url 'directory:shortcut_action' slot.shortcut.id 'remove' %}"
+                              data-confirm="Remove this shortcut? Calling permissions will stay the same.">
+                            {% csrf_token %}
+                            <button class="text-button danger-text">Remove</button>
+                        </form>
+                    </div>
+                {% else %}
+                    <h2>A place for someone.</h2>
+                    <a class="text-button blue-text"
+                       href="{% url 'directory:shortcut_create' device.id %}?key={{ slot.digit }}">
+                    {% icon 'plus' %} Assign a person</a>
+                {% endif %}
+            </article>
+        {% endfor %}
+    </div>
+{% endblock %}

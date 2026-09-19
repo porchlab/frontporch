@@ -1,0 +1,7 @@
+{{ form.non_field_errors }}{% for field in form %}
+{% if field.is_hidden %}{{ field }}{{ field.errors }}{% else %}
+    <div class="field {% if field.errors %}invalid{% endif %}">{{ field.label_tag }}{{ field }}{% if field.help_text %}
+        <div class="form-note" id="{{ field.auto_id }}_helptext">{{ field.help_text|safe }}</div>
+{% endif %}{{ field.errors }}</div>
+{% endif %}
+{% endfor %}

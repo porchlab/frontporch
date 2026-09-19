@@ -28,7 +28,7 @@ Contributions must not introduce:
 
 - Features that bypass parent, guardian, or administrator approval.
 - Public child profiles.
-- Open contact discovery or searchable child/family directories.
+- Public contact discovery or searchable child directories. The authenticated opt-in parent directory described in ADR-010 is permitted.
 - Unrestricted outbound calling.
 - Unknown inbound calling to children unless a future design explicitly requires parent/admin approval and default-deny routing.
 - Tests, examples, screenshots, docs, fixtures, migrations, or seed data containing real family names, child names, phone numbers, addresses, emails, neighborhoods, provider accounts, logs, recordings, or call history.

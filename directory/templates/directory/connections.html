@@ -1,0 +1,65 @@
+{% extends "directory/base.html" %}
+{% load portal_tags %}
+{% block content %}
+    {% include "directory/heading.html" with heading="A circle you choose." subtitle="Build connections with families you already know." action_url="directory:family_directory" action_label="Connect a family" %}
+    <div class="info-strip">
+        <p>One invitation, one acceptance. Only the selected children can call each other both ways. Other children and parent/shared phones are not included.</p>
+    </div>
+    <div class="connection-grid">
+        {% for connection in connections %}
+            <article class="connection-card">
+                <div class="person-line">
+                    <span class="avatar lavender">{% icon 'users' %}</span>
+                    <div>
+                        <h2>{{ connection.child_a.name }} ↔ {{ connection.child_b.name }}</h2>
+                        <span>{{ connection.child_a.family.name }} · {{ connection.child_b.family.name }}</span>
+                    </div>
+                </div>
+                <div class="direction-block">
+                    <div class="permission-line">
+                        <span>Child-to-child connection</span>
+                        <span class="pill green">Calls both ways</span>
+                    </div>
+                    <form method="post"
+                          action="{% url 'directory:connection_remove' connection.id %}"
+                          data-confirm="Stop calls between these children in both directions?">
+                        {% csrf_token %}
+                        <button class="text-button danger-text">Remove connection</button>
+                    </form>
+                </div>
+            </article>
+        {% empty %}
+            <div class="empty-state">
+                <h3>Start with someone you know.</h3>
+                <p>Explore listed families, or use a code shared by a parent.</p>
+                <a class="button" href="{% url 'directory:family_directory' %}">Browse the directory</a>
+            </div>
+        {% endfor %}
+    </div>
+    <section class="connections-preview">
+        <div class="section-heading">
+            <h2>Group calls</h2>
+            <a class="button secondary"
+               href="{% url 'directory:conference_group_create' %}">Add a group</a>
+        </div>
+        <p class="form-note">Groups need explicit membership approval. Your installer enables a group’s dial extension.</p>
+        <div class="connection-grid">
+            {% for group in conference_groups %}
+                <article class="panel">
+                    <h3>{{ group.name }}</h3>
+                    <p class="small-empty">
+                        {% for member in group.members.all %}{{ member.name }}{% if not forloop.last %}, {% endif %}
+            {% endfor %}
+        </p>
+        <p class="small-empty">
+            {% if group.is_active and group.calling_enabled %}Extension {{ group.dial_extension }}{% else %}Calling not enabled{% endif %}
+        </p>
+        <a class="text-button blue-text"
+           href="{% url 'directory:conference_group_update' group.id %}">Manage group</a>
+    </article>
+{% empty %}
+    <p class="small-empty">No group calls set up yet.</p>
+{% endfor %}
+</div>
+</section>
+{% endblock %}

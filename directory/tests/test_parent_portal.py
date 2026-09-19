@@ -216,92 +216,18 @@ class ParentPortalTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertTrue(FamilyContact.objects.filter(id=contact.id).exists())
 
-    def test_parent_can_request_family_permission_by_exact_family_name(self):
+    def test_old_family_scope_endpoints_cannot_create_or_approve_permissions(self):
         self.login()
-
-        response = self.client.post(
-            reverse("directory:child_family_relationship_request"),
-            {
-                "child": self.child.id,
-                "target_family_name": "Maple House",
-                "notes": "Cousins.",
-            },
-        )
-
-        self.assertRedirects(response, reverse("directory:dashboard"))
-        relationship = AllowedChildFamilyRelationship.objects.get(child=self.child)
-        self.assertEqual(relationship.target_family, self.other_family)
-        self.assertEqual(relationship.approved_by_child_family_guardian, self.parent)
-        self.assertIsNone(relationship.approved_by_target_family_guardian)
-        self.assertFalse(relationship.is_active)
-
-    def test_family_permission_request_rejects_unknown_family_name(self):
-        self.login()
-
-        response = self.client.post(
-            reverse("directory:child_family_relationship_request"),
-            {
-                "child": self.child.id,
-                "target_family_name": "Unknown House",
-                "notes": "",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
+        response = self.client.post(reverse("directory:child_family_relationship_request"),
+            {"child": self.child.pk, "target_family_name": self.other_family.name})
+        self.assertEqual(response.status_code, 410)
         self.assertFalse(AllowedChildFamilyRelationship.objects.exists())
-
-    def test_target_family_parent_can_approve_incoming_family_permission(self):
-        relationship = AllowedChildFamilyRelationship.objects.create(
-            child=self.child,
-            target_family=self.other_family,
-            approved_by_child_family_guardian=self.parent,
-        )
-        self.client.login(username="nico", password="secret-pass")
-
-        response = self.client.post(
-            reverse("directory:child_family_relationship_approve", args=[relationship.id])
-        )
-
-        self.assertRedirects(response, reverse("directory:dashboard"))
-        relationship.refresh_from_db()
-        self.assertEqual(relationship.approved_by_target_family_guardian, self.other_parent)
-        self.assertTrue(relationship.is_active)
-
-    def test_non_target_family_parent_cannot_approve_family_permission(self):
-        third_family = Family.objects.create(name="Oak House")
-        relationship = AllowedChildFamilyRelationship.objects.create(
-            child=self.other_child,
-            target_family=third_family,
-            approved_by_child_family_guardian=self.other_parent,
-        )
-        self.login()
-
-        response = self.client.post(
-            reverse("directory:child_family_relationship_approve", args=[relationship.id])
-        )
-
-        self.assertEqual(response.status_code, 404)
+        relationship = AllowedChildFamilyRelationship.objects.create(child=self.other_child,
+            target_family=self.family, approved_by_child_family_guardian=self.other_parent)
+        response = self.client.post(reverse("directory:child_family_relationship_approve", args=[relationship.pk]))
+        self.assertEqual(response.status_code, 410)
         relationship.refresh_from_db()
         self.assertIsNone(relationship.approved_by_target_family_guardian)
-
-    def test_parent_revokes_only_their_side_of_family_permission(self):
-        relationship = AllowedChildFamilyRelationship.objects.create(
-            child=self.child,
-            target_family=self.other_family,
-            approved_by_child_family_guardian=self.parent,
-            approved_by_target_family_guardian=self.other_parent,
-        )
-        self.login()
-
-        response = self.client.post(
-            reverse("directory:child_family_relationship_revoke", args=[relationship.id])
-        )
-
-        self.assertRedirects(response, reverse("directory:dashboard"))
-        relationship.refresh_from_db()
-        self.assertIsNone(relationship.approved_by_child_family_guardian)
-        self.assertEqual(relationship.approved_by_target_family_guardian, self.other_parent)
-        self.assertFalse(relationship.is_active)
 
     def test_contact_permission_form_rejects_other_family_child(self):
         number, _ = ExternalPhoneNumber.objects.get_or_create_normalized("+1 212 555 0100")

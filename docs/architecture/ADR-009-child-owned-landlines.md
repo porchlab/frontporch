@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Accepted. The child-to-family permission scope below is superseded by
+[ADR-010](ADR-010-parent-portal-and-child-connections.md); landline transport and
+spoken-menu decisions remain in effect.
 
 ## Date
 

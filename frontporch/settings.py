@@ -1,4 +1,5 @@
 """Django settings for FrontPorch."""
+
 from pathlib import Path
 import os
 
@@ -72,9 +73,7 @@ ASTERISK_TTS_SOX_COMMAND = os.environ.get("ASTERISK_TTS_SOX_COMMAND", "sox")
 ASTERISK_TTS_VOICE = os.environ.get("ASTERISK_TTS_VOICE", "en_US-ljspeech-medium")
 ASTERISK_TTS_LENGTH_SCALE = float(os.environ.get("ASTERISK_TTS_LENGTH_SCALE", "1.0"))
 ASTERISK_TTS_NOISE_SCALE = float(os.environ.get("ASTERISK_TTS_NOISE_SCALE", "0.667"))
-ASTERISK_TTS_NOISE_W_SCALE = float(
-    os.environ.get("ASTERISK_TTS_NOISE_W_SCALE", "0.8")
-)
+ASTERISK_TTS_NOISE_W_SCALE = float(os.environ.get("ASTERISK_TTS_NOISE_W_SCALE", "0.8"))
 ASTERISK_TTS_RANDOM_SEED = int(os.environ.get("ASTERISK_TTS_RANDOM_SEED", "1729"))
 ASTERISK_TTS_VOLUME = float(os.environ.get("ASTERISK_TTS_VOLUME", "1.0"))
 ASTERISK_AUTO_APPLY_CONFIG = env_bool("ASTERISK_AUTO_APPLY_CONFIG", default=False)
@@ -118,6 +117,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "directory.context_processors.portal",
             ],
         },
     },
@@ -165,3 +165,23 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/welcome/"
+
+# Configure SMTP in private deployment settings. No invitation preview tokens are exposed in the portal.
+EMAIL_BACKEND = os.environ.get(
+    "DJANGO_EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend"
+)
+EMAIL_HOST = os.environ.get("DJANGO_EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.environ.get("DJANGO_EMAIL_PORT", "25"))
+EMAIL_HOST_USER = os.environ.get("DJANGO_EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("DJANGO_EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env_bool("DJANGO_EMAIL_USE_TLS", False)
+EMAIL_USE_SSL = env_bool("DJANGO_EMAIL_USE_SSL", False)
+EMAIL_TIMEOUT = 10
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DJANGO_DEFAULT_FROM_EMAIL", "FrontPorch <noreply@example.com>"
+)
+
+FRONTPORCH_PUBLIC_URL = os.environ.get("FRONTPORCH_PUBLIC_URL", "").strip()

@@ -1,4 +1,5 @@
 from django.conf import settings
+from directory.services import shortcut_destination_allowed
 
 from .domain import (
     AsteriskConfiguration,
@@ -22,7 +23,7 @@ from .tts import (
     text_to_speech_settings,
 )
 from directory.models import (
-    AllowedChildFamilyRelationship,
+    ChildConnection,
     ChildBlackoutPeriod,
     ChildLandline,
     ChildLandlineDialShortcut,
@@ -90,15 +91,15 @@ def build_asterisk_configuration():
             extension=landline.dial_extension,
             normalized_number=landline.external_phone_number.normalized_number,
             child_id=landline.child_id,
-            blackout_windows=tuple(blackout_windows_by_child_id.get(landline.child_id, ())),
+            blackout_windows=tuple(
+                blackout_windows_by_child_id.get(landline.child_id, ())
+            ),
         )
         for landline in ChildLandline.objects.filter(is_active=True)
         .select_related("child", "child__family", "external_phone_number")
         .order_by("id")
     )
-    landline_numbers = {
-        landline.normalized_number for landline in landline_endpoints
-    }
+    landline_numbers = {landline.normalized_number for landline in landline_endpoints}
     landline_endpoints_by_id = {
         endpoint.child_landline_id: endpoint for endpoint in landline_endpoints
     }
@@ -106,14 +107,18 @@ def build_asterisk_configuration():
     routable_endpoints_by_child_id = {}
     for endpoint in routable_endpoints:
         if endpoint.child_id:
-            routable_endpoints_by_child_id.setdefault(endpoint.child_id, []).append(endpoint)
+            routable_endpoints_by_child_id.setdefault(endpoint.child_id, []).append(
+                endpoint
+            )
     preferred_inbound_endpoints_by_child_id = {}
     for child_id, child_endpoints in routable_endpoints_by_child_id.items():
         sip_targets = tuple(
-            endpoint for endpoint in child_endpoints if isinstance(endpoint, SipEndpoint)
+            endpoint
+            for endpoint in child_endpoints
+            if isinstance(endpoint, SipEndpoint)
         )
-        preferred_inbound_endpoints_by_child_id[child_id] = (
-            sip_targets or tuple(child_endpoints)
+        preferred_inbound_endpoints_by_child_id[child_id] = sip_targets or tuple(
+            child_endpoints
         )
 
     conference_routes = []
@@ -155,11 +160,10 @@ def build_asterisk_configuration():
         route.conference_group_id: route for route in conference_routes
     }
 
-    approved_child_family_pairs = set(
-        AllowedChildFamilyRelationship.objects.filter(
-            approved_by_child_family_guardian__isnull=False,
-            approved_by_target_family_guardian__isnull=False,
-        ).values_list("child_id", "target_family_id")
+    approved_child_pairs = set(
+        ChildConnection.objects.filter(is_active=True).values_list(
+            "child_a_id", "child_b_id"
+        )
     )
 
     rules = []
@@ -167,8 +171,10 @@ def build_asterisk_configuration():
         for target in routable_endpoints:
             if source == target:
                 continue
-            if _endpoints_may_call(source, target, approved_child_family_pairs):
-                rules.append(DialplanRule(source_endpoint=source, target_endpoint=target))
+            if _endpoints_may_call(source, target, approved_child_pairs):
+                rules.append(
+                    DialplanRule(source_endpoint=source, target_endpoint=target)
+                )
 
     public_inbound_numbers = tuple(
         PublicInboundNumber(
@@ -201,14 +207,18 @@ def build_asterisk_configuration():
 
     external_rules_by_key = {}
     family_contacts = tuple(
-        FamilyContact.objects.select_related("family", "external_phone_number").order_by(
+        FamilyContact.objects.select_related(
+            "family", "external_phone_number"
+        ).order_by(
             "family_id",
             "external_phone_number__normalized_number",
             "id",
         )
     )
     for contact in family_contacts:
-        extension = external_extensions_by_number_id.get(contact.external_phone_number_id)
+        extension = external_extensions_by_number_id.get(
+            contact.external_phone_number_id
+        )
         if not extension:
             continue
         for source in endpoints:
@@ -382,11 +392,14 @@ def build_asterisk_configuration():
         if not public_numbers:
             continue
         for public_number in public_numbers:
-            for child_id, child_targets in preferred_inbound_endpoints_by_child_id.items():
+            for (
+                child_id,
+                child_targets,
+            ) in preferred_inbound_endpoints_by_child_id.items():
                 if caller.child_id == child_id:
                     continue
                 for target in child_targets:
-                    if _endpoints_may_call(caller, target, approved_child_family_pairs):
+                    if _endpoints_may_call(caller, target, approved_child_pairs):
                         inbound_landline_rule_candidates.append(
                             InboundLandlineCallerRule(
                                 public_phone_number_id=public_number.public_phone_number_id,
@@ -438,9 +451,12 @@ def build_asterisk_configuration():
         if not targets:
             continue
         for (
-            source_landline_id,
-            public_phone_number_id,
-        ), authorized_child_ids in authorized_inbound_children_by_source_and_number.items():
+            (
+                source_landline_id,
+                public_phone_number_id,
+            ),
+            authorized_child_ids,
+        ) in authorized_inbound_children_by_source_and_number.items():
             if source_landline_id != shortcut.source_landline_id:
                 continue
             if shortcut.target_child_id not in authorized_child_ids:
@@ -496,9 +512,12 @@ def build_asterisk_configuration():
 
     shortcut_rules = []
     for shortcut in (
-        DialShortcut.objects.filter(is_active=True)
+        DialShortcut.objects.filter(is_active=True, approved_by__isnull=False)
         .select_related(
-            "source_device",
+            "source_device__assigned_child__family",
+            "source_device__assigned_parent__family",
+            "source_device__assigned_family",
+            "approved_by",
             "internal_target_device",
             "external_target_extension",
             "external_target_extension__external_phone_number",
@@ -508,6 +527,8 @@ def build_asterisk_configuration():
         )
         .order_by("source_device_id", "digits", "id")
     ):
+        if not shortcut_destination_allowed(shortcut):
+            continue
         source = endpoints_by_device_id.get(shortcut.source_device_id)
         if not source:
             continue
@@ -605,26 +626,12 @@ def build_asterisk_configuration():
     )
 
 
-def _endpoints_may_call(source, target, approved_child_family_pairs):
+def _endpoints_may_call(source, target, approved_child_pairs):
     if source.family_id == target.family_id:
         return True
-
-    if source.child_id and target.child_id:
-        return (
-            source.child_id,
-            target.family_id,
-        ) in approved_child_family_pairs and (
-            target.child_id,
-            source.family_id,
-        ) in approved_child_family_pairs
-
-    if source.child_id:
-        return (source.child_id, target.family_id) in approved_child_family_pairs
-
-    if target.child_id:
-        return (target.child_id, source.family_id) in approved_child_family_pairs
-
-    return False
+    if not source.child_id or not target.child_id:
+        return False
+    return tuple(sorted((source.child_id, target.child_id))) in approved_child_pairs
 
 
 def _endpoint_sort_identity(endpoint):

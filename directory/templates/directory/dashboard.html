@@ -1,156 +1,155 @@
 {% extends "directory/base.html" %}
-
-{% block title %}Family Dashboard - FrontPorch{% endblock %}
-
+{% load portal_tags %}
 {% block content %}
-<section class="page-heading">
-  <div>
-    <p class="eyebrow">{{ parent.family.name }}</p>
-    <h1>Family Dashboard</h1>
-  </div>
-  <a class="button primary" href="{% url 'directory:child_create' %}">Add Child</a>
-</section>
-
-<section class="section">
-  <div class="section-heading">
-    <h2>Child Cards</h2>
-  </div>
-  <div class="child-grid">
-    {% for child in children %}
-      <article class="card child-card">
-        <div class="card-title-row">
-          <h3>{{ child.name }}</h3>
-          <a href="{% url 'directory:child_update' child.id %}">Edit</a>
+    <div class="page-heading">
+        <div>
+            <div class="eyebrow">WELCOME HOME, {{ portal_parent.display_name|upper }}</div>
+            <h1>The {{ portal_parent.family.name }} family</h1>
+            <p>A little independence for them. Peace of mind for you.</p>
         </div>
-        {% if child.notes %}
-          <p>{{ child.notes }}</p>
-        {% endif %}
-        <div class="subsection">
-          <div class="card-title-row">
-            <h4>Blackout Periods</h4>
-            <a href="{% url 'directory:blackout_create' child.id %}">Add</a>
-          </div>
-          <ul class="plain-list">
-            {% for blackout in child.blackout_periods.all %}
-              <li class="{% if not blackout.is_active %}muted{% endif %}">
-                <span>{{ blackout.label }}: {{ blackout.get_day_group_display }}, {{ blackout.start_time|time:"g:i A" }} to {{ blackout.end_time|time:"g:i A" }}</span>
-                <span class="actions">
-                  <a href="{% url 'directory:blackout_update' blackout.id %}">Edit</a>
-                  {% if blackout.is_active %}
-                    <form action="{% url 'directory:blackout_deactivate' blackout.id %}" method="post">
-                      {% csrf_token %}
-                      <button class="link-button" type="submit">Deactivate</button>
-                    </form>
-                  {% endif %}
-                </span>
-              </li>
-            {% empty %}
-              <li class="muted">No blackout periods yet.</li>
-            {% endfor %}
-          </ul>
-        </div>
-      </article>
-    {% empty %}
-      <p class="empty-state">Add a child card to start setting up calling permissions.</p>
-    {% endfor %}
-  </div>
-</section>
-
-<section class="section">
-  <div>
-    <div class="section-heading">
-      <h2>Family Contacts</h2>
-      <a class="button" href="{% url 'directory:contact_create' %}">Add Contact</a>
+        <a class="button" href="{% url 'directory:child_create' %}">{% icon 'plus' %} Add a child</a>
     </div>
-    <ul class="panel-list">
-      {% for contact in contacts %}
-        <li>
-          <strong>{{ contact.label }}</strong>
-          <span>{{ contact.external_phone_number.normalized_number }}</span>
-          {% if contact.dial_extension %}
-            <span>Ext. {{ contact.dial_extension.dial_extension }}</span>
-          {% endif %}
-          <form action="{% url 'directory:contact_delete' contact.id %}" method="post">
-            {% csrf_token %}
-            <button class="link-button" type="submit">Remove</button>
-          </form>
-        </li>
-      {% empty %}
-        <li class="muted">No family contacts yet.</li>
-      {% endfor %}
-    </ul>
-  </div>
-</section>
-
-<section class="section split">
-  <div>
-    <div class="section-heading">
-      <h2>Family Permissions</h2>
-      <a class="button" href="{% url 'directory:child_family_relationship_request' %}">Request Permission</a>
-    </div>
-    <ul class="panel-list">
-      {% for relationship in outgoing_relationships %}
-        <li class="{% if not relationship.is_active %}muted{% endif %}">
-          <strong>{{ relationship.child.name }}</strong>
-          <span>{{ relationship.target_family.name }}</span>
-          <span>{% if relationship.is_active %}Approved{% else %}Pending{% endif %}</span>
-          <form action="{% url 'directory:child_family_relationship_revoke' relationship.id %}" method="post">
-            {% csrf_token %}
-            <button class="link-button" type="submit">Revoke</button>
-          </form>
-        </li>
-      {% empty %}
-        <li class="muted">No family permissions requested yet.</li>
-      {% endfor %}
-    </ul>
-  </div>
-  <div>
-    <div class="section-heading">
-      <h2>Permission Requests</h2>
-    </div>
-    <ul class="panel-list">
-      {% for relationship in incoming_relationships %}
-        <li class="{% if not relationship.is_active %}muted{% endif %}">
-          <strong>{{ relationship.child.name }}</strong>
-          <span>{{ relationship.child.family.name }}</span>
-          {% if relationship.approved_by_target_family_guardian %}
-            <form action="{% url 'directory:child_family_relationship_revoke' relationship.id %}" method="post">
-              {% csrf_token %}
-              <button class="link-button" type="submit">Revoke</button>
-            </form>
-          {% else %}
-            <form action="{% url 'directory:child_family_relationship_approve' relationship.id %}" method="post">
-              {% csrf_token %}
-              <button class="link-button" type="submit">Approve</button>
-            </form>
-          {% endif %}
-        </li>
-      {% empty %}
-        <li class="muted">No incoming permission requests.</li>
-      {% endfor %}
-    </ul>
-  </div>
-</section>
-
-<section class="section">
-  <div class="section-heading">
-    <h2>Conference Groups</h2>
-    <a class="button" href="{% url 'directory:conference_group_create' %}">Add Group</a>
-  </div>
-  <ul class="panel-list">
-    {% for group in conference_groups %}
-      <li class="{% if not group.is_active %}muted{% endif %}">
-        <strong>{{ group.name }}</strong>
-        <span>
-          {% for member in group.members.all %}
-            {{ member.name }}{% if not forloop.last %}, {% endif %}
-          {% endfor %}
+    {% if not portal_parent.family.setup_dismissed %}
+        <section class="setup-banner" aria-label="Family setup checklist">
+            <div class="setup-banner-intro">
+                <span class="setup-icon">{% icon 'home' %}</span>
+                <div class="setup-copy">
+                    <h2>A few little steps. A lot of connection.</h2>
+                    <p>Let’s get your family ready for their first hello.</p>
+                </div>
+                <span class="setup-count">{{ setup_count }} of 3 complete</span>
+                <form class="setup-controls"
+                      method="post"
+                      action="{% url 'directory:preference' 'setup' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="dismissed" value="true">
+                    <button class="text-button setup-dismiss">{% icon 'close' %} Dismiss setup</button>
+                </form>
+            </div>
+            <div class="setup-steps">
+                <a href="{% url 'directory:settings' %}">
+                    <span class="step-number done">{% icon 'check' %}</span>
+                    <span>Make it your family<strong>{{ portal_parent.family.name }} family is set up</strong>
+                    </span>
+                </a>
+                <a href="{% url 'directory:children' %}">
+                    <span class="step-number {% if phone_done %}done{% endif %}">2</span>
+                    <span>Add their phones<strong> {% if phone_done %}Their phones are enabled{% else %}Give each child a place to call{% endif %}</strong>
+                    </span>
+                </a>
+                <a href="{% url 'directory:family_directory' %}">
+                    <span class="step-number {% if circle_done %}done{% endif %}">
+                        {% if circle_done %}
+                            {% icon 'check' %}
+    {% else %}3{% endif %}
         </span>
-        <a href="{% url 'directory:conference_group_update' group.id %}">Edit</a>
-      </li>
-    {% empty %}
-      <li class="muted">No conference groups yet.</li>
-    {% endfor %}
-  </ul>
+        <span>Build your circle<strong> {% if circle_done %}Your first connection is here{% else %}Invite a family you know{% endif %}</strong>
+        </span>
+        </a>
+        </div>
+        </section>
+    {% endif %}
+    <div class="dashboard-grid">
+        <div class="dashboard-primary">
+            <section>
+                <div class="section-heading">
+                    <h2>
+                        Children & phones <span class="heading-count">{{ children|length }}</span>
+                    </h2>
+                    <a class="text-button blue-text" href="{% url 'directory:children' %}">View all {% icon 'arrow' %}</a>
+                </div>
+                <div class="children-grid">
+                    {% for child in children %}
+                        {% include "directory/child_card.html" %}
+                    {% empty %}
+                        <div class="empty-state">
+                            <h3>Their first hello starts here.</h3>
+                            <p>Add a child, then reserve their phone.</p>
+                            <a class="button" href="{% url 'directory:child_create' %}">Add your first child</a>
+                        </div>
+                    {% endfor %}
+                </div>
+            </section>
+            <section class="connections-preview">
+                <div class="section-heading">
+                    <h2>Your family connections</h2>
+                    <a class="text-button blue-text"
+                       href="{% url 'directory:connections' %}">Manage {% icon 'arrow' %}</a>
+                </div>
+                <div class="panel compact">
+                    {% for connection in connections|slice:':4' %}
+                        <div class="family-row">
+                            <span class="avatar lavender">{% icon 'users' %}</span>
+                            <div class="family-row-copy">
+                                <h3>{{ connection.child_a.name }} ↔ {{ connection.child_b.name }}</h3>
+                                <p>{{ connection.child_a.family.name }} · {{ connection.child_b.family.name }}</p>
+                            </div>
+                            <span class="pill green">Connected</span>
+                        </div>
+                    {% empty %}
+                        <p class="small-empty">Every connection starts with both families’ approval.</p>
+                    {% endfor %}
+                    <a class="subtle-add" href="{% url 'directory:family_directory' %}">{% icon 'plus' %} Find a familiar family</a>
+                </div>
+            </section>
+            <section class="activity-section">
+                <div class="section-heading">
+                    <h2>Around your front porch</h2>
+                    <span class="muted">Recent changes</span>
+                </div>
+                {% for item in activity %}
+                    <div class="activity-row">
+                        <span class="activity-icon">{% icon 'check' %}</span>
+                        <p>{{ item.description }}</p>
+                        <time datetime="{{ item.created_at|date:'c' }}">{{ item.created_at|timesince }} ago</time>
+                    </div>
+                {% empty %}
+                    <p class="muted">Your family’s updates will appear here.</p>
+                {% endfor %}
+            </section>
+        </div>
+        <aside class="dashboard-secondary">
+            <section class="inbox-panel">
+                <div class="section-heading">
+                    <h2>{% icon 'mail' %} A little hello</h2>
+                </div>
+                {% for invitation in incoming_invitations|slice:':2' %}
+                    <div class="invite-peek">
+                        <h3>The {{ invitation.source_family.name }} family</h3>
+                        <p>
+                            {% for child in invitation.source_children.all %}{{ child.name }}{% if not forloop.last %}, {% endif %}
+                {% endfor %} would like to connect.</p>
+            <a class="button full-width"
+               href="{% url 'directory:connection_review' invitation.id %}">Review invitation</a>
+        </div>
+{% empty %}
+    <p class="small-empty">
+        You’re all caught up.
+        <br>
+        New invitations will appear here.
+    </p>
+{% endfor %}
+<a class="button full-width" href="{% url 'directory:invitations' %}">All invitations {% icon 'arrow' %}</a>
 </section>
+<section class="trust-note">
+    <div class="note-symbol">{% icon 'shield' %}</div>
+    <h3>
+        Their freedom.
+        <br>
+        Your boundaries.
+    </h3>
+    <p>Only approved people can reach your children. Every new connection starts with a parent’s say-so.</p>
+    <a href="{% url 'directory:connections' %}">See your family’s connections {% icon 'arrow' %}</a>
+</section>
+<div class="external-peek">
+    <span class="icon-tile">{% icon 'book' %}</span>
+    <h3>Grandparents count, too.</h3>
+    <p>Keep trusted people outside FrontPorch a phone call away.</p>
+    {% for contact in contacts %}
+        <p>{{ contact.label }} · {{ contact.external_phone_number.normalized_number }} · Ext. {{ contact.dial_extension.dial_extension }}</p>
+    {% endfor %}
+    <a class="text-button blue-text" href="{% url 'directory:contacts' %}">Manage external contacts {% icon 'arrow' %}</a>
+</div>
+</aside>
+</div>
 {% endblock %}

@@ -10,9 +10,17 @@ The phone is a place, not a device.
 
 FrontPorch is an early pilot project. It is not a turnkey production system.
 
-The repository currently contains a Django project, foundational domain models, Django Admin exposure, deterministic Asterisk configuration generation, tests, and Docker Compose scaffolding for Django, PostgreSQL, and Asterisk. It does not yet include polished parent onboarding, production provisioning automation, SIP trunk account management, PBX reload hardening, emergency calling, or a complete deployment runbook.
+The repository currently contains a Django project, foundational domain models, Django Admin exposure, deterministic Asterisk configuration generation, tests, and Docker Compose scaffolding for Django, PostgreSQL, and Asterisk. It includes a Django parent portal based on the approved UI prototype. It does not yet include production provisioning automation, SIP trunk account management, PBX reload hardening, emergency calling, or a complete deployment runbook.
 
 Use this repository as application source and public examples only. Real neighborhood configuration belongs outside the public repo.
+
+## Parent Portal
+
+Open the Django root URL for family signup or login. The portal provides children
+and phones, exact child-to-child invitations, private family discovery, contacts,
+quiet hours, dial shortcuts, guardian membership, and family settings. New phone
+reservations require installer activation. See the [implementation and upgrade
+guide](docs/parent-ui-implementation.md) before deploying this version.
 
 ## Parent UI Design Prototype
 
@@ -24,8 +32,8 @@ FrontPorch should default to deny.
 
 The current model is built around these rules:
 
-- Parents and guardians control children, devices, contacts, child-to-family approvals, approved external callers, blackout periods, and conference groups.
-- Staff can attach an existing household landline to a child as a FrontPorch extension, while parents still control reachability through child-to-family approvals.
+- Parents and guardians control children, devices, contacts, exact child-to-child connections, approved external callers, blackout periods, and conference groups.
+- Staff can attach an existing household landline to a child as a FrontPorch extension, while parents still control reachability through exact child-to-child connections.
 - Children should not discover other children or families through an open directory.
 - Children should not dial arbitrary public phone numbers.
 - Unknown inbound callers should not reach a child's phone.
@@ -237,7 +245,7 @@ Grandparents and other ordinary external contacts are managed as family contacts
 
 FrontPorch devices call that child by dialing the child's FrontPorch extension. Asterisk routes the call through the SIP trunk to the landline number.
 
-A child using the landline calls the shared or family-assigned FrontPorch public number. The generated dialplan checks the landline caller ID and derives destinations from existing child-to-family approvals. A single permitted child destination rings directly without answering into a menu. With multiple permitted children, FrontPorch answers and announces each active, currently authorized Admin-configured shortcut from `1` through `9`, followed by the option to enter an approved four-digit extension. The caller may use either form. Asterisk supplies in-band North American ringback from the committed `indications.conf` tone zone whenever an authorized child-landline route dials its destination, including both direct calls and menu selections. Invalid or timed-out input replays the menu once; a second failure plays the official goodbye prompt and disconnects.
+A child using the landline calls the shared or family-assigned FrontPorch public number. The generated dialplan checks the landline caller ID and derives destinations from existing exact child-to-child connections. A single permitted child destination rings directly without answering into a menu. With multiple permitted children, FrontPorch answers and announces each active, currently authorized Admin-configured shortcut from `1` through `9`, followed by the option to enter an approved four-digit extension. The caller may use either form. Asterisk supplies in-band North American ringback from the committed `indications.conf` tone zone whenever an authorized child-landline route dials its destination, including both direct calls and menu selections. Invalid or timed-out input replays the menu once; a second failure plays the official goodbye prompt and disconnects.
 
 Shortcuts and spoken names are rechecked against current reciprocal permissions whenever configuration is rendered. Stale Admin rows remain visible but are omitted from both Asterisk routes and the spoken menu. Calls ring every active SIP device that shares the selected child's extension. The child's active external landline is used only when that child has no active SIP device.
 

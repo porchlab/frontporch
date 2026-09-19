@@ -1,0 +1,70 @@
+{% extends "directory/base.html" %}
+{% load portal_tags %}
+{% block content %}
+    <div class="page-heading">
+        <div>
+            <div class="eyebrow">CHILDREN & PHONES</div>
+            <h1>{{ child.name }}’s place to call.</h1>
+            <p>Phones, quiet hours, and the people in their circle.</p>
+        </div>
+        <a class="button secondary"
+           href="{% url 'directory:child_update' child.id %}">Edit child</a>
+    </div>
+    <div class="settings-grid">
+        <section class="panel">
+            <div class="section-heading">
+                <h2>Their phones</h2>
+            </div>
+            {% for device in child.devices.all %}
+                <div class="device-row">
+                    <h3>{{ device.friendly_name }}</h3>
+                    <p>Extension {{ device.sip_extension }} · {% if device.is_active %}Enabled{% else %}Setup pending · your installer activates this phone{% endif %}
+                    </p>
+                    <div class="inline-actions">
+                        <a class="button secondary"
+                           href="{% url 'directory:shortcuts' device.id %}">Dial shortcuts</a>
+                        <a class="text-button blue-text"
+                           href="{% url 'directory:phone_edit' device.id %}">Rename phone</a>
+                    </div>
+                </div>
+            {% empty %}
+                <p class="small-empty">No phone registered yet.</p>
+            {% endfor %}
+            <a class="button" href="{% url 'directory:phone_create' child.id %}">Add a phone</a>
+            <p class="form-note">Your installer connects and tests the physical phone. Enabled does not mean the phone is currently online.</p>
+        </section>
+        <section class="panel">
+            <div class="section-heading">
+                <h2>Quiet hours</h2>
+                <a class="text-button blue-text"
+                   href="{% url 'directory:blackout_create' child.id %}">Add quiet hours</a>
+            </div>
+            <p class="form-note">All times use {{ portal_timezone }}, the phone system’s time zone. Each interval must end on the same day.</p>
+            {% for period in child.blackout_periods.all %}
+                <div class="device-row">
+                    <h3>{{ period.label }} {% if not period.is_active %}
+                        <span class="pill neutral">Paused</span>
+            {% endif %}
+        </h3>
+        <p>{{ period.get_day_group_display }} · {{ period.start_time|time:'g:i A' }}–{{ period.end_time|time:'g:i A' }}</p>
+        <div class="inline-actions">
+            <a class="text-button blue-text"
+               href="{% url 'directory:blackout_update' period.id %}">Edit</a>
+            {% if period.is_active %}
+                <form method="post"
+                      action="{% url 'directory:blackout_deactivate' period.id %}">
+                    {% csrf_token %}
+                    <button class="text-button">Pause</button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+{% empty %}
+    <p class="small-empty">No quiet hours set.</p>
+{% endfor %}
+</section>
+</div>
+<p class="section-footnote">
+    <a href="{% url 'directory:connections' %}">Manage family connections</a> · <a href="{% url 'directory:contacts' %}">Manage external contacts</a>
+</p>
+{% endblock %}

@@ -1,27 +1,28 @@
 {% extends "directory/base.html" %}
-
-{% block title %}{{ title }} - FrontPorch{% endblock %}
-
+{% block title %}{{ title }} · FrontPorch{% endblock %}
 {% block content %}
-<section class="form-panel">
-  <h1>{{ title }}</h1>
-  <form method="post">
-    {% csrf_token %}
-    {{ form.non_field_errors }}
-    {% for field in form %}
-      <div class="field">
-        {{ field.label_tag }}
-        {{ field }}
-        {{ field.errors }}
-        {% if field.help_text %}
-          <p class="help">{{ field.help_text }}</p>
+    <section class="form-panel panel">
+        <div class="eyebrow">YOUR FAMILY’S FRONT PORCH</div>
+        <h1>{{ title }}</h1>
+        {% if intro %}
+            <p class="dialog-intro">{{ intro }}</p>
         {% endif %}
-      </div>
-    {% endfor %}
-    <div class="form-actions">
-      <button class="button primary" type="submit">Save</button>
-      <a class="button" href="{% url 'directory:dashboard' %}">Cancel</a>
-    </div>
-  </form>
-</section>
+        <form method="post">
+            {% csrf_token %}
+            {% include "directory/fields.html" %}
+            <div class="form-actions">
+                <button class="button" type="submit">{{ submit_label|default:"Save changes" }}</button>
+                <a class="button secondary" href="{% url 'directory:dashboard' %}">Cancel</a>
+            </div>
+        </form>
+        {% if delete_url_name %}
+            <form class="delete-form"
+                  method="post"
+                  action="{% url delete_url_name delete_id %}"
+                  data-confirm="Remove this contact and its calling approval for your family?">
+                {% csrf_token %}
+                <button class="button danger">Remove contact</button>
+            </form>
+        {% endif %}
+    </section>
 {% endblock %}

@@ -1,27 +1,26 @@
 {% extends "directory/base.html" %}
-
-{% block title %}Register - FrontPorch{% endblock %}
-
+{% block title %}Set up your family · FrontPorch{% endblock %}
 {% block content %}
-<section class="form-panel">
-  <h1>Create Family Account</h1>
-  <form method="post">
-    {% csrf_token %}
-    {{ form.non_field_errors }}
-    {% for field in form %}
-      <div class="field">
-        {{ field.label_tag }}
-        {{ field }}
-        {{ field.errors }}
-        {% if field.help_text %}
-          <p class="help">{{ field.help_text }}</p>
-        {% endif %}
-      </div>
-    {% endfor %}
-    <div class="form-actions">
-      <button class="button primary" type="submit">Create Account</button>
-      <a class="button" href="{% url 'login' %}">Sign In</a>
-    </div>
-  </form>
-</section>
+    <section class="form-panel panel auth-panel">
+        <div class="eyebrow">MAKE YOURSELF AT HOME</div>
+        <h1>A front porch for your family.</h1>
+        <p class="dialog-intro">Children don’t need accounts. You manage their phones and the people they can call.</p>
+        <form method="post">
+            {% csrf_token %}
+            {% include "directory/fields.html" %}
+            <aside class="info-strip listing-preview"
+                   aria-label="Directory listing preview">
+                <div>
+                    <strong>Listing preview</strong>
+                    <p>
+                        <span data-preview-family>{{ form.family_name.value|default:'Your family' }}</span> · <span data-preview-guardian>{{ form.display_name.value|default:'Your guardian name' }}</span>
+                    </p>
+                    <p class="form-note">Shown to parents in your private network only if you choose to be listed. Email, phone numbers, and children stay private.</p>
+                </div>
+            </aside>
+            <button class="button full-width">Create family account</button>
+        </form>
+        <p class="auth-footnote">Already have an account? <a href="{% url 'login' %}">Log in</a>
+        </p>
+    </section>
 {% endblock %}

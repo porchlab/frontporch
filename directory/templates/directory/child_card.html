@@ -1,0 +1,44 @@
+{% load portal_tags %}
+<article class="child-card">
+    <div class="child-card-heading">
+        <span class="avatar {{ child.color }}">{{ child.name|first|upper }}</span>
+        <div>
+            <h3>{{ child.name }}</h3>
+            <span>A place to call their own</span>
+        </div>
+        <a class="icon-button"
+           href="{% url 'directory:child_update' child.id %}"
+           aria-label="Edit {{ child.name }}">{% icon 'edit' %}</a>
+    </div>
+    <div class="child-meta">
+        {% for device in child.devices.all %}
+            <div class="phone-status">
+                <span>
+                    {% icon 'phone' %} {{ device.friendly_name }} · <b>{{ device.sip_extension }}</b>
+                </span>
+                <span class="pill {% if device.is_active %}green{% else %}amber{% endif %}">
+                    {% if device.is_active %}Enabled{% else %}Setup pending{% endif %}
+                </span>
+            </div>
+            <a class="shortcut-card-link"
+               href="{% url 'directory:shortcuts' device.id %}">
+                {% icon 'phone' %} Dial shortcuts <span>{{ device.dial_shortcuts.count }} set {% icon 'chevron' %}</span>
+            </a>
+        {% empty %}
+            <div class="phone-status">
+                <span>{% icon 'phone' %} No phone registered yet</span>
+            </div>
+        {% endfor %}
+        {% for landline in child.landlines.all %}
+            <div class="phone-status">
+                {% icon 'phone' %} Landline · {{ landline.dial_extension }} <span class="pill neutral">{% if landline.is_active %}Enabled{% else %}Disabled{% endif %}</span>
+            </div>
+        {% endfor %}
+        <span>
+        {% icon 'users' %} {{ child.connection_count }} connection{{ child.connection_count|pluralize }} · {{ child.contact_count }} external contact{{ child.contact_count|pluralize }}</span>
+        <span>
+        {% icon 'clock' %} {{ child.blackout_periods.count }} quiet hours schedule{{ child.blackout_periods.count|pluralize }}</span>
+    </div>
+    <a class="card-action"
+       href="{% url 'directory:child_detail' child.id %}">Manage phone & permissions {% icon 'arrow' %}</a>
+</article>

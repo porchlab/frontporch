@@ -1,5 +1,9 @@
 # FrontPorch UI design lab
 
+The real Django implementation and its resolved backend decisions are documented in
+[the parent portal guide](../docs/parent-ui-implementation.md). The proposal and
+fictional browser behavior below remain design reference material.
+
 A standalone, single-page prototype for exploring the parent experience before implementation in Django. All interactions use fictional data and run in the browser. There is no backend, real authentication, phone provisioning, email delivery, or telephony integration.
 
 Maintained in `ui-prototype/` in [porchlab/frontporch](https://github.com/porchlab/frontporch). Run the commands below from this prototype directory.

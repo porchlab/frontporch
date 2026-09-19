@@ -1,0 +1,8 @@
+{% extends "directory/base.html" %}
+{% block content %}
+    <section class="panel form-panel">
+        <h1>Connections now belong to children.</h1>
+        <p class="dialog-intro">Use an invitation to select the exact children who may call each other. Previous family-wide approval forms have been retired.</p>
+        <a class="button" href="{% url 'directory:connections' %}">Manage child connections</a>
+    </section>
+{% endblock %}

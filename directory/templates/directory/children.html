@@ -1,0 +1,19 @@
+{% extends "directory/base.html" %}
+{% block content %}
+    {% include "directory/heading.html" with heading="Their people. Their phones." subtitle="Give each child a place to call their own." action_url="directory:child_create" action_label="Add a child" %}
+    <div class="info-strip">
+        <p>New children share your family’s saved external contacts. Connections with other FrontPorch children need separate approval.</p>
+    </div>
+    <div class="children-grid expanded">
+        {% for child in children %}
+            {% include "directory/child_card.html" %}
+        {% empty %}
+            <div class="empty-state">
+                <h3>A place for each child.</h3>
+                <p>Start with a first name. You can add their phone next.</p>
+                <a class="button" href="{% url 'directory:child_create' %}">Add your first child</a>
+            </div>
+        {% endfor %}
+    </div>
+    <p class="section-footnote">Enabled phones still need to be connected to the private network. Live phone registration is not monitored here.</p>
+{% endblock %}

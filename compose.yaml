@@ -4,6 +4,8 @@ services:
       context: .
       dockerfile: asterisk/Dockerfile
     image: frontporch-asterisk
+    environment:
+      TZ: ${TZ:-America/New_York}
     network_mode: host
     healthcheck:
       disable: true
@@ -46,6 +48,15 @@ services:
       DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
       DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY}
+      DJANGO_EMAIL_BACKEND: ${DJANGO_EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+      DJANGO_EMAIL_HOST: ${DJANGO_EMAIL_HOST:-localhost}
+      DJANGO_EMAIL_PORT: ${DJANGO_EMAIL_PORT:-25}
+      DJANGO_EMAIL_HOST_USER: ${DJANGO_EMAIL_HOST_USER:-}
+      DJANGO_EMAIL_HOST_PASSWORD: ${DJANGO_EMAIL_HOST_PASSWORD:-}
+      DJANGO_EMAIL_USE_TLS: ${DJANGO_EMAIL_USE_TLS:-false}
+      DJANGO_EMAIL_USE_SSL: ${DJANGO_EMAIL_USE_SSL:-false}
+      DJANGO_DEFAULT_FROM_EMAIL: ${DJANGO_DEFAULT_FROM_EMAIL:-noreply@example.com}
+      FRONTPORCH_PUBLIC_URL: ${FRONTPORCH_PUBLIC_URL:-}
       FRONTPORCH_DEFAULT_PHONE_REGION: ${FRONTPORCH_DEFAULT_PHONE_REGION:-US}
       GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-60}

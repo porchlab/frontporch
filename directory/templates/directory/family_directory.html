@@ -1,0 +1,78 @@
+{% extends "directory/base.html" %}
+{% load portal_tags %}
+{% block content %}
+    {% include "directory/heading.html" with heading="Find a familiar family." subtitle="Explore families who have chosen to be listed in your private network." action_url="directory:invite_code" action_label="Use an invite code" %}
+    <div class="directory-welcome">
+        <span class="directory-welcome-icon">{% icon 'users' %}</span>
+        <div>
+            <h2>Good company starts with a hello.</h2>
+            <p>Only family names and opted-in guardian names appear here. An invitation still needs approval before children can call.</p>
+        </div>
+    </div>
+    <div class="directory-visibility-summary">
+        <p>
+            Your family is <strong>{% if portal_parent.family.directory_listed %}listed{% else %}unlisted{% endif %} </strong>. You choose when to be found.
+        </p>
+        <a class="text-button blue-text" href="{% url 'directory:settings' %}">Manage visibility</a>
+    </div>
+    <form method="get" class="directory-toolbar">
+        <label class="directory-search">
+            {% icon 'search' %}
+            <span class="sr-only">Search family or guardian names</span>
+            <input name="q"
+                   value="{{ query }}"
+                   placeholder="Search family or guardian names"
+                   maxlength="200"
+                   type="search">
+        </label>
+        <button class="button secondary">Search</button>
+        <span class="directory-count">{{ page.paginator.count }} famil{{ page.paginator.count|pluralize:'y,ies' }}</span>
+    </form>
+    <div class="directory-grid">
+        {% for family in page %}
+            <article class="directory-card">
+                <div class="directory-card-top">
+                    <span class="avatar blue">{{ family.name|first|upper }}</span>
+                    {% if family.id == portal_parent.family_id %}
+                        <span class="pill blue">Your family</span>
+                    {% elif family.connection_state %}
+                        <span class="pill blue">{{ family.connection_state }}</span>
+                    {% endif %}
+                </div>
+                <h2>The {{ family.name }} family</h2>
+                <div class="directory-guardians">
+                    {% icon 'users' %}
+                    <div>
+                        {% for guardian in family.listed_guardians %}{{ guardian.display_name }}{% if not forloop.last %}, {% endif %}
+{% empty %}Guardian names private{% endfor %}
+    </div>
+    </div>
+    {% if family.connection_state == "Invitation received" %}
+        <a class="card-action" href="{% url 'directory:invitations' %}">Review invitation {% icon 'arrow' %}</a>
+    {% elif family.connection_state == "Invitation sent" %}
+        <a class="card-action" href="{% url 'directory:invitations' %}?tab=sent">View invitation {% icon 'arrow' %}</a>
+    {% elif family.id != portal_parent.family_id %}
+        <a class="card-action"
+           href="{% url 'directory:connection_invite' %}?family={{ family.id }}">Request a connection {% icon 'arrow' %}
+        </a>
+    {% endif %}
+    </article>
+{% empty %}
+    <div class="empty-state">
+        <h3>No familiar names yet.</h3>
+        <p>Try another name or use a code shared by a parent.</p>
+    </div>
+{% endfor %}
+</div>
+{% if page.has_other_pages %}
+    <nav class="pagination" aria-label="Directory pages">
+        {% if page.has_previous %}
+            <a href="?q={{ query|urlencode }}&page={{ page.previous_page_number }}">Previous</a>
+        {% endif %}
+        <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+        {% if page.has_next %}
+            <a href="?q={{ query|urlencode }}&page={{ page.next_page_number }}">Next</a>
+        {% endif %}
+    </nav>
+{% endif %}
+{% endblock %}

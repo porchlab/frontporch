@@ -4,6 +4,10 @@ from django import forms
 from .models import (
     AllowedChildFamilyRelationship,
     Child,
+    ChildConnection,
+    ConnectionInvitation,
+    GuardianInvitation,
+    FamilyActivity,
     ChildBlackoutPeriod,
     ChildLandline,
     ChildLandlineDialShortcut,
@@ -37,6 +41,7 @@ class ParentAdmin(admin.ModelAdmin):
 
 @admin.register(Child)
 class ChildAdmin(admin.ModelAdmin):
+    fields = ("family", "name", "spoken_name", "notes")
     list_display = ("name", "spoken_name", "family", "created_at")
     list_filter = ("family",)
     search_fields = ("name", "spoken_name", "family__name", "notes")
@@ -174,7 +179,12 @@ class PublicPhoneNumberAdmin(admin.ModelAdmin):
 
 @admin.register(FamilyContact)
 class FamilyContactAdmin(admin.ModelAdmin):
-    list_display = ("label", "family", "external_phone_number", "dial_extension_display")
+    list_display = (
+        "label",
+        "family",
+        "external_phone_number",
+        "dial_extension_display",
+    )
     list_filter = ("family",)
     search_fields = (
         "label",
@@ -194,12 +204,22 @@ class FamilyContactAdmin(admin.ModelAdmin):
 
 @admin.register(AllowedChildFamilyRelationship)
 class AllowedChildFamilyRelationshipAdmin(admin.ModelAdmin):
+    # Historical records only. Current calling permissions use ChildConnection.
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
     list_display = (
         "child",
         "target_family",
         "approved_by_child_family_guardian",
         "approved_by_target_family_guardian",
-        "is_active",
+        "previously_approved",
         "created_at",
     )
     list_filter = ("child__family", "target_family")
@@ -211,6 +231,10 @@ class AllowedChildFamilyRelationshipAdmin(admin.ModelAdmin):
         "approved_by_target_family_guardian__display_name",
     )
     ordering = ("child__family__name", "child__name", "target_family__name")
+
+    @admin.display(boolean=True, description="Historically approved (not a call grant)")
+    def previously_approved(self, obj):
+        return obj.is_active
 
 
 @admin.register(ExternalContactPermission)
@@ -368,3 +392,25 @@ class ConferenceGroupAdmin(admin.ModelAdmin):
     @admin.display(description="Members")
     def member_count(self, obj):
         return obj.members.count()
+
+
+@admin.register(ChildConnection)
+class ChildConnectionAdmin(admin.ModelAdmin):
+    list_display = ("child_a", "child_b", "is_active", "approved_by_a", "approved_by_b")
+    list_filter = ("is_active",)
+    search_fields = ("child_a__name", "child_b__name")
+
+
+@admin.register(ConnectionInvitation, GuardianInvitation, FamilyActivity)
+class PortalHistoryAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_exclude(self, request, obj=None):
+        return ("token_digest",) if self.model is GuardianInvitation else ()

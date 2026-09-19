@@ -1,35 +1,124 @@
-{% load static %}
-<!doctype html>
+{% load static portal_tags %}
+<!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}FrontPorch{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'directory/portal.css' %}">
-</head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="{% url 'directory:dashboard' %}">FrontPorch</a>
-    <nav>
-      {% if request.user.is_authenticated %}
-        <form action="{% url 'logout' %}" method="post">
-          {% csrf_token %}
-          <button class="link-button" type="submit">Sign out</button>
-        </form>
-      {% else %}
-        <a href="{% url 'login' %}">Sign in</a>
-      {% endif %}
-    </nav>
-  </header>
-  <main class="shell">
-    {% if messages %}
-      <div class="messages">
-        {% for message in messages %}
-          <p class="message {{ message.tags }}">{{ message }}</p>
-        {% endfor %}
-      </div>
-    {% endif %}
-    {% block content %}{% endblock %}
-  </main>
-</body>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#203dcc">
+        <meta name="robots" content="noindex,nofollow">
+        <title>{% block title %}FrontPorch · A little more hello{% endblock %}</title>
+        <link rel="icon"
+              href="{% static 'directory/favicon.svg' %}"
+              type="image/svg+xml">
+        <link rel="stylesheet" href="{% static 'directory/portal.css' %}">
+        <script src="{% static 'directory/portal.js' %}" defer></script>
+    </head>
+    <body>
+        <a class="skip-link" href="#main">Skip to content</a>
+        {% if not portal_parent.emergency_notice_dismissed %}
+            <aside class="emergency-banner" aria-label="Emergency calling notice">
+                {% icon 'info' %}
+                <p>
+                    <strong>FrontPorch cannot call 911.</strong> Emergency calling is not supported. Keep another phone available for emergencies.
+                </p>
+                {% if portal_parent %}
+                    <form method="post" action="{% url 'directory:preference' 'emergency' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="dismissed" value="true">
+                        <button class="emergency-dismiss"
+                                aria-label="Dismiss the 911 calling notice">Dismiss {% icon 'close' %}</button>
+                    </form>
+                {% endif %}
+            </aside>
+        {% endif %}
+        {% if portal_parent %}
+            <div class="app-shell">
+                <aside class="sidebar">
+                    <a class="brand" href="{% url 'directory:dashboard' %}">
+                        <span class="brand-mark">{% icon 'home' %} </span>FrontPorch<span class="brand-period">.</span>
+                    </a>
+                    <div class="family-switch">
+                        <span class="avatar blue">{{ portal_parent.family.name|first|upper }}</span>
+                        <div>
+                            <strong>{{ portal_parent.family.name }} family</strong>
+                            <span>Your private space</span>
+                        </div>
+                    </div>
+                    <div class="nav-label">YOUR FRONT PORCH</div>
+                    <nav aria-label="Family navigation">
+                        {% include "directory/nav.html" with name="Overview" route="directory:dashboard" key="overview" symbol="home" %}
+                        {% include "directory/nav.html" with name="Children & phones" route="directory:children" key="children" symbol="users" %}
+                        {% include "directory/nav.html" with name="Family connections" route="directory:connections" key="circle" symbol="leaf" %}
+                        {% include "directory/nav.html" with name="Family directory" route="directory:family_directory" key="directory" symbol="search" %}
+                        {% include "directory/nav.html" with name="Invitations" route="directory:invitations" key="invites" symbol="mail" %}
+                        {% include "directory/nav.html" with name="External contacts" route="directory:contacts" key="contacts" symbol="book" %}
+                    </nav>
+                    <div class="sidebar-bottom">
+                        <div class="sidebar-note">
+                            {% icon 'shield' %}
+                            <p>
+                                A small circle.
+                                <br>
+                                A world of connection.
+                            </p>
+                        </div>
+                        {% include "directory/nav.html" with name="Family settings" route="directory:settings" key="settings" symbol="settings" %}
+                        <div class="profile">
+                            <span class="avatar yellow small-avatar">{{ portal_parent.display_name|first|upper }}</span>
+                            <div>
+                                <strong>{{ portal_parent.display_name }}</strong>
+                                <span>Parent & guardian</span>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+                <div class="workspace">
+                    <header class="app-topbar">
+                        <span>My FrontPorch <span class="breadcrumb-slash">/</span> Your family</span>
+                        <div class="topbar-right">
+                            <span class="privacy-label">{% icon 'lock' %} Private by design</span>
+                            <a class="icon-button"
+                               href="{% url 'directory:invitations' %}"
+                               aria-label="Invitations">{% icon 'mail' %}</a>
+                            <form method="post" action="{% url 'logout' %}">
+                                {% csrf_token %}
+                                <button class="logout-button">
+                                    {% icon 'logout' %}
+                                    <span>Log out</span>
+                                </button>
+                            </form>
+                        </div>
+                    </header>
+        {% else %}
+            <header class="landing-header">
+                <a class="brand" href="{% url 'directory:welcome' %}">
+                    <span class="brand-mark">{% icon 'home' %} </span>FrontPorch<span class="brand-period">.</span>
+                </a>
+                <nav aria-label="Welcome">
+                    <a href="{% url 'login' %}">Log in</a>
+                    <a class="button small" href="{% url 'directory:register' %}">Set up your family</a>
+                </nav>
+            </header>
+        {% endif %}
+        <main id="main"
+              class="{% if portal_parent %}family-main{% else %}public-main{% endif %}"
+              tabindex="-1">
+            {% if messages %}
+                <div class="messages" aria-live="polite">
+                    {% for message in messages %}
+                        <p class="message {{ message.tags }}">{{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            {% block content %}{% endblock %}
+        </main>
+        <footer class="app-footer">
+            <span>{% icon 'shield' %} Private by design. Connected by choice.</span>
+            <span>Emergency calling is not available.</span>
+        </footer>
+        {% if portal_parent %}
+            </div>
+            </div>
+        {% endif %}
+    </body>
 </html>

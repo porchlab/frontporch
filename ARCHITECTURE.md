@@ -46,7 +46,7 @@ The application should speak in family and relationship language. SIP extensions
 
 Everything is relationship-based.
 
-Parents approve relationships, not numbers. A child may be allowed to call devices in another family because both families have approved that child-to-family relationship.
+Parents approve exact child pairs. Both households must approve the named children before their devices or landlines can call each other. New children never inherit cross-family permission. Parent/shared devices remain reachable within their own household. See [ADR-010](docs/architecture/ADR-010-parent-portal-and-child-connections.md) for the parent portal and migration from legacy family-scoped approvals.
 
 The system should avoid presenting children with a discoverable directory. Children cannot browse other users, probe extensions, or infer who exists in the system.
 
@@ -56,7 +56,7 @@ External phone numbers should be globally deduplicated by normalized E.164 numbe
 
 Families may assign private names to the same underlying number. For example, one family may call a contact "Sophia" while another calls the same phone number "Sophie."
 
-Permissions belong to the relationship between a child and an external number, not to the family-specific display name.
+Saving a family contact approves that external number for every current and future child in the household. The label remains private to that family. Removing the contact also revokes legacy per-child grants for that number in the household. Config generation rechecks shortcut authorization against current permissions.
 
 ## Group Calls
 

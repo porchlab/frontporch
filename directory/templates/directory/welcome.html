@@ -1,0 +1,88 @@
+{% extends "directory/base.html" %}
+{% load portal_tags %}
+{% block content %}
+    <div class="landing">
+        <section class="hero">
+            <div class="hero-copy">
+                <div class="eyebrow">
+                    <span class="tiny-line"></span>SMALL CIRCLES. REAL CONNECTION.
+                </div>
+                <h1>
+                    A little less screen.
+                    <br>
+                    A little more <em>hello.</em>
+                </h1>
+                <p>
+                    A phone of their own. A circle you trust.
+                    <br>
+                    Give your kids the freedom to call their favorite people, with you close by.
+                </p>
+                <div class="hero-actions">
+                    <a class="button large" href="{% url 'directory:register' %}">Set up your family {% icon 'arrow' %}</a>
+                    <a class="text-button" href="#how-it-works">How it works</a>
+                </div>
+                <div class="hero-proof">{% icon 'shield' %} Parent-approved. Private by design.</div>
+            </div>
+            <div class="hero-stage">
+                <div class="stage-heading">
+                    <span>YOUR FAMILY’S FRONT PORCH</span>
+                    <span>{% icon 'lock' %} Your little corner</span>
+                </div>
+                <div class="phone-preview">
+                    <div class="preview-icon">{% icon 'phone' %}</div>
+                    <div class="eyebrow">A FAMILIAR PLACE TO CALL</div>
+                    <h2>A place for hello.</h2>
+                    <div class="preview-people">
+                        <div>
+                            <span class="avatar lavender">{% icon 'users' %}</span>
+                            <span>Friends</span>
+                            <small>The circle you choose</small>
+                        </div>
+                        <div>
+                            <span class="avatar yellow">{% icon 'book' %}</span>
+                            <span>Grandparents</span>
+                            <small>A familiar voice</small>
+                        </div>
+                        <div>
+                            <span class="avatar blue">{% icon 'home' %}</span>
+                            <span>Family</span>
+                            <small>Always in their corner</small>
+                        </div>
+                    </div>
+                    <div class="preview-footer">{% icon 'shield' %} Only the people you’ve approved</div>
+                </div>
+                <div class="stage-note">
+                    <span>More “can you come over?”</span>
+                    <span>Less scrolling.</span>
+                </div>
+                <div class="stage-caption">
+                    Good old-fashioned connection.
+                    <br>
+                    A thoughtful new way to get there.
+                </div>
+            </div>
+        </section>
+        <section class="how-section" id="how-it-works">
+            <div class="section-heading">
+                <h2>Make room for real conversations.</h2>
+            </div>
+            <div class="how-grid">
+                <article>
+                    <span class="step-label">01 / AT HOME</span>
+                    <h3>Start with your family.</h3>
+                    <p>Add your children and reserve their phones. Your installer connects the hardware.</p>
+                </article>
+                <article>
+                    <span class="step-label">02 / IN GOOD COMPANY</span>
+                    <h3>Choose their circle.</h3>
+                    <p>Connect with families you know. Calling starts when both families approve.</p>
+                </article>
+                <article>
+                    <span class="step-label">03 / JUST PICK UP</span>
+                    <h3>Let the hellos happen.</h3>
+                    <p>A simple phone, trusted contacts, and room for conversations without a screen.</p>
+                </article>
+            </div>
+        </section>
+    </div>
+{% endblock %}
