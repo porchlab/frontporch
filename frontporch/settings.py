@@ -239,5 +239,8 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 )
 
 FRONTPORCH_PUBLIC_URL = os.environ.get("FRONTPORCH_PUBLIC_URL", "").strip()
+FRONTPORCH_DEMO_URL = os.environ.get(
+    "FRONTPORCH_DEMO_URL", "https://front-demo.porchlab.app/#family/overview"
+).strip()
 # Enables invited registration only; there is no open signup route.
 FRONTPORCH_ALLOW_REGISTRATION = True

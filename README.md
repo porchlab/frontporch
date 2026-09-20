@@ -2,6 +2,10 @@
 
 FrontPorch is an early parent-controlled neighborhood phone system for kids and families.
 
+**[Explore the live demo](https://front-demo.porchlab.app/#family/overview)** —
+Try the parent portal with a fictional family. No signup needed; changes stay in
+your browser tab.
+
 The goal is to recreate the old-school landline experience: a simple physical phone in a child's room, a small set of trusted people to call, and parents or guardians who decide the boundaries. FrontPorch is not a smartphone replacement, a social network, or a public directory.
 
 The phone is a place, not a device.

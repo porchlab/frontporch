@@ -10,5 +10,6 @@ def portal(request):
     return {
         "portal_parent": parent if parent and parent.is_guardian else None,
         "portal_timezone": settings.TIME_ZONE,
+        "portal_demo_url": settings.FRONTPORCH_DEMO_URL,
         "portal_allow_registration": settings.FRONTPORCH_ALLOW_REGISTRATION,
     }

@@ -58,7 +58,12 @@ approved scope, upgrade semantics, and deployment assumptions.
    email service or phone hardware is provisioned by this change.
    The optional [public portal deployment](operations/public-portal.md) uses
    `https://front.porchlab.app` and keeps Django admin on Tailscale.
-6. Collect static assets as part of the existing build/deploy process. The bundled
+6. The landing page shows **Explore the demo** with **No signup needed** beside
+   the login button, linking directly to the public demo's fictional family.
+   Override `FRONTPORCH_DEMO_URL` in deployment configuration to use another demo,
+   or set it to an empty value to hide the link. Both Compose web services receive
+   this setting; recreate them after changing it.
+7. Collect static assets as part of the existing build/deploy process. The bundled
    font license remains alongside the fonts.
 
 Quiet hours show `TIME_ZONE` (`TZ`); configure the PBX to the same zone. Phones

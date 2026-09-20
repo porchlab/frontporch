@@ -76,7 +76,10 @@ def exported_assets():
     )
     # The public demo deliberately includes fictional onboarding, regardless of
     # whether a private deployment has registration enabled.
-    context = Context({"portal_allow_registration": True})
+    context = Context({
+        "portal_allow_registration": True,
+        "portal_demo_url": "#family/overview",
+    })
     with context.bind_template(template):
         welcome = content.render(context)
     # Template conditionals may add indentation without changing the page.

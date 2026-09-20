@@ -19,7 +19,14 @@
                 </p>
                 <div class="hero-actions">
                     <a class="button large" href="{% url 'login' %}">Log in to your family {% icon 'arrow' %}</a>
-                    <a class="text-button" href="#how-it-works">How it works</a>
+                    {% if portal_demo_url %}
+                        <div class="hero-demo">
+                            <a class="text-button" href="{{ portal_demo_url }}">Explore the demo {% icon 'arrow' %}</a>
+                            <small class="muted">No signup needed.</small>
+                        </div>
+                    {% else %}
+                        <a class="text-button" href="#how-it-works">How it works</a>
+                    {% endif %}
                 </div>
                 <p class="form-note">FrontPorch is invite only for now. Any family already here can invite yours. Open your email invitation to get started.</p>
                 <div class="hero-proof">{% icon 'shield' %} Parent-approved. Private by design.</div>
