@@ -131,6 +131,7 @@ Django models
 
 - [Parent portal implementation and upgrade guide](docs/parent-ui-implementation.md)
 - [Public parent portal: Cloudflare Tunnel deployment and testing](docs/operations/public-portal.md)
+- [Automatic production deployment and merge controls](docs/operations/automatic-deployment.md)
 - [Browser demo: Cloudflare Pages publishing and verification](ui-prototype/deploy/cloudflare-pages.md)
 - [GL.iNet Opal router setup checklist](docs/operations/opal-router-checklist.md)
 
