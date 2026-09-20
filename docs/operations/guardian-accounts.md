@@ -67,7 +67,10 @@ with the existing password and open **Family settings → Google & Apple sign-in
 Connect Apple from there. Later logins use the linked provider identity and do not
 depend on matching the hidden relay address to the original account email.
 
-Provider buttons appear only after credentials have been configured. Keep all
+The login page puts branded provider buttons above the email/password form.
+Google and Apple share this presentation with the account-connections page.
+Provider buttons appear only after credentials have been configured, so Apple
+remains hidden until it is enabled. Keep all
 credentials in the private deployment environment. The Compose private web and
 public portal processes inherit these settings. Use either environment settings or
 an allauth Social application in private Admin for each provider, not both.

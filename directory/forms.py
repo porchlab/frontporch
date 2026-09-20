@@ -503,6 +503,5 @@ class ParentAuthenticationForm(LoginForm):
         super().__init__(*args, **kwargs)
         self.fields["password"].help_text = ""
         self.fields["login"].label = "Email or username"
-        self.fields["login"].widget.attrs.update(
-            {"autofocus": True, "autocomplete": "username"}
-        )
+        self.fields["login"].widget.attrs.pop("autofocus", None)
+        self.fields["login"].widget.attrs["autocomplete"] = "username"
