@@ -1,0 +1,46 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: frontporch_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:test-ci-only@localhost:5432/frontporch_test
+      DJANGO_SETTINGS_MODULE: frontporch.settings
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install locked Python dependencies
+        run: |
+          python -m pip install uv==0.12.15
+          uv sync --frozen --python 3.12
+      - name: Run the full Django test suite
+        run: uv run --frozen python manage.py test --noinput
