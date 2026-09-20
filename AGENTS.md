@@ -137,6 +137,39 @@ Before editing:
 
 When uncertain, choose the option that keeps the project more explicit, private, deterministic, and understandable.
 
+## Code Review Rules
+
+Prioritize concrete regressions introduced by the PR. Identify the affected
+behavior, a reachable failure or unauthorized action, and the code that permits
+it. Read callers, centralized permission services, tests, and relevant accepted
+ADRs before claiming a check is missing. Avoid speculative refactors, style nits,
+duplicate findings, and unrelated roadmap requests. Current implementation and
+accepted ADRs may supersede older project-status descriptions.
+
+### Permissions and privacy
+
+- Check family and guardian authorization on reads and writes, including
+  invitations, membership changes, child visibility, and cross-family connections.
+  Calls and discovery remain default-deny; revoked or inactive permissions must
+  stop granting access. The authenticated opt-in parent directory in ADR-010 is
+  intentional and does not permit public child discovery.
+- Check audit events and denial cases for changed permission behavior. Identify
+  the specific unverified unsafe path when reporting a missing test.
+- Flag secrets or real family/deployment data entering tracked files, examples,
+  fixtures, logs, or demo exports. Never reproduce secret values in findings.
+
+### Infrastructure and demo boundaries
+
+- Asterisk configuration must remain deterministic, derived from Django policy,
+  and safe against configuration injection. Preserve WireGuard for ATA traffic,
+  Tailscale for administration, and isolated public portal settings/URLs that do
+  not expose Django admin or maintenance functions.
+- For browser demo changes, follow `ui-prototype/DESIGN.md`. Fictional session-local
+  state and simulated authentication are intentional. Flag real-data leaks and
+  unintended differences in the permission behavior the demo promises to model.
+- Apply the production deployment and review rules below to all changes that
+  affect deployment execution, permissions, or review policy.
+
 ## Production Deployment and Reviews
 
 Read [deployment agent rules](deploy/AGENTS.md) when changing or reviewing any
