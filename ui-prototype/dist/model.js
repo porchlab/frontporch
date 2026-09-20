@@ -136,20 +136,45 @@ const Demo = (() => {
     const source = findDevice(data, deviceId);
     if (!source) return [];
     const result = [];
-    const addPhone = (phone, group, detail) => {
-      if (phone.active && phone.id !== deviceId) result.push({key:`device:${phone.id}`, name:phone.name, group, detail});
+    const addPhone = (phone, group, detail, childName, familyName) => {
+      if (phone.active && phone.id !== deviceId) result.push({key:`device:${phone.id}`, name:phone.name, group, detail,
+        phonebookName:childName, extension:phone.extension, description:`${familyName} family`});
     };
-    for (const child of data.children) for (const phone of child.devices) addPhone(phone, "Your family’s phones", child.name);
+    for (const child of data.children) for (const phone of child.devices) addPhone(phone, "Your family’s phones", child.name, child.name, data.family);
     for (const pair of data.connections.filter(c => c.childId === source.child.id)) {
       const peerFamily = family(data, pair.familyId);
       const peer = peerFamily?.children.find(c => c.id === pair.peerId);
-      for (const phone of peer?.devices || []) addPhone(phone, "Approved child connections", `${peer.name} · ${peerFamily.name}`);
+      for (const phone of peer?.devices || []) addPhone(phone, "Approved child connections", `${peer.name} · ${peerFamily.name}`, peer.name, peerFamily.name);
     }
-    for (const contact of data.contacts) result.push({key:`contact:${contact.phone}`, name:contact.name, detail:`Extension ${contact.extension}`, group:"Family contacts"});
-    for (const parent of data.guardians.filter(g => g.phone)) result.push({key:`parent:${parent.id}`, name:parent.name, detail:"Phone", group:"Your family’s phones"});
+    for (const contact of data.contacts) result.push({key:`contact:${contact.phone}`, name:contact.name, detail:`Extension ${contact.extension}`, group:"Family contacts",
+      extension:contact.extension, description:"Family contact"});
+    for (const parent of data.guardians.filter(g => g.phone)) result.push({key:`parent:${parent.id}`, name:parent.name, detail:"Phone", group:"Your family’s phones",
+      extension:"", description:"Parent phone · shortcut only"});
     for (const group of data.groups.filter(g => g.is_active && g.enabled && g.extension && g.members.length >= 2 && g.members.includes(source.child.id)))
-      result.push({key:`group:${group.id}`, name:group.name, detail:`Extension ${group.extension}`, group:"Group calls"});
+      result.push({key:`group:${group.id}`, name:group.name, detail:`Extension ${group.extension}`, group:"Group calls",
+        extension:group.extension, description:"Group call"});
     return result;
+  }
+  function phonebook(data, deviceId) {
+    const source = findDevice(data, deviceId);
+    if (!source?.phone.active) return [];
+    const entries = new Map(), targets = new Map();
+    for (const target of destinations(data, deviceId)) {
+      const key = target.extension || target.key;
+      const entry = entries.get(key) || {name:target.phonebookName || target.name,
+        description:target.description, extension:target.extension, shortcuts:[]};
+      // Parent phones become callable only through an assigned shortcut.
+      if (target.extension) entries.set(key, entry);
+      targets.set(target.key, {key, entry});
+    }
+    for (const shortcut of [...source.phone.shortcuts].sort((a, b) => a.digits.localeCompare(b.digits))) {
+      const target = targets.get(shortcut.target);
+      if (!shortcut.active || !target || !/^[1-9]$/.test(shortcut.digits)) continue;
+      entries.set(target.key, target.entry);
+      target.entry.shortcuts.push({digits:shortcut.digits, label:shortcut.label || ""});
+    }
+    return [...entries.values()].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase(), "en")
+      || a.description.localeCompare(b.description, "en") || a.extension.localeCompare(b.extension, "en"));
   }
   function saveShortcut(data, deviceId, shortcutId, values) {
     const source = findDevice(data, deviceId);
@@ -322,7 +347,7 @@ const Demo = (() => {
   }
   function save(storage, data) { storage.setItem(STORAGE_KEY, JSON.stringify({version:VERSION, data})); }
   return {VERSION, STORAGE_KEY, TIME_ZONE, id, same, assert, seed, actor, primaryOnly, findChild, findDevice, family, nextExtension,
-    reservePhone, saveChild, saveQuiet, listedFamilies, sendInvitation, acceptInvitation, destinations, saveShortcut,
+    reservePhone, saveChild, saveQuiet, listedFamilies, sendInvitation, acceptInvitation, destinations, phonebook, saveShortcut,
     normalizePhone, saveContact, inviteStatus, inviteGuardian, resendGuardian, joinGuardian, removeGuardian, saveProfile,
     saveGroup, migrateLegacy, load, save};
 })();

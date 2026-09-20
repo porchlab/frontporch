@@ -16,12 +16,14 @@ from directory.models import (
     Child,
     ChildConnection,
     Device,
+    DialShortcut,
     ExternalPhoneNumber,
     Family,
     FamilyContact,
     Parent,
 )
 from directory.services import shortcut_destinations
+from directory.phonebook import device_phonebook
 
 
 class BrowserDemoAssetsTests(SimpleTestCase):
@@ -103,6 +105,7 @@ class BrowserDemoPermissionParityTests(TestCase):
             }
 
         data = {
+            "family": local.name,
             "children": [
                 demo_child(children[0], [devices[0], second]),
                 demo_child(children[1], [devices[1]]),
@@ -147,6 +150,20 @@ class BrowserDemoPermissionParityTests(TestCase):
                 approved_by_b=remote_parent,
             )
 
+        DialShortcut.objects.create(
+            source_device=devices[0],
+            digits="1",
+            internal_target_device=devices[2],
+            approved_by=local_parent,
+        )
+        data["children"][0]["devices"][0]["shortcuts"].append(
+            {
+                "digits": "1",
+                "active": True,
+                "target": f"device:{devices[2].pk}",
+            }
+        )
+
         def snapshot():
             return {
                 "pairs": sorted(
@@ -158,6 +175,16 @@ class BrowserDemoPermissionParityTests(TestCase):
                     for field, target, label in shortcut_destinations(
                         devices[0]
                     ).values()
+                ),
+                "phonebook": sorted(
+                    (
+                        {
+                            "extension": entry.extension,
+                            "shortcuts": [s["digits"] for s in entry.shortcuts],
+                        }
+                        for entry in device_phonebook(devices[0])
+                    ),
+                    key=lambda entry: entry["extension"],
                 ),
             }
 

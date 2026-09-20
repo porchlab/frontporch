@@ -13,6 +13,12 @@ urlpatterns = [
         name="family_invitation_action",
     ),
     path("phones/<int:device_id>/edit/", portal.phone_edit, name="phone_edit"),
+    path("phones/<int:device_id>/phonebook/", portal.phonebook, name="phonebook"),
+    path(
+        "landlines/<int:landline_id>/phonebook/",
+        portal.landline_phonebook,
+        name="landline_phonebook",
+    ),
     path("guardians/invite/", guardians.invite, name="guardian_invite"),
     path("guardians/join/<str:token>/", guardians.join, name="guardian_join"),
     path(

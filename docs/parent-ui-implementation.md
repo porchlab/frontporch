@@ -17,6 +17,16 @@ not load its JavaScript or store household data in browser storage.
 - Overview with setup progress, invitations, connected child pairs, and private activity.
 - Children, multiple actual devices per child, phone naming, inactive automatic
   reservations, quiet hours, and per-device shortcut keys 1–9.
+- Printable phonebook cards from each child's phone or shortcut page. The preview
+  defaults to black and white, with an optional color style. Each card lists all
+  currently authorized, active destination extensions and this phone's enabled
+  shortcuts, including family contacts and enabled groups. Shared extensions
+  appear once; parent phone shortcuts without an extension are marked as such.
+  Landline cards follow the child-only dial-in flow and include the available
+  FrontPorch access numbers. Cards require guardian access to the child's family
+  and are served with `no-store` caching. Print at 100% on Letter or A4, turn off
+  browser headers/footers, and trim the border; longer lists continue across pages.
+  Quiet hours still apply. Reprint after permissions or shortcuts change.
 - Exact child-pair connection invitations, selected-child acceptance, decline,
   cancellation, sent/received/history views, and bilateral removal.
 - Authenticated opt-in directory, family/visible guardian name search, pagination,
@@ -26,6 +36,9 @@ not load its JavaScript or store household data in browser storage.
 - Family details, guardian profiles, visibility controls, setup/911-notice preferences,
   and primary-guardian membership invitations with new/existing-account acceptance.
 - Existing conference management is retained. Staff still enable conference calling.
+
+Phonebook examples use fictional demo data: [black and white](images/phonebook-black-and-white.png)
+and [color](images/phonebook-color.png).
 
 Mutations require guardian ownership and CSRF. Contact or connection revocation
 makes saved shortcuts unavailable; generated PBX configuration also rechecks the
