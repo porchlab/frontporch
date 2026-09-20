@@ -114,6 +114,7 @@ development environment. Use `frontporch.settings` and a local PostgreSQL
 `DATABASE_URL` whose role can create a test database, not production credentials:
 
 ```sh
+npm ci --prefix ui-prototype --ignore-scripts
 uv run --frozen python manage.py export_browser_demo
 uv run --frozen python manage.py export_browser_demo --check
 node --test ui-prototype/tests/*.test.cjs
@@ -197,6 +198,7 @@ Verify the complete release against the exact uploaded snapshot:
 
 - Load `index.html`, `app.js`, `model.js`, `portal-contract.js`, `styles.css`,
   `demo.css`, `phonebook.html`, `phonebook-page.js`, `phonebook-print.js`,
+  `phonebook-pdf.js`, `phonebook-fonts.js`, `vendor/jspdf.umd.min.js`,
   `phonebook.css`, `favicon.svg`, and the fonts. Compare the served file contents with
   the prepared snapshot, and inspect content types. An HTTP 200 alone can hide a
   missing asset served as the SPA's HTML fallback. `_headers` is configuration;
@@ -209,7 +211,9 @@ Verify the complete release against the exact uploaded snapshot:
   phones must show **Setup pending** until activated through **Demo tools**;
   pending destination phones must stay out of the shortcut picker.
 - Open **Print phonebook** from a phone and its shortcut page. Check both print
-  styles, the phone's own shortcuts, and Letter/A4 output. Revoking a connection
+  styles, the phone's own shortcuts, and Letter/A4 **Download PDF** output in
+  Safari and Chromium. Downloads should make no network requests, include every
+  entry on long lists, and have no browser URL/date header. Revoking a connection
   or removing a contact must remove its extension and stale shortcuts when the
   card is reopened. Cards must identify themselves as fictional demo data.
 - Accept an invitation with selected children using the receiving-parent preview.

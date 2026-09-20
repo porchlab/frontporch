@@ -3,6 +3,7 @@
 from directory.tests.factories import create_user
 
 import json
+from datetime import date
 from pathlib import Path
 import shutil
 import subprocess
@@ -10,6 +11,7 @@ from unittest import skipUnless
 
 from django.conf import settings
 from django.test import SimpleTestCase, TestCase
+from django.template.loader import render_to_string
 
 from directory.management.commands.export_browser_demo import exported_assets
 from directory.models import (
@@ -23,7 +25,7 @@ from directory.models import (
     Parent,
 )
 from directory.services import shortcut_destinations
-from directory.phonebook import device_phonebook
+from directory.phonebook import PhonebookEntry, device_phonebook
 
 
 class BrowserDemoAssetsTests(SimpleTestCase):
@@ -36,6 +38,103 @@ class BrowserDemoAssetsTests(SimpleTestCase):
                     content,
                     "Run python manage.py export_browser_demo to refresh browser assets.",
                 )
+        self.assertEqual(
+            (Path(settings.BASE_DIR) / "directory/static/directory/phonebook-fonts.js").read_bytes(),
+            exported_assets()["phonebook-fonts.js"],
+        )
+
+
+@skipUnless(shutil.which("node"), "Node is required for the HTML-to-PDF check.")
+class PhonebookDOMTests(SimpleTestCase):
+    def test_django_card_variants_pass_through_the_real_dom_extractor(self):
+        entries = [
+            PhonebookEntry("Alex", "River family", "7000", [
+                {"digits": "1", "label": "Alex"},
+                {"digits": "2", "label": "Best & <buddy>"},
+            ]),
+            PhonebookEntry("Élodie", "Parent phone · shortcut only", "", [
+                {"digits": "4", "label": "Call home"},
+            ]),
+            PhonebookEntry("Grandma <June>", "Family contact", "6100"),
+        ]
+        base = {
+            "child": {"id": 1, "name": 'Casey & "C"'},
+            "phone_name": "Bedroom <north>", "phone_extension": "4754",
+            "phone_active": True, "printed_on": date(2026, 9, 20),
+            "entries": entries,
+        }
+        pick_up = "Pick up the phone. Dial an extension or use a shortcut."
+        at_menu = "At the menu, dial an extension or a shortcut below."
+        empty_notice = (
+            "No calls available yet. Ask a parent or guardian to check your "
+            "connections and contacts, then print a new card."
+        )
+        access_numbers = [f"+12025550{n}" for n in range(100, 200)]
+        # These are real Django template renders, not copied HTML fixtures.
+        variants = [
+            ("phone", {}, [pick_up], ""),
+            ("empty", {"entries": []}, [pick_up], empty_notice),
+            ("inactive", {"entries": [], "phone_active": False}, [
+                "This phone is not enabled yet. Print a new card after your installer activates it."
+            ], ""),
+            ("landline", {"is_landline": True, "dial_in_numbers": access_numbers[:2]}, [
+                f"First, call FrontPorch: {' or '.join(access_numbers[:2])}", at_menu,
+            ], ""),
+            ("direct landline", {"is_landline": True, "direct_call": True,
+                "dial_in_numbers": access_numbers[:1], "entries": [PhonebookEntry("Alex", "River family", "7000")]}, [
+                f"First, call FrontPorch: {access_numbers[0]}",
+                "Your call connects directly to Alex. No extension or shortcut is needed.",
+            ], ""),
+            ("pending landline", {"is_landline": True, "dial_in_numbers": [], "entries": []}, [
+                "FrontPorch dial-in is not set up yet. Ask your installer to set it up, then print a new card."
+            ], empty_notice),
+            ("long landline", {"child": {"id": 1, "name": "W" * 200},
+                "phone_name": "Landline", "is_landline": True, "dial_in_numbers": access_numbers}, [
+                f"First, call FrontPorch: {' or '.join(access_numbers)}", at_menu,
+            ], ""),
+        ]
+        cases = []
+        expected = []
+        for name, changes, guide, empty in variants:
+            context = {**base, **changes}
+            for paper in ("letter", "a4"):
+                for color in (False, True):
+                    cases.append({
+                        "html": render_to_string("directory/phonebook.html", {**context, "color": color}),
+                        "options": {"paper": paper, "color": color},
+                    })
+                    expected.append((name, paper, color, {
+                        "title": f"{context['child']['name']}’s phonebook.",
+                        "identity": f"{context['phone_name']} · My extension 4754",
+                        "guide": guide, "empty": empty,
+                        "entries": [{
+                            "name": entry.name, "description": entry.description,
+                            "extension": entry.extension or "Use shortcut",
+                            "shortcuts": [{
+                                "digits": shortcut["digits"],
+                                "label": shortcut["label"] if shortcut["label"] != entry.name else "",
+                            } for shortcut in entry.shortcuts],
+                        } for entry in context["entries"]],
+                        "reminders": [
+                            "A little reminder Quiet hours still apply. If a call doesn’t connect, ask a grown-up.",
+                            "FrontPorch cannot call 911. Use another phone for emergencies.",
+                        ],
+                        "metadata": ["Made Sep 20, 2026 · Reprint when your circle changes.",
+                            "Your family’s private phonebook."],
+                    }))
+        result = subprocess.run(
+            [shutil.which("node"), "ui-prototype/tests/phonebook-dom-runner.cjs"],
+            input=json.dumps(cases), cwd=settings.BASE_DIR, text=True,
+            capture_output=True, timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        actual = json.loads(result.stdout)
+        self.assertEqual(len(actual), len(expected))
+        for (name, paper, color, data), pdf in zip(expected, actual):
+            with self.subTest(variant=name, paper=paper, color=color):
+                self.assertEqual(pdf["data"], data)
+                for entry in data["entries"]:
+                    self.assertIn(entry["name"], pdf["text"])
 
 
 @skipUnless(shutil.which("node"), "Node is required for the cross-runtime demo check.")

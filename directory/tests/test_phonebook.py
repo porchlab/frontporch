@@ -192,6 +192,10 @@ class PhonebookTests(TestCase):
         self.assertContains(response, "Best buddy")
         self.assertContains(response, "Use shortcut")
         self.assertContains(response, "Quiet hours still apply")
+        self.assertContains(response, "Download PDF")
+        self.assertContains(response, "US Letter")
+        self.assertContains(response, 'src="/static/directory/phonebook-pdf.js"')
+        self.assertContains(response, 'src="/static/directory/phonebook-fonts.js"')
         self.assertIn("no-store", response.headers["Cache-Control"])
         self.assertContains(
             self.client.get(self.url, {"style": "color"}), 'class="color"'

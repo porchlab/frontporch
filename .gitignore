@@ -10,6 +10,7 @@ env/
 !.env.example
 .local/
 staticfiles/
+node_modules/
 
 asterisk/logs/*
 !asterisk/logs/.empty

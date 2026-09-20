@@ -43,7 +43,11 @@ jobs:
           python -m pip install uv==0.12.15
           uv sync --frozen --python 3.12
       - name: Run the full Django test suite
-        run: uv run --frozen python manage.py test --noinput
+        # DOM integration tests parse the actual Django phonebook HTML in Node.
+        # These locked development dependencies are not part of the runtime.
+        run: |
+          npm ci --prefix ui-prototype --ignore-scripts
+          uv run --frozen python manage.py test --noinput
 
   deployment-policy:
     runs-on: ubuntu-latest

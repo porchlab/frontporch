@@ -44,6 +44,7 @@ function renderPhonebook() {
   back.href = source ? `index.html#family/child/${encodeURIComponent(source.child.id)}` : "index.html#family/children";
   back.textContent = source ? `← Back to ${source.child.name}’s phones` : "← Back to Children & phones";
   document.querySelector("[data-print]").disabled = !source;
+  document.querySelector("[data-download-pdf]").disabled = !source;
   document.querySelector("#print-style").value = options.get("style") === "color" ? "color" : "bw";
   document.body.className = options.get("style") === "color" ? "color" : "monochrome";
 }
