@@ -10,7 +10,10 @@ questions about permission scope and extension setup are resolved there.
 `directory/management/commands/export_browser_demo.py` produces deterministic,
 public-only exports from the Django source:
 
-- The complete `portal.css`, favicon, and self-hosted DM Sans assets.
+- The complete `portal.css`, phonebook styles, print/download controls and shared
+  PDF renderer, pinned jsPDF, favicon, and self-hosted DM Sans assets. The command
+  also generates `phonebook-fonts.js` in both Django static files and the demo
+  from the existing TTFs, without adding runtime font requests.
 - Icons from `directory/templatetags/portal_tags.py`.
 - Field definitions from `directory/forms.py`, including labels, required flags,
   max/min lengths, static choices, initial values, and help text.
@@ -39,6 +42,19 @@ Phones belong to children, shortcuts belong to individual phones, and quiet hour
 are separate schedules. Parents reserve inactive phones with automatic extensions;
 installer actions appear only inside **Demo tools**. A configured phone is not
 advertised as currently online.
+
+Each phone has a standalone printable phonebook using the same print styles as
+Django. Its entries come from the existing simulated destination checks, with
+shared extensions deduplicated and only that phone's active, still-authorized
+shortcuts included. Parent phone shortcuts have no invented extension. Paused
+or revoked targets are omitted, and inactive source phones show a setup notice.
+The preview reads current session state, defaults to black and white, offers
+color, and marks printed cards as fictional demo data. Downloadable PDFs use the
+same direct text/vector renderer in both apps, with Letter/A4 paper, embedded
+fonts, and explicit pagination. No HTML-to-image conversion or browser print
+dialog is involved. Scripts outside the Latin font subset use high-resolution
+font fallback images. Styling and PDF creation stay in the browser; no new
+network or form-submission permissions are required.
 
 Families and individual guardians opt into directory visibility separately. Only
 the primary guardian can invite, resend, cancel, or remove guardian access. Removed
@@ -87,9 +103,24 @@ When a parent-facing feature changes:
 
 The **Browser demo parity** GitHub workflow checks export freshness, runs the Node
 scenarios, and runs the Django parity tests without rewriting exports. It fails
-on stale generated assets. A cross-runtime fixture compares actual Django shortcut eligibility and child-pair revocation
-against the browser model. This is an executable guard against permission drift;
+on stale generated assets. A cross-runtime fixture compares actual Django shortcut
+eligibility, phonebook extensions and shortcuts, and child-pair revocation against
+the browser model. This is an executable guard against permission drift;
 it does not claim that two separate implementations can never diverge.
+
+PDF follow-up verification on 2026-09-20: 34 Node checks and all 279 Django tests
+passed. Chromium and WebKit downloads worked with the Pages security headers and
+made no PDF network requests. Sample PDFs rendered identically in both engines.
+Checks covered Letter/A4, both styles, 320/390-pixel layouts, long lists, Unicode
+names, missing sources, and real Django device/landline pages. Node tests exercise
+oversized rows, repeated identity and reminders, embedded fonts, and text bounds.
+Review regressions additionally cover maximum-length child/device names with
+100 dial-in numbers, including cards without entries. Calling guides flow across
+pages before the table starts. DOM integration checks render the real Django
+template (device, empty, inactive, landline menu, direct call, and pending dial-in)
+and demo cards, then run `readCard()` and the PDF generator. The locked LinkeDOM
+dependency is used only by tests.
+The PDF follow-up has not been published.
 
 Verified on 2026-09-19: 21 Node behavior/rendering checks and the full
 210-test Django suite passed in an isolated copy of the demo commit. Desktop and 390-pixel mobile checks covered all

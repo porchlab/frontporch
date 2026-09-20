@@ -23,12 +23,22 @@
                     <div class="inline-actions">
                         <a class="button secondary"
                            href="{% url 'directory:shortcuts' device.id %}">Dial shortcuts</a>
+                        <a class="button secondary"
+                           href="{% url 'directory:phonebook' device.id %}">Print phonebook</a>
                         <a class="text-button blue-text"
                            href="{% url 'directory:phone_edit' device.id %}">Rename phone</a>
                     </div>
                 </div>
             {% empty %}
                 <p class="small-empty">No phone registered yet.</p>
+            {% endfor %}
+            {% for landline in child.landlines.all %}
+                <div class="device-row">
+                    <h3>Landline</h3>
+                    <p>Extension {{ landline.dial_extension }} · {% if landline.is_active %}Enabled{% else %}Disabled{% endif %}</p>
+                    <a class="button secondary"
+                       href="{% url 'directory:landline_phonebook' landline.id %}">Print phonebook</a>
+                </div>
             {% endfor %}
             <a class="button" href="{% url 'directory:phone_create' child.id %}">Add a phone</a>
             <p class="form-note">Your installer connects and tests the physical phone. Enabled does not mean the phone is currently online.</p>

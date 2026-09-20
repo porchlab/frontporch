@@ -7,6 +7,10 @@
             <h1>One key. A familiar voice.</h1>
             <p>{{ device.friendly_name }} · Choose the people on this phone’s keys.</p>
         </div>
+        {% if device.assigned_child_id %}
+            <a class="button secondary"
+               href="{% url 'directory:phonebook' device.id %}">Print phonebook</a>
+        {% endif %}
     </div>
     <div class="info-strip">
         <p>Shortcuts use existing calling permissions. Quiet hours still apply. {% if not device.is_active %}This phone is awaiting installer activation.{% endif %}

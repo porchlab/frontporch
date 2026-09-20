@@ -17,6 +17,18 @@ not load its JavaScript or store household data in browser storage.
 - Overview with setup progress, invitations, connected child pairs, and private activity.
 - Children, multiple actual devices per child, phone naming, inactive automatic
   reservations, quiet hours, and per-device shortcut keys 1–9.
+- Printable phonebook cards from each child's phone or shortcut page. The preview
+  defaults to black and white, with an optional color style. Each card lists all
+  currently authorized, active destination extensions and this phone's enabled
+  shortcuts, including family contacts and enabled groups. Shared extensions
+  appear once; parent phone shortcuts without an extension are marked as such.
+  Landline cards follow the child-only dial-in flow and include the available
+  FrontPorch access numbers. Cards require guardian access to the child's family
+  and are served with `no-store` caching. **Download PDF** creates a file with
+  embedded fonts, fixed margins, and controlled page breaks in Letter or A4.
+  Print that PDF at 100% and trim the border. **Print preview** remains available
+  as a browser-printing fallback; disable browser headers/footers for that option.
+  Quiet hours still apply. Reprint after permissions or shortcuts change.
 - Exact child-pair connection invitations, selected-child acceptance, decline,
   cancellation, sent/received/history views, and bilateral removal.
 - Authenticated opt-in directory, family/visible guardian name search, pagination,
@@ -26,6 +38,20 @@ not load its JavaScript or store household data in browser storage.
 - Family details, guardian profiles, visibility controls, setup/911-notice preferences,
   and primary-guardian membership invitations with new/existing-account acceptance.
 - Existing conference management is retained. Staff still enable conference calling.
+
+Phonebook examples use fictional demo data: [black and white](images/phonebook-black-and-white.png)
+and [color](images/phonebook-color.png). Download the generated example PDFs in
+[black and white](../output/pdf/phonebook-black-and-white.pdf) or
+[color](../output/pdf/phonebook-color.pdf).
+
+The portal and demo share one local PDF renderer, using the vendored
+[jsPDF](../directory/static/directory/vendor/README.md) library. It draws the
+already-authorized card contents directly into a PDF; it does not take an HTML
+screenshot or upload family data. DM Sans is embedded for selectable Latin text;
+other scripts and emoji use high-resolution browser font fallback images to
+avoid missing glyphs. Long lists repeat phone identification and reminders on
+each page. The existing guardian-scoped page remains the permission boundary;
+reopen it after changing approvals before saving a new PDF.
 
 Mutations require guardian ownership and CSRF. Contact or connection revocation
 makes saved shortcuts unavailable; generated PBX configuration also rechecks the

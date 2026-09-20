@@ -79,8 +79,34 @@ Security-sensitive tests should include denial cases, not only allowed cases.
 Run the test suite locally before submitting application changes:
 
 ```bash
+npm ci --prefix ui-prototype --ignore-scripts
 uv run python manage.py test
 ```
+
+Use Node 24 for the cross-runtime tests. The locked `ui-prototype` development
+dependencies provide DOM parsing for the phonebook HTML-to-PDF integration tests;
+they are not needed to serve the application or demo.
+
+Pull requests to `main` require both GitHub Actions checks to pass:
+
+- [`tests`](.github/workflows/tests.yml) runs the full Django suite with
+  PostgreSQL 16, Python 3.12, and Node 24, including cross-runtime demo tests.
+- [`parity`](.github/workflows/browser-demo.yml) checks generated demo assets,
+  browser behavior, and permission parity with Django. See the
+  [browser demo guide](ui-prototype/README.md#keeping-django-and-the-demo-aligned)
+  for local commands.
+
+Both workflows run on every pull request, including documentation-only changes.
+Keep these job names stable: GitHub's required checks use the job names, not the
+workflow names. Branches must be up to date with `main` before merging.
+
+The repository's active **Required PR checks** ruleset is recorded in
+[`.github/rulesets/main.json`](.github/rulesets/main.json). It accepts checks only
+from GitHub Actions and has no bypass actors. GitHub does not automatically apply
+this file; administrators must update the matching ruleset in **Settings → Rules →
+Rulesets** when changing it. In **Settings → General → Pull Requests**,
+**Automatically delete head branches** is enabled so merged PR branches are
+removed automatically.
 
 For local setup, copy `.env.example` to `.env`, fill in local-only values, run migrations, and create an admin user:
 

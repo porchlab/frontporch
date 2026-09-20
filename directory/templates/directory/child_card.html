@@ -24,6 +24,10 @@
                href="{% url 'directory:shortcuts' device.id %}">
                 {% icon 'phone' %} Dial shortcuts <span>{{ device.dial_shortcuts.count }} set {% icon 'chevron' %}</span>
             </a>
+            <a class="shortcut-card-link"
+               href="{% url 'directory:phonebook' device.id %}">
+                {% icon 'book' %} Print phonebook {% icon 'chevron' %}
+            </a>
         {% empty %}
             <div class="phone-status">
                 <span>{% icon 'phone' %} No phone registered yet</span>
@@ -33,6 +37,10 @@
             <div class="phone-status">
                 {% icon 'phone' %} Landline · {{ landline.dial_extension }} <span class="pill neutral">{% if landline.is_active %}Enabled{% else %}Disabled{% endif %}</span>
             </div>
+            <a class="shortcut-card-link"
+               href="{% url 'directory:landline_phonebook' landline.id %}">
+                {% icon 'book' %} Print phonebook {% icon 'chevron' %}
+            </a>
         {% endfor %}
         <span>
         {% icon 'users' %} {{ child.connection_count }} connection{{ child.connection_count|pluralize }} · {{ child.contact_count }} external contact{{ child.contact_count|pluralize }}</span>

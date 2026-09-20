@@ -1,0 +1,105 @@
+@font-face {
+  font-family: "DM Sans";
+  src: url("fonts/dm-sans-regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "DM Sans";
+  src: url("fonts/dm-sans-bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 28px 16px 48px; background: #f1f1ef; color: #111; font-family: "DM Sans", sans-serif; }
+button, select { font: inherit; }
+button, select, .back-link { min-height: 42px; }
+button, select { padding: 8px 12px; border: 1px solid #555; border-radius: 6px; background: white; color: #111; }
+button { cursor: pointer; font-weight: 700; }
+button:hover { background: #eee; }
+:focus-visible { outline: 3px solid #203dcc; outline-offset: 3px; }
+[hidden] { display: none !important; }
+.print-controls { max-width: 180mm; margin: 0 auto 24px; font-size: 14px; }
+.back-link { display: inline-flex; align-items: center; color: #203dcc; font-weight: 700; }
+.toolbar, .toolbar form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.toolbar { justify-content: space-between; margin-top: 12px; }
+.toolbar label { width: 100%; font-weight: 700; }
+.pdf-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.pdf-controls label { width: auto; }
+.print-button { min-width: 145px; }
+.print-button { align-self: flex-end; color: white; background: #203dcc; border-color: #203dcc; }
+.print-button:hover { background: #142998; }
+.print-controls p { line-height: 1.5; color: #555; }
+.phonebook { --accent: #111; --line: #555; width: 100%; max-width: 180mm; margin: auto; border: 1.5px solid var(--line); border-radius: 14px; padding: 24px 28px 18px; background: white; }
+.wordmark { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 700; color: var(--accent); }
+.wordmark svg { width: 21px; height: 21px; }
+.wordmark > span { margin-left: auto; font-size: 11px; font-weight: 400; color: #333; }
+.card-title { display: flex; justify-content: space-between; gap: 20px; align-items: center; margin: 24px 0 18px; }
+h1 { margin: 0; font-size: 38px; letter-spacing: -1.6px; line-height: 1.05; overflow-wrap: anywhere; color: var(--accent); }
+.card-title p { margin: 12px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.phone-drawing { display: flex; flex: 0 0 90px; flex-direction: column; align-items: center; gap: 6px; color: var(--accent); transform: rotate(8deg); }
+.phone-drawing svg { width: 56px; height: 56px; stroke-width: 1.5; }
+.phone-drawing span { font-size: 18px; font-weight: 700; }
+.calling-guide { border-top: 1.5px solid var(--line); padding: 12px 0; font-size: 13px; line-height: 1.5; }
+.calling-guide p { margin: 0; }
+.calling-guide p + p { margin-top: 5px; }
+table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+th { padding: 9px 0; border-block: 1px solid var(--line); text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+.person-column { width: 52%; }
+.extension-column { width: 27%; }
+.shortcut-column { width: 21%; }
+td { padding: 11px 8px 11px 0; vertical-align: middle; border-bottom: 1px solid #bbb; overflow-wrap: anywhere; }
+.person-name { display: block; font-size: 18px; line-height: 1.2; }
+.entry-description { display: block; margin-top: 3px; font-size: 10px; line-height: 1.3; color: #333; }
+.extension { font-size: 25px; font-weight: 700; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+.no-extension { display: block; font-size: 11px; letter-spacing: 0; font-weight: 400; }
+.shortcut { display: inline-flex; gap: 5px; flex-direction: column; align-items: flex-start; vertical-align: top; max-width: 100%; margin: 3px 7px 3px 0; }
+.shortcut b { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 32px; border: 1.5px solid var(--accent); border-radius: 7px; font-size: 22px; color: var(--accent); }
+.shortcut > span { max-width: 64px; font-size: 10px; line-height: 1.3; }
+.no-shortcut { font-size: 20px; }
+.empty-phonebook { padding: 24px 0; border-block: 1px solid var(--line); }
+.empty-phonebook h2 { margin: 0; font-size: 20px; }
+.empty-phonebook p { font-size: 13px; }
+.card-footer { padding-top: 15px; font-size: 10px; line-height: 1.5; }
+.card-footer p { margin: 0 0 7px; }
+.card-footer strong { display: block; text-transform: uppercase; letter-spacing: 1px; font-size: 9px; }
+.card-footer > div { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid #bbb; padding-top: 9px; margin-top: 13px; font-size: 8px; }
+.color .phonebook { --accent: #203dcc; --line: #203dcc; border-top: 7px solid var(--accent); }
+.color .phone-drawing { color: #b74b26; }
+.color .shortcut b { background: #fff1ac; }
+.color .person-name { color: #193b32; }
+.color tbody tr:nth-child(even):not(.footer-row) { background: #f3f7f2; }
+.footer-row > td { padding: 0; border-bottom: 0; }
+.print-identity { display: none; }
+@media screen and (max-width: 540px) {
+  body { padding: 12px 10px 24px; }
+  .phonebook { padding: 20px 16px 16px; }
+  .toolbar form { width: 100%; }
+  .toolbar select { width: 100%; }
+  h1 { font-size: 30px; }
+  .wordmark > span { display: none; }
+  .phone-drawing { flex-basis: 55px; }
+  .phone-drawing svg { width: 40px; height: 40px; }
+  .person-name { font-size: 16px; }
+  .extension { font-size: 20px; letter-spacing: 0; }
+  th { font-size: 9px; letter-spacing: 0; }
+  .card-footer > div { flex-direction: column; gap: 4px; }
+}
+@page { size: auto; margin: 12mm; }
+@media print {
+  body { padding: 0; margin: 0; background: white; color: black; }
+  .print-controls { display: none !important; }
+  .phonebook { max-width: 180mm; border-radius: 0; padding: 6mm; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .card-title { margin: 16px 0 12px; }
+  h1 { font-size: 32px; }
+  td { padding-block: 6px; }
+  .person-name { font-size: 16px; }
+  .extension { font-size: 23px; }
+  .print-identity { display: table-row; }
+  .print-identity td { font-size: 9px; color: #333; padding: 5px 0; border-bottom: 0; }
+  .card-heading, .calling-guide, tr, .card-footer { break-inside: avoid; }
+  .card-heading, .calling-guide, thead { break-after: avoid; }
+  .phonebook-ending { break-inside: avoid; }
+  thead { display: table-header-group; }
+  .color .phonebook { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}

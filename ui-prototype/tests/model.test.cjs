@@ -4,6 +4,62 @@ const {runtime} = require('./harness.cjs');
 const {Demo} = runtime();
 const memory = () => ({value:null, getItem() { return this.value; }, setItem(key, value) { this.value = value; }});
 
+test('phonebooks list every permitted extension, with shortcuts scoped to the selected phone', () => {
+  const data = Demo.seed();
+  const second = Demo.reservePhone(data, 'casey', 'Desk'); second.active = true;
+  const entries = Demo.phonebook(data, 'casey-phone');
+  assert.deepEqual(Array.from(entries, e => e.extension).sort(), ['6100', '6101', '7000', second.extension].sort());
+  assert.equal(entries.find(e => e.extension === '7000').name, 'Alex');
+  assert.equal(entries.find(e => e.extension === '7000').shortcuts[0].digits, '2');
+  assert(entries.some(e => e.name === 'Grandma June' && e.shortcuts.length === 0));
+  assert(Demo.phonebook(data, second.id).every(e => e.shortcuts.length === 0));
+  assert(!JSON.stringify(entries).includes('+1202555'));
+  assert.equal(Demo.phonebook(data, 'river-phone-0').length, 0);
+});
+test('phonebooks deduplicate shared extensions and omit shortcuts pointing at an inactive shared phone', () => {
+  const data = Demo.seed(), peer = data.network[0].children[0];
+  peer.devices.push({...peer.devices[0], id:'alex-second', name:'Alex desk'});
+  Demo.saveShortcut(data, 'casey-phone', '', {digits:'3', target:'device:alex-second', label:'Buddy', active:true});
+  let entries = Demo.phonebook(data, 'casey-phone');
+  assert.equal(entries.filter(e => e.extension === '7000').length, 1);
+  assert.deepEqual(Array.from(entries.find(e => e.extension === '7000').shortcuts, s => s.digits), ['2', '3']);
+  peer.devices[0].active = false;
+  entries = Demo.phonebook(data, 'casey-phone');
+  assert.deepEqual(Array.from(entries.find(e => e.extension === '7000').shortcuts, s => s.digits), ['3']);
+});
+test('phonebooks recheck revoked connections, removed contacts, paused shortcuts and inactive phones', () => {
+  const data = Demo.seed(), source = Demo.findDevice(data, 'casey-phone').phone;
+  Demo.saveShortcut(data, source.id, '', {digits:'1', target:'contact:+12025550142', label:'Grandma', active:true});
+  source.shortcuts[0].active = false;
+  assert.equal(Demo.phonebook(data, source.id).find(e => e.extension === '7000').shortcuts.length, 0);
+  source.shortcuts[0].active = true;
+  data.connections = []; data.contacts = [];
+  assert.equal(Demo.phonebook(data, source.id).length, 0);
+  assert.equal(source.shortcuts.length, 2);
+  Demo.acceptInvitation(data, 'cedar-invite', ['jordan']);
+  assert.equal(Demo.phonebook(data, source.id).length, 0);
+  data.contacts.push({name:'Grandma', phone:'+12025550142', extension:'6100'});
+  source.active = false;
+  assert.equal(Demo.phonebook(data, source.id).length, 0);
+});
+test('phonebooks include enabled member groups and parent phone shortcuts without inventing an extension', () => {
+  const data = Demo.seed(); data.guardians[0].phone = '+12025550199';
+  assert(!Demo.phonebook(data, 'casey-phone').some(e => e.extension === ''));
+  Demo.saveShortcut(data, 'casey-phone', '', {digits:'1', target:'parent:primary', label:'Mom', active:true});
+  const parent = Demo.phonebook(data, 'casey-phone').find(e => e.extension === '');
+  assert.equal(parent.name, 'Morgan'); assert.equal(parent.shortcuts[0].digits, '1');
+  const group = Demo.saveGroup(data, '', {name:'Home', is_active:true}, ['casey', 'jordan']);
+  group.extension = Demo.nextExtension(data); group.enabled = true;
+  assert(Demo.phonebook(data, 'casey-phone').some(e => e.extension === group.extension));
+  Demo.saveShortcut(data, 'casey-phone', '', {digits:'3', target:`group:${group.id}`, active:true});
+  group.enabled = false;
+  assert(!Demo.phonebook(data, 'casey-phone').some(e => e.extension === group.extension));
+  group.enabled = true; group.members = ['jordan', 'other-child'];
+  assert(!Demo.phonebook(data, 'casey-phone').some(e => e.extension === group.extension));
+  data.guardians[0].phone = '';
+  assert(!Demo.phonebook(data, 'casey-phone').some(e => e.extension === ''));
+});
+
 // These assertions describe product outcomes, including denial and revocation.
 test('each browser store has independent progress and a fresh reset', () => {
   const one = memory(), two = memory(), data = Demo.load(one);

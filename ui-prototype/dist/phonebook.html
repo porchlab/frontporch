@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Phonebook · FrontPorch demo</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="phonebook.css">
+  <script src="portal-contract.js" defer></script>
+  <script src="model.js" defer></script>
+  <script src="phonebook-page.js" defer></script>
+  <script src="vendor/jspdf.umd.min.js" defer></script>
+  <script src="phonebook-fonts.js" defer></script>
+  <script src="phonebook-pdf.js" defer></script>
+  <script src="phonebook-print.js" defer></script>
+</head>
+<body class="monochrome">
+  <div class="print-controls">
+    <a class="back-link" href="index.html#family/children">← Back to Children &amp; phones</a>
+    <p><strong>FrontPorch demo</strong> · Fictional data from this tab. Calls are simulated.</p>
+    <div class="toolbar">
+      <form id="print-options">
+        <label for="print-style">Print style</label>
+        <select name="style" id="print-style">
+          <option value="bw">Black &amp; white · low ink</option>
+          <option value="color">Color · a little more fun</option>
+        </select>
+        <button type="submit">Update preview</button>
+      </form>
+      <div class="pdf-controls" data-pdf-controls hidden>
+        <label for="pdf-paper">Paper size</label>
+        <select id="pdf-paper"><option value="letter">US Letter</option><option value="a4">A4</option></select>
+        <button type="button" class="print-button" data-download-pdf>Download PDF</button>
+      </div>
+      <button type="button" data-print hidden>Print preview</button>
+    </div>
+    <p>Download a PDF for consistent spacing and page breaks. Print the PDF at 100% on your chosen paper size, then trim around the border.</p>
+    <p data-pdf-status role="status" hidden></p>
+  </div>
+  <main id="main" class="phonebook">
+    <noscript>Turn on JavaScript to preview this demo phonebook.</noscript>
+  </main>
+</body>
+</html>
