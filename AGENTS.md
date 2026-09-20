@@ -146,6 +146,12 @@ ADRs before claiming a check is missing. Avoid speculative refactors, style nits
 duplicate findings, and unrelated roadmap requests. Current implementation and
 accepted ADRs may supersede older project-status descriptions.
 
+Independently establish the expected behavior from trusted requirements and
+existing contracts. Challenge assumptions shared by the implementation and its
+tests. Look for concrete counterexamples, including unauthorized actors, revoked
+access, and partial failures. Do not assume passing tests establish correctness,
+and do not invent findings to satisfy a quota.
+
 ### Permissions and privacy
 
 - Check family and guardian authorization on reads and writes, including
