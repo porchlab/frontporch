@@ -170,9 +170,10 @@ still govern merges.
 A repository administrator configures the integration outside this repository:
 
 1. Sign in to Codex Cloud with the ChatGPT account that supplies review usage.
-2. Connect the ChatGPT Codex Connector GitHub app to `porchlab`. The owner has
-   authorized access to all current and future repositories in this organization.
-   Do not provide deployment credentials to review environments.
+2. Connect the ChatGPT Codex Connector GitHub app to `porchlab`. Confirm the
+   repository scope directly with CarlosBorroto before installing the app or
+   changing its access; this document does not authorize access changes. Do not
+   provide deployment credentials to review environments.
 3. In FrontPorch's repository preferences, set **Auto review** to **Review all PRs**
    and **Trigger** to **On every push**. This covers other contributors and reviews
    new commits after the initial review. Keep **Enable credits use** off to stay
