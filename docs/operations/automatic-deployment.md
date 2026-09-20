@@ -93,7 +93,8 @@ the moment the runner joins, including before route acceptance is disabled.
 
 Create an OIDC trust credential with only `auth_keys` write and exactly the
 deployment tag. Use issuer `https://token.actions.githubusercontent.com`, subject
-`repo:porchlab/frontporch:environment:production`, and exact claim constraints:
+`repo:porchlab@300614051/frontporch@1291418820:environment:production`, and exact
+claim constraints:
 
 | Claim | Required value |
 | --- | --- |
@@ -102,6 +103,12 @@ deployment tag. Use issuer `https://token.actions.githubusercontent.com`, subjec
 | `ref` | `refs/heads/main` |
 | `event_name` | `push` |
 | `workflow_ref` | `porchlab/frontporch/.github/workflows/tests.yml@refs/heads/main` |
+
+This repository uses GitHub's [immutable subject format](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims),
+which includes owner and repository IDs. Verify the prefix with
+`gh api repos/porchlab/frontporch/actions/oidc/customization/sub --jq .sub_claim_prefix`
+and append `:environment:production`. Keep all custom claim constraints above;
+do not disable immutable subjects or loosen the subject to resolve a mismatch.
 
 The identity cannot edit policy or create credentials for other tags. Store its
 generated audience and client ID in GitHub. See the official
