@@ -36,7 +36,7 @@ compose() {
 stage() { printf '%s\n' "$1" > "$STATE_DIR/stage"; }
 verify_revision() {
     "$DOCKER" run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
-        --volume "$policy_dir:/policy:ro" "$PYTHON_IMAGE" \
+        --volume "$policy_dir/verify_revision.py:/policy/verify_revision.py:ro" "$PYTHON_IMAGE" \
         python /policy/verify_revision.py "$REPOSITORY" "$revision"
 }
 deploy() {
@@ -82,12 +82,14 @@ deploy() {
     compose exec -T web python manage.py render_asterisk_config --reload
     stage verification
     "$DOCKER" run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
-        --volume "$policy_dir:/policy:ro" --network "${PROJECT}_default" \
+        --volume "$policy_dir/verify_http.py:/policy/verify_http.py:ro" \
+        --volume "$policy_dir/http.json:/policy/http.json:ro" --network "${PROJECT}_default" \
         "$PYTHON_IMAGE" python /policy/verify_http.py private
     # Check the public ingress isolation path directly. Cloudflare can challenge
     # automated requests from the NAS; that is not an origin readiness signal.
     "$DOCKER" run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
-        --volume "$policy_dir:/policy:ro" --network "${PROJECT}_portal_backend" \
+        --volume "$policy_dir/verify_http.py:/policy/verify_http.py:ro" \
+        --volume "$policy_dir/http.json:/policy/http.json:ro" --network "${PROJECT}_portal_backend" \
         "$PYTHON_IMAGE" python /policy/verify_http.py public
     compose ps --all
     for service in web portal public-ingress cloudflared db asterisk; do
