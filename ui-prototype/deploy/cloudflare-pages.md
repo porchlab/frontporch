@@ -6,8 +6,9 @@ The real Django parent portal has a separate [Cloudflare Tunnel runbook](../../d
 
 ## Last recorded hosting setup
 
-Recorded during the September 19, 2026 demo publication; recheck the dashboard and
-live site before relying on deployment status:
+Project and domain values were recorded during the September 19, 2026 demo
+publication. The automation rows describe the workflow now in this repository;
+recheck GitHub Actions, the dashboard, and the live site for deployment status:
 
 | Setting | Value |
 | --- | --- |
@@ -19,14 +20,15 @@ live site before relying on deployment status:
 | Production branch | `main` |
 | Source in this repository | `ui-prototype/` |
 | Upload directory from the repository root | `ui-prototype/dist/` |
-| Build command on Pages | None; generate and verify assets locally before uploading |
+| Build command on Pages | None; GitHub Actions generates and verifies assets before uploading |
 | Backend, Functions, environment secrets | None |
-| Git integration / automatic deployment | None |
+| Git integration | None; the project remains Direct Upload |
+| Automatic deployment | GitHub Actions on pushes to `main`, after the repository secrets below are configured |
 | Last recorded custom-domain status | Active, SSL enabled |
 
 The application uses fictional data and per-tab `sessionStorage`. Its login, invitations, phone setup, and calling controls are simulations. Passwords are discarded. The public demo has no connection to the Django database or Asterisk; publishing it does not expose the private voice network. Fictional signup stays available even though the real public portal disables open family registration.
 
-The first production upload on September 19 used a snapshot of the original design lab before the dial-shortcut changes. The maintained source now lives in this repository. A Git commit or a local edit does not update the live site; publish a new deployment to release those changes.
+The first production upload on September 19 used a snapshot of the original design lab before the dial-shortcut changes. The maintained source now lives in this repository. Local edits do not update the live site; pushing to `main` triggers the deployment workflow described below.
 
 The recorded September 19 refresh deployed `ui-prototype/dist/` from commit `bff7d781ded220e995c77273997753855f8131c8` as production deployment `98798008-37d1-41e0-ac48-f2c6d261099f`. That snapshot included dial shortcuts, family-wide contacts, the dismissible setup checklist, and the dismissible 911 notice. At that publication, all nine served assets matched the uploaded snapshot; HTTPS, security headers, and the updated browser controls were verified. The preceding production deployment was `56aff5c8-4b3e-48a3-8787-fabf4642e48c`; confirm its availability in the dashboard before selecting it for rollback.
 
@@ -34,9 +36,62 @@ Those publication checks predate the Django portal implementation (`f28737c`) an
 the demo alignment and parity checks (`77ea18c`). They do not verify the current
 source on the public site. The maintained demo now exports Django presentation,
 uses per-phone shortcuts and exact child-to-child connections, and includes
-installer/recipient simulations. Use the manual upload workflow below to publish
-the current version, then verify the served assets. Record the source
-commit, Pages deployment ID, and verification result after each release.
+installer/recipient simulations. Use the GitHub Actions workflow or a manual
+upload below to publish the current version, then verify the served assets. The
+Actions run records the source commit, and Wrangler logs the deployment URL;
+Cloudflare's dashboard records the deployment ID. Record the verification result
+after each release.
+
+## Automatic updates from main
+
+[`Deploy browser demo`](../../.github/workflows/browser-demo-deploy.yml) runs on
+every push to `main`, including merged pull requests, with no path filter. It
+installs locked Python dependencies, runs `export_browser_demo` to regenerate the
+public presentation assets, checks the exports, runs the Node scenarios and
+Django demo parity tests against a disposable PostgreSQL service, then uploads
+only `ui-prototype/dist/` to the `front-demo` project's production branch, `main`.
+Failed generation or tests prevent the upload. No production database credentials
+are needed. Cloudflare credentials are passed only to the credential check and
+upload steps.
+
+Uploads are serialized without canceling an in-progress deployment. Superseded
+pending runs can be replaced by GitHub's concurrency queue; before uploading,
+the workflow also skips commits that are no longer the head of `main`. Reruns of
+superseded commits skip deployment; use the Pages rollback procedure below to
+restore a previous release.
+
+The exporter refreshes shared presentation; changes to simulated behavior and
+page composition still need the updates described in the [parity notes](../DESIGN.md).
+Keep committing generated assets with Django changes: the separate
+[`Browser demo parity`](../../.github/workflows/browser-demo.yml) workflow still
+checks committed exports on pull requests. Deployment regenerates its own copy
+and does not commit files back to the repository. Wrangler's `--commit-dirty=true`
+allows those regenerated files to be uploaded and marks that fact in deployment
+metadata; `--commit-hash` identifies the source commit.
+
+### One-time GitHub secret setup
+
+1. In the Cloudflare account containing `front-demo`, create an API token with
+   **Account → Cloudflare Pages → Edit**, scoped to that account. Copy the account
+   ID from Cloudflare's dashboard. See [Cloudflare's CI setup guide](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/).
+2. In **porchlab/frontporch → Settings → Secrets and variables → Actions**, add
+   these **repository secrets**:
+
+   | Secret | Value |
+   | --- | --- |
+   | `CLOUDFLARE_ACCOUNT_ID` | The account ID for the existing `front-demo` project |
+   | `CLOUDFLARE_API_TOKEN` | The account-scoped token with Cloudflare Pages edit permission |
+
+3. Confirm the Pages project's production branch is `main`. Keep its existing
+   custom-domain association; no Git integration or DNS change is required.
+4. After this workflow is merged, open **Actions → Deploy browser demo → Run
+   workflow**, select **main**, and run it to verify the setup. Manual runs on
+   other branches are skipped. Future pushes to `main` trigger it automatically.
+
+Missing secrets fail the workflow with an explicit setup message. Secrets are
+not stored in Git or uploaded with the static files. Check the Actions run and
+the Pages production deployment, then use the verification steps below for the
+custom domain. For a retry, run the workflow against current `main`.
 
 ## DNS and HTTPS
 
@@ -50,7 +105,7 @@ Cloudflare manages HTTPS for the attached hostname. The Pages project name is `f
 
 To inspect or restore the association, open **Cloudflare → Workers & Pages → front-demo → Custom domains**. The expected status for `front-demo.porchlab.app` is **Active**, with **SSL enabled**. Add a missing association through **Set up a custom domain**, enter the hostname, and confirm the proposed DNS record. Register the hostname with Pages before creating DNS manually; a CNAME alone does not configure Pages to serve that domain. See [Cloudflare's custom-domain documentation](https://developers.cloudflare.com/pages/configuration/custom-domains/).
 
-## Prepare an update
+## Prepare a manual update
 
 Use `ui-prototype/` in this FrontPorch checkout as the source.
 
@@ -109,7 +164,9 @@ Complete the Cloudflare browser authorization when requested and confirm `front-
 
 Confirm the project's production branch is still `main`. `--branch main` targets that production branch even when the local checkout is on another branch. It uploads the current local files; it does not check out or fetch Git's `main` branch. Review the files and any uncommitted-change warning before publishing. A different Pages branch creates a preview and does not update the main custom domain.
 
-Direct Upload projects cannot be converted to Git-integrated projects. Future automation can use Wrangler in CI, or a new Pages project can be created with Git integration. See [Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/).
+Direct Upload projects cannot be converted to Git-integrated projects. The
+automatic workflow above uses Wrangler with the existing Direct Upload project;
+no replacement project is needed. See [Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/).
 
 ## Headers and verification
 
@@ -165,5 +222,10 @@ calls require the separate Django and public-portal testing procedures.
 When an update appears missing, check that the deployment is **Production / main**, that the upload came from this checkout's `ui-prototype/dist/`, and that the archive did not include an extra enclosing directory. Compare against the uploaded snapshot if local files have changed since publication.
 
 ## Roll back an update
+
+Disable **Deploy browser demo** in GitHub Actions and let any running deployment
+finish before an operational rollback, so automation does not immediately
+replace it. Re-enable the workflow after the source has been corrected and run
+it on current `main` to resume deployment.
 
 Open **front-demo → Deployments**, find a previous successful production deployment in **All deployments**, open its three-dot menu, and choose **Rollback to this deployment**. Confirm the selected release and repeat the verification checks. Preview deployments are not rollback targets. Rollback changes the published assets; it does not revert this checkout or visitors' per-tab state. Older releases may not understand newer saved state; use a fresh tab or **Reset** to discard only fictional demo progress when testing a rollback. A Pages rollback has no effect on the Django database or NAS deployment. See [Cloudflare's rollback documentation](https://developers.cloudflare.com/pages/configuration/rollbacks/).

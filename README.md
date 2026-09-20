@@ -21,7 +21,7 @@ Try the parent portal with a fictional family. No signup or phone hardware neede
 
 The demo uses fictional data, and changes stay in your browser tab. Accounts, invitations, phone activation, and calls are simulated. Use fictional details while exploring; **Reset** restores the sample family.
 
-For contributors, the [browser demo guide](ui-prototype/README.md) explains how to run it locally. Django supplies its styles, fonts, icons, form definitions, and welcome content, and automated checks compare selected permission behaviors. See the [design and parity notes](ui-prototype/DESIGN.md) for intentional differences and the [hosting runbook](ui-prototype/deploy/cloudflare-pages.md) for publishing and verification.
+For contributors, the [browser demo guide](ui-prototype/README.md) explains how to run it locally. Django supplies its styles, fonts, icons, form definitions, and welcome content, and automated checks compare selected permission behaviors. See the [design and parity notes](ui-prototype/DESIGN.md) for intentional differences and the [hosting runbook](ui-prototype/deploy/cloudflare-pages.md) for automatic updates from `main`, GitHub secret setup, manual publishing, verification, and rollback.
 
 ## Get Involved
 
