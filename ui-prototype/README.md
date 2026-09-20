@@ -81,7 +81,9 @@ The GitHub **Browser demo parity** workflow checks pull requests and pushes to
 transitions, and compares selected connections and revoked shortcut destinations
 against actual Django model outcomes. The export
 check also runs in Django's normal test suite. The cross-runtime test needs Node;
-CI installs it explicitly. This workflow does not publish to Cloudflare Pages.
+CI installs it explicitly. A separate **Deploy browser demo** workflow regenerates
+the assets, repeats the demo checks, and publishes successful pushes to `main` to
+Cloudflare Pages. Neither workflow commits generated changes back to Git.
 
 | File | Ownership |
 | --- | --- |
@@ -99,12 +101,13 @@ workflow for changing parent-facing features.
 
 The shared demo is **[front-demo.porchlab.app](https://front-demo.porchlab.app)**,
 hosted on Cloudflare Pages. See the [demo setup and deployment
-runbook](deploy/cloudflare-pages.md) for the Pages project, DNS record, update
-commands, verification, and rollback. Upload this repository's
-`ui-prototype/dist/` after running the checks above; changes are published manually.
-No Django server or shared database is required. The runbook distinguishes the
-last recorded publication from subsequent source changes; merging to `main` does
-not update the hosted demo.
+runbook](deploy/cloudflare-pages.md) for the Pages project, GitHub Actions secret
+setup, DNS record, manual update commands, verification, and rollback. Once the
+repository secrets are configured, every push to `main` (including merges)
+triggers **Deploy browser demo**. It exports current Django presentation, runs
+the demo tests, and uploads only `ui-prototype/dist/`. The workflow can also be
+run manually with `main` selected. No Django server or shared database is required
+by the hosted demo.
 
 The real parent portal's prepared [Cloudflare Tunnel setup](../docs/operations/public-portal.md)
 uses `front.porchlab.app`, real FrontPorch login, and operator-controlled family
