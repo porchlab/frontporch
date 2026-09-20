@@ -36,9 +36,14 @@
           "tags": "tag:frontporch-deploy",
           "version": "1.94.2",
           "sha256sum": "c6f99a5d774c7783b56902188d69e9756fc3dddfb08ac6be4cb2585f3fecdc32",
-          "use-cache": "false",
-          "args": "--accept-routes=false"
+          "use-cache": "false"
         }
+      },
+      {
+        "name": "Disable subnet route acceptance",
+        "if": "steps.current.outputs.deploy == 'true'",
+        "shell": "bash",
+        "run": "sudo tailscale set --accept-routes=false"
       },
       {
         "name": "Request the fixed host deployment",

@@ -84,6 +84,13 @@ addresses, and the production host's web, database, and AMI ports. Also test tha
 existing administrator access still works. Do not tag the production host merely
 to create the CI identity; retagging would change its existing user-based access.
 
+The [pinned action](https://github.com/tailscale/github-action/blob/306e68a486fd2350f2bfc3b19fcd143891a4a2d8/src/main.ts#L764-L773)
+always enables route acceptance during connection. The next workflow step runs
+`sudo tailscale set --accept-routes=false` before SSH; if it fails, deployment
+stops. Do not pass this flag through the action's `args`: Tailscale rejects the
+duplicate `tailscale up` flag. The tailnet policy is the access boundary from
+the moment the runner joins, including before route acceptance is disabled.
+
 Create an OIDC trust credential with only `auth_keys` write and exactly the
 deployment tag. Use issuer `https://token.actions.githubusercontent.com`, subject
 `repo:porchlab/frontporch:environment:production`, and exact claim constraints:
