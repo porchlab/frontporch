@@ -36,6 +36,10 @@ class BrowserDemoAssetsTests(SimpleTestCase):
                     content,
                     "Run python manage.py export_browser_demo to refresh browser assets.",
                 )
+        self.assertEqual(
+            (Path(settings.BASE_DIR) / "directory/static/directory/phonebook-fonts.js").read_bytes(),
+            exported_assets()["phonebook-fonts.js"],
+        )
 
 
 @skipUnless(shutil.which("node"), "Node is required for the cross-runtime demo check.")

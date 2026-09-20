@@ -30,8 +30,11 @@ copy of the original tab's session, but subsequent changes are independent.
 - Choose **Print phonebook** on a child's phone or shortcut page. The card uses
   this tab's current approved extensions and that phone's active shortcuts.
   Black and white is the default; choose **Color** for a more playful printout.
-  Print on Letter or A4 paper. Changing connections, contacts, or shortcuts and
-  reopening the preview updates the card. Printed cards are marked as fictional.
+  Choose Letter or A4 and **Download PDF** for fixed margins, embedded fonts, and
+  consistent page breaks, then print the file at 100%. **Print preview** remains
+  available as a fallback. Changing connections, contacts, or shortcuts and
+  reopening the preview updates the card. PDFs are made locally, and the cards
+  are marked as fictional.
 - Add, edit, and pause multiple quiet-hour schedules. The fictional phone system
   uses **America/New_York**, explicitly shown on screen, independent of your browser.
 - Review the Cedar invitation and select children. Each selected sender child is
@@ -93,6 +96,7 @@ Cloudflare Pages. Neither workflow commits generated changes back to Git.
 | File | Ownership |
 | --- | --- |
 | `dist/styles.css`, `dist/phonebook.css`, `dist/phonebook-print.js`, `dist/fonts/`, `dist/favicon.svg` | Generated from Django static assets; do not edit here |
+| `dist/phonebook-pdf.js`, `dist/phonebook-fonts.js`, `dist/vendor/` | Shared PDF renderer, generated font bundle, and pinned jsPDF; do not edit here |
 | `dist/portal-contract.js` | Generated icons, forms, and welcome content; do not edit |
 | `dist/model.js` | Fictional state, transitions, storage, and old-session migration |
 | `dist/app.js` | Browser rendering and interactions |

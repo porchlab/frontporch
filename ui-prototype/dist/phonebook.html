@@ -10,6 +10,9 @@
   <script src="portal-contract.js" defer></script>
   <script src="model.js" defer></script>
   <script src="phonebook-page.js" defer></script>
+  <script src="vendor/jspdf.umd.min.js" defer></script>
+  <script src="phonebook-fonts.js" defer></script>
+  <script src="phonebook-pdf.js" defer></script>
   <script src="phonebook-print.js" defer></script>
 </head>
 <body class="monochrome">
@@ -25,9 +28,15 @@
         </select>
         <button type="submit">Update preview</button>
       </form>
-      <button type="button" class="print-button" data-print hidden>Print phonebook</button>
+      <div class="pdf-controls" data-pdf-controls hidden>
+        <label for="pdf-paper">Paper size</label>
+        <select id="pdf-paper"><option value="letter">US Letter</option><option value="a4">A4</option></select>
+        <button type="button" class="print-button" data-download-pdf>Download PDF</button>
+      </div>
+      <button type="button" data-print hidden>Print preview</button>
     </div>
-    <p>Print at 100% on Letter or A4 paper, then trim around the border. Longer phonebooks continue onto another page. Turn off browser headers and footers for a clean card.</p>
+    <p>Download a PDF for consistent spacing and page breaks. Print the PDF at 100% on your chosen paper size, then trim around the border.</p>
+    <p data-pdf-status role="status" hidden></p>
   </div>
   <main id="main" class="phonebook">
     <noscript>Turn on JavaScript to preview this demo phonebook.</noscript>
