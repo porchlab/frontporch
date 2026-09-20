@@ -147,6 +147,8 @@ up. A repository administrator completes these steps:
 1. Apply through [Greptile's open-source program](https://www.greptile.com/open-source)
    for `https://github.com/porchlab/frontporch`. Confirm the project's eligibility
    and free OSS status in Greptile; a trial alone does not confirm OSS approval.
+   On September 20, 2026, the dashboard also required at least 50 GitHub stars;
+   a public repository and an eligible license were not sufficient.
 2. In Greptile's Code Providers setup, install its GitHub app for `porchlab`,
    choosing **Only select repositories** and `frontporch`. Link that GitHub
    organization and enable `porchlab/frontporch` for reviews.
