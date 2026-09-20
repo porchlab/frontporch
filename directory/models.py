@@ -48,12 +48,9 @@ class Parent(TimeStampedModel):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="frontporch_parent",
-        null=True,
-        blank=True,
     )
     family = models.ForeignKey(Family, on_delete=models.CASCADE, related_name="parents")
     display_name = models.CharField(max_length=200)
-    email = models.EmailField(blank=True)
     phone = models.CharField(max_length=32, blank=True)
     is_guardian = models.BooleanField(default=True)
     is_primary = models.BooleanField(default=False)
@@ -76,6 +73,10 @@ class Parent(TimeStampedModel):
 
     def __str__(self):
         return f"{self.display_name} ({self.family})"
+
+    @property
+    def email(self):
+        return self.user.email
 
     def clean(self):
         if self.phone:
@@ -1400,6 +1401,60 @@ class ConnectionInvitation(TimeStampedModel):
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class FamilyInvitation(TimeStampedModel):
+    """An existing family sponsors one new household, without granting calls."""
+
+    family = models.ForeignKey(
+        Family, on_delete=models.CASCADE, related_name="family_invitations"
+    )
+    invited_by = models.ForeignKey(
+        Parent, on_delete=models.PROTECT, related_name="family_invitations_sent"
+    )
+    email = models.EmailField()
+    token_digest = models.CharField(max_length=64, unique=True, editable=False)
+    expires_at = models.DateTimeField()
+    status = models.CharField(
+        max_length=12,
+        default="pending",
+        choices=[
+            ("pending", "Pending"),
+            ("accepted", "Accepted"),
+            ("cancelled", "Cancelled"),
+            ("replaced", "Replaced"),
+        ],
+    )
+    accepted_family = models.OneToOneField(
+        Family,
+        on_delete=models.SET_NULL,
+        related_name="registration_invitation",
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["family", "email"],
+                condition=models.Q(status="pending"),
+                name="one_pending_family_invitation_per_email",
+            )
+        ]
+
+    @property
+    def available(self):
+        from django.utils import timezone
+
+        return (
+            self.status == "pending"
+            and self.expires_at > timezone.now()
+            and self.invited_by.is_guardian
+            and self.invited_by.family_id == self.family_id
+            and self.invited_by.user_id is not None
+            and self.invited_by.user.is_active
+        )
 
 
 class GuardianInvitation(TimeStampedModel):

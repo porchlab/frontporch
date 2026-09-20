@@ -7,7 +7,13 @@ not load its JavaScript or store household data in browser storage.
 
 ## Workflows
 
-- `/welcome/`, signup, email-or-username login, and POST logout.
+- `/welcome/`, invited signup, email-or-username login, and POST logout.
+- Required guardian accounts, allauth password recovery and email management, and
+  Google/Apple sign-in for existing accounts. See the [account upgrade and provider
+  setup guide](operations/guardian-accounts.md).
+- New-family invitations from any active guardian, with email delivery, resend,
+  cancellation, and a separate household on acceptance. No staff or primary role
+  is required to invite a new family.
 - Overview with setup progress, invitations, connected child pairs, and private activity.
 - Children, multiple actual devices per child, phone naming, inactive automatic
   reservations, quiet hours, and per-device shortcut keys 1–9.
@@ -35,6 +41,11 @@ approved scope, upgrade semantics, and deployment assumptions.
 2. Run `uv run python manage.py migrate`. Migrations 0016–0018 add portal state,
    materialize existing effective child pairs, carry pending requests into the
    inbox, and choose the initial primary guardian. Family listings start hidden.
+   Migration 0019 adds new-family invitations; existing families and accounts
+   remain intact. Open registration is disabled on both public and private portals.
+   Migration 0020 provisions missing guardian accounts with random passwords and
+   makes account email authoritative. Review the account upgrade guide for email
+   conflict handling and recovery before deploying.
 3. Review primary guardians in Admin. Existing legacy relationship rows are history;
    use child connections for current authorization. The old portal approval URLs
    return a migration notice rather than creating ineffective approvals.
@@ -47,7 +58,12 @@ approved scope, upgrade semantics, and deployment assumptions.
    email service or phone hardware is provisioned by this change.
    The optional [public portal deployment](operations/public-portal.md) uses
    `https://front.porchlab.app` and keeps Django admin on Tailscale.
-6. Collect static assets as part of the existing build/deploy process. The bundled
+6. The landing page shows **Explore the demo** with **No signup needed** beside
+   the login button, linking directly to the public demo's fictional family.
+   Override `FRONTPORCH_DEMO_URL` in deployment configuration to use another demo,
+   or set it to an empty value to hide the link. Both Compose web services receive
+   this setting; recreate them after changing it.
+7. Collect static assets as part of the existing build/deploy process. The bundled
    font license remains alongside the fonts.
 
 Quiet hours show `TIME_ZONE` (`TZ`); configure the PBX to the same zone. Phones
@@ -59,6 +75,19 @@ Family discovery codes have 144 random bits and remain valid until rotated. A
 lookup is bound to the authenticated browser session and rechecked against the
 current code before an invitation can be sent. Guardian membership links have
 256 random bits, are stored as SHA-256 digests, and expire after seven days.
+New-family registration links have the same token strength and expiration, are
+bound to the recipient email, and can be redeemed only once. Resending invalidates
+the old link; cancelling or removing the inviting guardian's access also prevents
+redemption. Sending, replacing, cancelling, and accepting are recorded in family
+activity. An invitation grants no calling permission and does not join the
+inviter's household. Discovery codes cannot authorize registration.
+
+Any active guardian can send or manage their family's new-family invitations in
+Family settings. Guardian membership invitations remain limited to the primary
+guardian. Emailed links work on the public portal as well as the private portal.
+The first household in a fresh installation must be created by an operator in
+private Django Admin, with a user linked to a guardian; that family can then invite
+others. `FRONTPORCH_ALLOW_REGISTRATION=False` disables invited registration too.
 
 ## Verification
 

@@ -92,6 +92,11 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "directory",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
+    "allauth.socialaccount.providers.apple",
 ]
 
 MIDDLEWARE = [
@@ -102,6 +107,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -169,6 +175,54 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/welcome/"
 
+AUTHENTICATION_BACKENDS = ["allauth.account.auth_backends.AuthenticationBackend"]
+ACCOUNT_ADAPTER = "directory.accounts.AccountAdapter"
+SOCIALACCOUNT_ADAPTER = "directory.accounts.SocialAccountAdapter"
+ACCOUNT_LOGIN_METHODS = {"email", "username"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+ACCOUNT_FORMS = {"login": "directory.forms.ParentAuthenticationForm"}
+# Existing passwords keep working; invitation acceptance verifies new accounts.
+ACCOUNT_EMAIL_VERIFICATION = "optional"
+ACCOUNT_CHANGE_EMAIL = True
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "[FrontPorch] "
+ACCOUNT_SESSION_REMEMBER = False
+ACCOUNT_LOGOUT_ON_GET = False
+SOCIALACCOUNT_LOGIN_ON_GET = False
+SOCIALACCOUNT_STORE_TOKENS = False
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "SCOPE": ["profile", "email"],
+        "OAUTH_PKCE_ENABLED": True,
+        "EMAIL_AUTHENTICATION": True,
+    },
+    "apple": {
+        "SCOPE": ["email", "name"],
+        "EMAIL_AUTHENTICATION": True,
+    },
+}
+
+google_client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+if google_client_id and google_client_secret:
+    SOCIALACCOUNT_PROVIDERS["google"]["APP"] = {
+        "client_id": google_client_id,
+        "secret": google_client_secret,
+        "key": "",
+    }
+
+apple_client_id = os.environ.get("APPLE_CLIENT_ID", "")
+apple_key_id = os.environ.get("APPLE_KEY_ID", "")
+apple_team_id = os.environ.get("APPLE_TEAM_ID", "")
+apple_private_key = os.environ.get("APPLE_PRIVATE_KEY", "").replace("\\n", "\n")
+if apple_client_id and apple_key_id and apple_team_id and apple_private_key:
+    SOCIALACCOUNT_PROVIDERS["apple"]["APP"] = {
+        "client_id": apple_client_id,
+        "secret": apple_key_id,
+        "key": apple_team_id,
+        "settings": {"certificate_key": apple_private_key},
+    }
+
 # Configure SMTP in private deployment settings. No invitation preview tokens are exposed in the portal.
 EMAIL_BACKEND = os.environ.get(
     "DJANGO_EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend"
@@ -185,4 +239,8 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 )
 
 FRONTPORCH_PUBLIC_URL = os.environ.get("FRONTPORCH_PUBLIC_URL", "").strip()
+FRONTPORCH_DEMO_URL = os.environ.get(
+    "FRONTPORCH_DEMO_URL", "https://front-demo.porchlab.app/#family/overview"
+).strip()
+# Enables invited registration only; there is no open signup route.
 FRONTPORCH_ALLOW_REGISTRATION = True

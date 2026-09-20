@@ -2,6 +2,10 @@
 
 FrontPorch is an early parent-controlled neighborhood phone system for kids and families.
 
+**[Explore the live demo](https://front-demo.porchlab.app/#family/overview)** —
+Try the parent portal with a fictional family. No signup needed; changes stay in
+your browser tab.
+
 The goal is to recreate the old-school landline experience: a simple physical phone in a child's room, a small set of trusted people to call, and parents or guardians who decide the boundaries. FrontPorch is not a smartphone replacement, a social network, or a public directory.
 
 The phone is a place, not a device.
@@ -16,18 +20,24 @@ Use this repository as application source and public examples only. Real neighbo
 
 ## Parent Portal
 
-Open the Django root URL for login or, when enabled, family signup. The portal provides children
+Open the Django root URL to log in. New family registration is invite only: any
+active guardian of an existing family can email an invitation from Family settings
+or the Family directory. Links expire in seven days and can be used once to create
+a separate family account. Calling still needs approval from both families.
+The portal provides children
 and phones, exact child-to-child invitations, private family discovery, contacts,
 quiet hours, dial shortcuts, guardian membership, and family settings. New phone
 reservations require installer activation. See the [implementation and upgrade
 guide](docs/parent-ui-implementation.md) before deploying this version.
+Every guardian has a user account. Password recovery, email management, and optional
+Google/Apple sign-in use django-allauth; see the [guardian account upgrade and
+provider setup guide](docs/operations/guardian-accounts.md).
 
-The prepared public setup uses Cloudflare Tunnel at `front.porchlab.app` and
-FrontPorch login, with no Tailscale installation required for parents. Public
-family signup is disabled: operators enroll families through the private portal,
-while invited guardians can join through their invitations. Django admin and
-maintenance remain on Tailscale; ATA connections to Asterisk use WireGuard.
-Production deployment and tunnel activation are deferred. See the [public portal
+The optional public setup uses Cloudflare Tunnel at `front.porchlab.app` and
+FrontPorch login, with no Tailscale installation required for parents. Family
+registration requires an invitation from an existing family, and invited guardians
+can join through their invitations. Django admin and maintenance remain on
+Tailscale; ATA connections to Asterisk use WireGuard. See the [public portal
 runbook](docs/operations/public-portal.md) for deployment prerequisites and tests.
 
 ## Browser Demo

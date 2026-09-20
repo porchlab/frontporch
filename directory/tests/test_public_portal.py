@@ -1,10 +1,12 @@
 import json
 import os
+import re
 import subprocess
 import sys
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core import mail
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
@@ -13,17 +15,23 @@ from directory.models import Family, Parent
 
 @override_settings(
     ROOT_URLCONF="frontporch.public_urls",
-    FRONTPORCH_ALLOW_REGISTRATION=False,
+    FRONTPORCH_ALLOW_REGISTRATION=True,
+    FRONTPORCH_PUBLIC_URL="https://front.porchlab.app",
     ALLOWED_HOSTS=["front.porchlab.app"],
     CSRF_TRUSTED_ORIGINS=["https://front.porchlab.app"],
     SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"),
     SECURE_SSL_REDIRECT=True,
     SESSION_COOKIE_SECURE=True,
     CSRF_COOKIE_SECURE=True,
-    MIDDLEWARE=[*settings.MIDDLEWARE, "frontporch.middleware.PrivateResponseMiddleware"],
+    MIDDLEWARE=[
+        *settings.MIDDLEWARE,
+        "frontporch.middleware.PrivateResponseMiddleware",
+    ],
     STORAGES={
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        },
     },
 )
 class PublicPortalTests(TestCase):
@@ -44,6 +52,45 @@ class PublicPortalTests(TestCase):
             self.assertEqual(method("/register/").status_code, 404)
         self.assertEqual(User.objects.count(), 0)
 
+    def test_existing_family_can_invite_and_recipient_can_register_publicly(self):
+        family = Family.objects.create(name="Maple")
+        user = User.objects.create_user("guardian", "maple@example.com", "test-pass")
+        Parent.objects.create(user=user, family=family, display_name="Taylor")
+        self.client.force_login(user)
+        self.assertEqual(
+            self.client.post(
+                reverse("directory:family_invite"), {"email": "new@example.com"}
+            ).status_code,
+            302,
+        )
+        token = re.search(
+            r"https://front\.porchlab\.app/register/([^/]+)/", mail.outbox[-1].body
+        ).group(1)
+        self.client.logout()
+        recipient = Client(
+            enforce_csrf_checks=True,
+            HTTP_HOST="front.porchlab.app",
+            HTTP_X_FORWARDED_PROTO="https",
+        )
+        url = reverse("directory:register_invited", args=[token])
+        page = recipient.get(url)
+        self.assertEqual(page.headers["Referrer-Policy"], "same-origin")
+        response = recipient.post(
+            url,
+            {
+                "family_name": "Willow",
+                "display_name": "Morgan",
+                "password1": "different-test-pass-123",
+                "password2": "different-test-pass-123",
+                "csrfmiddlewaretoken": recipient.cookies[settings.CSRF_COOKIE_NAME].value,
+            },
+            HTTP_ORIGIN="https://front.porchlab.app",
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("directory:dashboard"))
+        self.assertTrue(User.objects.filter(email="new@example.com").exists())
+        self.assertEqual(Family.objects.count(), 2)
+
     def test_entry_pages_have_no_signup_links_and_are_not_cacheable(self):
         for path in ("/welcome/", "/accounts/login/"):
             response = self.client.get(path)
@@ -63,7 +110,7 @@ class PublicPortalTests(TestCase):
             "guardian", email="guardian@example.com", password="test-pass"
         )
         Parent.objects.create(
-            user=user, family=family, display_name="Taylor", email=user.email
+            user=user, family=family, display_name="Taylor"
         )
         client = Client(
             enforce_csrf_checks=True,
@@ -76,7 +123,7 @@ class PublicPortalTests(TestCase):
         response = client.post(
             reverse("login"),
             {
-                "username": user.email,
+                "login": user.email,
                 "password": "test-pass",
                 "csrfmiddlewaretoken": csrf_cookie.value,
             },
@@ -141,10 +188,16 @@ class PublicSettingsTests(SimpleTestCase):
         config = json.loads(result.stdout)
         self.assertFalse(config["DEBUG"])
         self.assertEqual(config["ALLOWED_HOSTS"], ["front.porchlab.app"])
-        for name in ("SECURE_SSL_REDIRECT", "SESSION_COOKIE_SECURE", "CSRF_COOKIE_SECURE"):
+        for name in (
+            "SECURE_SSL_REDIRECT",
+            "SESSION_COOKIE_SECURE",
+            "CSRF_COOKIE_SECURE",
+        ):
             self.assertTrue(config[name])
-        self.assertEqual(config["SECURE_PROXY_SSL_HEADER"], ["HTTP_X_FORWARDED_PROTO", "https"])
+        self.assertEqual(
+            config["SECURE_PROXY_SSL_HEADER"], ["HTTP_X_FORWARDED_PROTO", "https"]
+        )
         self.assertEqual(config["SESSION_COOKIE_NAME"], "__Host-frontporch_session")
         self.assertEqual(config["ROOT_URLCONF"], "frontporch.public_urls")
-        self.assertFalse(config["FRONTPORCH_ALLOW_REGISTRATION"])
+        self.assertTrue(config["FRONTPORCH_ALLOW_REGISTRATION"])
         self.assertEqual(config["FRONTPORCH_PUBLIC_URL"], "https://front.porchlab.app")

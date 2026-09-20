@@ -1,0 +1,15 @@
+{% extends "directory/base.html" %}
+{% block title %}By invitation · FrontPorch{% endblock %}
+{% block content %}
+    <section class="form-panel panel auth-panel">
+        <div class="eyebrow">A FAMILIAR WELCOME</div>
+        {% if expired %}
+            <h1>This invitation is no longer available.</h1>
+            <p class="dialog-intro">It may have expired, been used, or been cancelled. Ask the family who invited you to send a new invitation.</p>
+        {% else %}
+            <h1>A hello by invitation.</h1>
+            <p class="dialog-intro">FrontPorch is invite only for now. Any existing family can invite yours. Ask a parent or guardian already here to send you an invitation, then open the link in your email.</p>
+        {% endif %}
+        <a class="button" href="{% url 'login' %}">Log in to your family</a>
+    </section>
+{% endblock %}

@@ -22,6 +22,8 @@ FRONTPORCH_PUBLIC_URL = f"https://{PUBLIC_HOST}"
 # Only public-ingress can reach this listener from the tunnel network. It
 # overwrites forwarded headers; never publish this container's port on the host.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# public-ingress replaces X-Forwarded-For with the Cloudflare client IP.
+ALLAUTH_TRUSTED_PROXY_COUNT = 1
 SECURE_SSL_REDIRECT = True
 SECURE_SSL_HOST = PUBLIC_HOST
 SECURE_HSTS_SECONDS = 3600
@@ -33,7 +35,6 @@ SESSION_COOKIE_NAME = "__Host-frontporch_session"
 CSRF_COOKIE_NAME = "__Host-frontporch_csrf"
 SECURE_REFERRER_POLICY = "same-origin"
 
-# Existing families can log in and invited guardians can join. Initial family
-# enrollment remains available to the operator through the private portal.
-FRONTPORCH_ALLOW_REGISTRATION = False
+# New families need an email-bound invitation from an existing family's guardian.
+# The shared registration view enforces invitations on both portal processes.
 MIDDLEWARE = [*MIDDLEWARE, "frontporch.middleware.PrivateResponseMiddleware"]

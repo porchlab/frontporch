@@ -1,5 +1,7 @@
 from django.core.management.base import BaseCommand
+from django.contrib.auth.models import User
 from django.db import transaction
+import secrets
 
 from directory.models import Child, Device, Family, Parent
 
@@ -24,9 +26,7 @@ TEST_FAMILIES = (
             ("6255", "Taylor"),
             ("7981", "Riley"),
         ),
-        "children": (
-            ("3552", "Alex"),
-        ),
+        "children": (("3552", "Alex"),),
     },
     {
         "name": "Cedar",
@@ -69,11 +69,20 @@ class Command(BaseCommand):
             device_count += 1
 
             for extension, display_name in family_data["parents"]:
-                parent, _ = Parent.objects.update_or_create(
-                    family=family,
-                    display_name=display_name,
-                    defaults={"is_guardian": True},
-                )
+                parent = Parent.objects.filter(
+                    family=family, display_name=display_name
+                ).first()
+                if parent is None:
+                    user = User.objects.create_user(
+                        username=f"guardian_{secrets.token_hex(12)}",
+                        password=secrets.token_urlsafe(48),
+                    )
+                    parent = Parent.objects.create(
+                        family=family, display_name=display_name, user=user
+                    )
+                elif not parent.is_guardian:
+                    parent.is_guardian = True
+                    parent.save(update_fields=["is_guardian", "updated_at"])
                 parent_count += 1
                 self._upsert_device(
                     extension=extension,

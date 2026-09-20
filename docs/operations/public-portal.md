@@ -249,7 +249,7 @@ docker compose -f compose.yaml -f compose.public.yaml logs --tail=100 cloudflare
 | Connector exits with missing/empty token or permission denied | Check `CLOUDFLARE_TUNNEL_TOKEN_FILE`, file ownership/ACL, and the non-root readability probe. Do not print the token. |
 | Tunnel inactive, connection timeouts, or Cloudflare error 1033 | Check the connector process, token, DNS resolution, and outbound UDP/TCP 7844. |
 | Tunnel Healthy but HTTP 502 | Re-run the private origin probe; check `public-ingress:8080`, the portal process, and Docker networks. The tunnel service is HTTP because TLS terminates at Cloudflare. |
-| HTTP 404 for the welcome/login page | Check the route's public hostname and remove an incorrect HTTP Host Header override. Admin/registration 404s are intentional. |
+| HTTP 404 for the welcome/login page | Check the route's public hostname and remove an incorrect HTTP Host Header override. Admin and uninvited registration 404s are intentional; new families must use their emailed registration link. |
 | HTTP 400 or repeated HTTPS redirects | Check the public hostname and forwarded protocol. Keep `frontporch.public_settings` on `portal` and route through the ingress that overwrites headers. |
 | Login POST returns 403 | Check the HTTPS origin and secure CSRF cookie; clear stale cookies and use a fresh login page. Do not disable CSRF protection. |
 | Login POST returns 429 | Wait for the per-IP limit to refill; check shared NAT usage before changing the limit. Restarting ingress also clears counters and should not be the routine remedy. |

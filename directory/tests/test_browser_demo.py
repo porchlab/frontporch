@@ -1,5 +1,7 @@
 """Keep the browser's public exports and simulated permissions aligned with Django."""
 
+from directory.tests.factories import create_user
+
 import json
 from pathlib import Path
 import shutil
@@ -39,8 +41,16 @@ class BrowserDemoPermissionParityTests(TestCase):
     def test_selected_pairs_and_revoked_shortcuts_match_django(self):
         local = Family.objects.create(name="Demo Maple")
         remote = Family.objects.create(name="Demo Cedar")
-        local_parent = Parent.objects.create(family=local, display_name="Morgan")
-        remote_parent = Parent.objects.create(family=remote, display_name="Sam")
+        local_parent = Parent.objects.create(
+            user=create_user(),
+            family=local,
+            display_name="Morgan",
+        )
+        remote_parent = Parent.objects.create(
+            user=create_user(),
+            family=remote,
+            display_name="Sam",
+        )
         children = [
             Child.objects.create(family=local, name=name)
             for name in ("Casey", "Jordan")

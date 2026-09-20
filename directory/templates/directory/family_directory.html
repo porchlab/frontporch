@@ -2,6 +2,9 @@
 {% load portal_tags %}
 {% block content %}
     {% include "directory/heading.html" with heading="Find a familiar family." subtitle="Explore families who have chosen to be listed in your private network." action_url="directory:invite_code" action_label="Use an invite code" %}
+    {% if portal_allow_registration %}
+        <p class="dialog-intro">Know a family who hasn’t joined yet? <a href="{% url 'directory:family_invite' %}">Invite a new family</a>.</p>
+    {% endif %}
     <div class="directory-welcome">
         <span class="directory-welcome-icon">{% icon 'users' %}</span>
         <div>

@@ -1,6 +1,7 @@
 import re
 from datetime import timedelta
 from unittest.mock import patch
+from allauth.account.models import EmailAddress
 from django.contrib.auth.models import User
 from django.core import mail
 from django.test import TestCase
@@ -19,7 +20,6 @@ class GuardianInvitationTests(TestCase):
             user=self.user,
             family=self.family,
             display_name="Taylor",
-            email=self.user.email,
             is_primary=True,
         )
         self.child = Child.objects.create(family=self.family, name="Casey")
@@ -54,7 +54,8 @@ class GuardianInvitationTests(TestCase):
             },
         )
         self.assertRedirects(response, reverse("directory:dashboard"))
-        joined = Parent.objects.get(email="guardian@example.com")
+        joined = Parent.objects.get(user__email="guardian@example.com")
+        self.assertTrue(EmailAddress.objects.get(user=joined.user).verified)
         self.assertEqual(joined.family, self.family)
         self.assertFalse(joined.is_primary)
         self.assertFalse(joined.directory_visible)
@@ -95,6 +96,28 @@ class GuardianInvitationTests(TestCase):
         self.assertRedirects(self.client.post(url), reverse("directory:dashboard"))
         self.assertEqual(recipient.frontporch_parent.family, self.family)
 
+    def test_account_email_alias_cannot_create_a_second_guardian_identity(self):
+        invitation, token = self.invite()
+        recipient = User.objects.create_user(
+            "recipient", "current@example.com", "test-password-123"
+        )
+        EmailAddress.objects.create(
+            user=recipient, email="guardian@example.com", verified=False
+        )
+        self.client.logout()
+        response = self.client.post(
+            reverse("directory:guardian_join", args=[token]),
+            {
+                "password1": "different-test-pass-123",
+                "password2": "different-test-pass-123",
+            },
+        )
+        self.assertContains(response, "already has an account")
+        self.assertEqual(User.objects.count(), 2)
+        self.assertEqual(Parent.objects.count(), 1)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "pending")
+
     def test_existing_member_of_another_family_is_never_moved(self):
         recipient = User.objects.create_user(
             "recipient", "guardian@example.com", "test-password-123"
@@ -102,7 +125,7 @@ class GuardianInvitationTests(TestCase):
         invitation, token = self.invite()
         other = Family.objects.create(name="Willow")
         member = Parent.objects.create(
-            user=recipient, family=other, display_name="Morgan", email=recipient.email
+            user=recipient, family=other, display_name="Morgan"
         )
         self.client.force_login(recipient)
         self.assertContains(
@@ -209,9 +232,13 @@ class GuardianInvitationTests(TestCase):
         self.assertEqual(self.family.children.get(), self.child)
 
     def test_signup_and_login_with_email_without_a_username(self):
+        self.client.post(
+            reverse("directory:family_invite"), {"email": "new@example.com"}
+        )
+        token = re.search(r"/register/([^/]+)/", mail.outbox[-1].body).group(1)
         self.client.logout()
         response = self.client.post(
-            reverse("directory:register"),
+            reverse("directory:register_invited", args=[token]),
             {
                 "email": "new@example.com",
                 "family_name": "Oak",
@@ -222,7 +249,8 @@ class GuardianInvitationTests(TestCase):
             },
         )
         self.assertRedirects(response, reverse("directory:dashboard"))
-        parent = Parent.objects.get(email="new@example.com")
+        parent = Parent.objects.get(user__email="new@example.com")
+        self.assertTrue(EmailAddress.objects.get(user=parent.user).verified)
         self.assertTrue(parent.is_primary)
         self.assertTrue(parent.family.directory_listed)
         self.assertTrue(parent.directory_visible)
@@ -230,7 +258,7 @@ class GuardianInvitationTests(TestCase):
         self.assertRedirects(
             self.client.post(
                 reverse("login"),
-                {"username": "NEW@example.com", "password": "different-test-pass-123"},
+                {"login": "NEW@example.com", "password": "different-test-pass-123"},
             ),
             reverse("directory:dashboard"),
         )
@@ -243,7 +271,6 @@ class GuardianInvitationTests(TestCase):
             user=recipient,
             family=self.family,
             display_name="Morgan",
-            email=recipient.email,
             is_guardian=False,
         )
         invitation, token = self.invite()

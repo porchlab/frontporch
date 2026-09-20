@@ -83,8 +83,44 @@
             {% endif %}
         </section>
         <section class="panel settings-panel">
-            <h2>A hello by invitation.</h2>
-            <p class="dialog-intro">Share this code privately with another parent to help them find your family, even when you’re unlisted. It never grants calling permission.</p>
+            <h2>Your sign-in details.</h2>
+            <p>{{ request.user.email }}</p>
+            <div class="inline-actions">
+                <a class="button secondary" href="{% url 'account_email' %}">Change email</a>
+                <a class="button secondary" href="{% url 'account_change_password' %}">Change password</a>
+                <a class="button secondary" href="{% url 'socialaccount_connections' %}">Google &amp; Apple sign-in</a>
+            </div>
+            <p class="form-note">To use Apple’s Hide My Email, sign in here first and connect your Apple account.</p>
+        </section>
+        <section class="panel settings-panel">
+            <h2>Invite a new family.</h2>
+            <p class="dialog-intro">FrontPorch is invite only for now. Every family can welcome another family, and any guardian in your family can send an invitation. They’ll have their own family account.</p>
+            {% if portal_allow_registration %}
+                <a class="button secondary" href="{% url 'directory:family_invite' %}">Invite a new family</a>
+            {% endif %}
+            <p class="form-note">Inviting a family does not approve calls. Connect your children separately when both families are ready.</p>
+            {% for invitation in family_invitations %}
+                <div class="device-row">
+                    <h3>{{ invitation.email }}</h3>
+                    <p>Invited by {{ invitation.invited_by.display_name }} · {% if invitation.available %}Pending until {{ invitation.expires_at|date:'M j' }}{% else %}No longer available{% endif %}</p>
+                    <div class="inline-actions">
+                        {% if portal_allow_registration %}
+                            <form method="post" action="{% url 'directory:family_invitation_action' invitation.id 'resend' %}">
+                                {% csrf_token %}
+                                <button class="text-button blue-text">Resend family invitation</button>
+                            </form>
+                        {% endif %}
+                        <form method="post" action="{% url 'directory:family_invitation_action' invitation.id 'cancel' %}">
+                            {% csrf_token %}
+                            <button class="text-button">Cancel family invitation</button>
+                        </form>
+                    </div>
+                </div>
+            {% endfor %}
+        </section>
+        <section class="panel settings-panel">
+            <h2>Help another family find you.</h2>
+            <p class="dialog-intro">Share this code privately with another family already on FrontPorch to help them find you, even when you’re unlisted. It never grants calling permission or lets a new family register.</p>
             <code class="family-code" id="family-code">{{ portal_parent.family.invite_code }}</code>
             <button class="button secondary" type="button" data-copy="family-code">{% icon 'copy' %} Copy code</button>
             <p class="copy-status" role="status"></p>

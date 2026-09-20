@@ -1,3 +1,4 @@
+from directory.tests.factories import create_user
 from datetime import time
 
 from django.test import TestCase, override_settings
@@ -31,8 +32,16 @@ class AsteriskConfigurationBuilderTests(TestCase):
         self.alex = Child.objects.create(family=self.river, name="Alex")
         self.emma = Child.objects.create(family=self.maple, name="Emma")
         self.luca = Child.objects.create(family=self.maple, name="Luca")
-        self.river_parent = Parent.objects.create(family=self.river, display_name="Mara")
-        self.maple_parent = Parent.objects.create(family=self.maple, display_name="Nico")
+        self.river_parent = Parent.objects.create(
+            user=create_user(),
+            family=self.river,
+            display_name="Mara",
+        )
+        self.maple_parent = Parent.objects.create(
+            user=create_user(),
+            family=self.maple,
+            display_name="Nico",
+        )
 
         self.alex_device = Device.objects.create(
             assigned_child=self.alex,

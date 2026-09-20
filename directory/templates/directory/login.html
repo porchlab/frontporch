@@ -1,22 +1,21 @@
 {% extends "directory/base.html" %}
+{% load portal_tags %}
 {% block title %}Welcome back · FrontPorch{% endblock %}
 {% block content %}
     <section class="form-panel panel auth-panel">
         <div class="eyebrow">A FAMILIAR PLACE</div>
         <h1>Welcome home.</h1>
         <p class="dialog-intro">Your family’s front porch is right here.</p>
+        {% include "directory/provider_buttons.html" with show_email_divider=True %}
         <form method="post">
             {% csrf_token %}
             {% include "directory/fields.html" %}
             <input type="hidden" name="next" value="{{ next }}">
-            <button class="button full-width">Log in {% load portal_tags %}
+            <button class="button secondary full-width" type="submit">Log in with email
                 {% icon 'arrow' %}
             </button>
         </form>
-        {% if portal_allow_registration %}
-            <p class="auth-footnote">New to the neighborhood? <a href="{% url 'directory:register' %}">Set up your family</a></p>
-        {% else %}
-            <p class="auth-footnote">New to FrontPorch? Ask your neighborhood organizer to help your family get started.</p>
-        {% endif %}
+        <p class="auth-footnote"><a href="{% url 'account_reset_password' %}">Forgot your password?</a></p>
+        <p class="auth-footnote">FrontPorch is invite only for now. Ask a family already here to send you an invitation, then open the link in your email.</p>
     </section>
 {% endblock %}

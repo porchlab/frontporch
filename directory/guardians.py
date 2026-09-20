@@ -7,9 +7,7 @@ from smtplib import SMTPException
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.mail import send_mail
 from django.db import transaction
@@ -18,6 +16,9 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.decorators.debug import sensitive_post_parameters
+from django.views.decorators.cache import never_cache
+
+from .accounts import account_email_in_use, login_after_invitation
 
 from .forms import GuardianInvitationForm, GuardianJoinForm
 from .models import Family, GuardianInvitation, Parent
@@ -181,6 +182,7 @@ def remove(request, parent_id):
 
 
 @sensitive_post_parameters("password1", "password2")
+@never_cache
 @transaction.atomic
 def join(request, token):
     invitation = get_object_or_404(
@@ -203,9 +205,7 @@ def join(request, token):
         lock_email_identity(invitation.email)
     form = GuardianJoinForm(request.POST or None)
     context["form"] = form
-    context["existing_account"] = User.objects.filter(
-        email__iexact=invitation.email
-    ).exists()
+    context["existing_account"] = account_email_in_use(invitation.email)
     if request.method == "POST":
         user = request.user if request.user.is_authenticated else None
         existing_parent = getattr(user, "frontporch_parent", None) if user else None
@@ -246,7 +246,6 @@ def join(request, token):
                         parent = Parent.objects.create(
                             user=user,
                             family=invitation.family,
-                            email=invitation.email,
                             display_name=invitation.display_name,
                             is_guardian=True,
                             directory_visible=False,
@@ -260,9 +259,8 @@ def join(request, token):
                 invitation.status = "accepted"
                 invitation.save(update_fields=["status", "updated_at"])
                 record_activity(parent, f"{parent.display_name} joined as a guardian.")
-                login(request, user)
                 messages.success(
                     request, "Welcome. You’ve joined your existing family."
                 )
-                return redirect("directory:dashboard")
+                return login_after_invitation(request, user)
     return render(request, "directory/guardian_join.html", context)

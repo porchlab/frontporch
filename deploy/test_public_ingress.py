@@ -155,6 +155,11 @@ HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
         self.assertEqual(codes[0], 200)
         self.assertIn(429, codes)
         self.assertEqual(self.request("/accounts/%6cogin/", "POST")[0], 429)
+        self.assertEqual(self.request("/accounts/password/reset/", "POST")[0], 429)
+        self.assertEqual(self.request("/accounts/confirm-email/private-key/", "POST")[0], 429)
+        self.assertEqual(self.request("/accounts/google/login/", "POST")[0], 429)
+        self.assertEqual(self.request("/register/private-token/", "POST")[0], 429)
+        self.assertEqual(self.request("/reg%69ster/private-token/", "POST")[0], 429)
         self.assertEqual(self.request("/accounts/login/")[0], 200)
         self.assertEqual(self.request("/accounts/login/", "POST", **{
             "CF-Connecting-IP": "192.0.2.11"
@@ -163,6 +168,7 @@ HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
     def test_invitation_tokens_are_not_in_access_logs(self):
         token = "test-private-invitation-token"
         self.assertEqual(self.request(f"/guardians/join/{token}/")[0], 200)
+        self.assertEqual(self.request(f"/register/{token}/")[0], 200)
         logs = docker("logs", self.ingress, stderr=subprocess.STDOUT)
         self.assertNotIn(token, logs)
 
