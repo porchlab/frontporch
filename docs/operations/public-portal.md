@@ -12,9 +12,11 @@ ATA gateway -> WireGuard -> Asterisk
 
 ## Readiness and scope
 
-The setup is implemented and locally tested, but production deployment and
-Cloudflare activation are deferred. Merging the code does not create a tunnel,
-publish DNS, migrate the NAS database, or restart its services.
+The public stack supports the manual procedure below and opt-in
+[automatic production deployment](automatic-deployment.md) after owner-controlled
+merges. Automatic deployment must be installed and enabled separately; it does not
+create a tunnel or publish DNS. When enabled, it migrates the existing database
+and recreates application services after successful checks.
 
 Run deployment commands from the application checkout on the deployment host,
 using its installed Docker/Compose binary. Hostnames for maintenance, SSH access,

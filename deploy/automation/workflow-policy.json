@@ -1,0 +1,82 @@
+{
+  "deploy": {
+    "needs": [
+      "tests",
+      "deployment-policy"
+    ],
+    "if": "github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'porchlab/frontporch' && vars.PRODUCTION_DEPLOY_ENABLED == 'true'",
+    "runs-on": "ubuntu-latest",
+    "timeout-minutes": 45,
+    "environment": "production",
+    "concurrency": {
+      "group": "frontporch-production",
+      "cancel-in-progress": false
+    },
+    "permissions": {
+      "contents": "read",
+      "id-token": "write"
+    },
+    "steps": [
+      {
+        "name": "Check this revision is still main",
+        "id": "current",
+        "env": {
+          "GH_TOKEN": "${{ github.token }}"
+        },
+        "shell": "bash",
+        "run": "set -euo pipefail\nmain_sha=$(gh api repos/porchlab/frontporch/git/ref/heads/main --jq .object.sha)\nif [[ \"$main_sha\" == \"$GITHUB_SHA\" ]]; then\n  echo 'deploy=true' >> \"$GITHUB_OUTPUT\"\nelse\n  echo 'Skipped superseded revision.' >> \"$GITHUB_STEP_SUMMARY\"\nfi\n"
+      },
+      {
+        "name": "Join deployment network",
+        "if": "steps.current.outputs.deploy == 'true'",
+        "uses": "tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8",
+        "with": {
+          "oauth-client-id": "${{ secrets.TS_DEPLOY_CLIENT_ID }}",
+          "audience": "${{ secrets.TS_DEPLOY_AUDIENCE }}",
+          "tags": "tag:frontporch-deploy",
+          "version": "1.94.2",
+          "sha256sum": "c6f99a5d774c7783b56902188d69e9756fc3dddfb08ac6be4cb2585f3fecdc32",
+          "use-cache": "false",
+          "args": "--accept-routes=false"
+        }
+      },
+      {
+        "name": "Request the fixed host deployment",
+        "if": "steps.current.outputs.deploy == 'true'",
+        "env": {
+          "DEPLOY_HOST": "${{ secrets.DEPLOY_HOST }}",
+          "DEPLOY_USER": "${{ secrets.DEPLOY_USER }}",
+          "DEPLOY_SSH_KEY": "${{ secrets.DEPLOY_SSH_KEY }}",
+          "DEPLOY_KNOWN_HOSTS": "${{ secrets.DEPLOY_KNOWN_HOSTS }}"
+        },
+        "shell": "bash",
+        "run": "set -euo pipefail\n[[ \"$GITHUB_SHA\" =~ ^[0-9a-f]{40}$ ]]\n[[ \"$DEPLOY_HOST\" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]\n[[ \"$DEPLOY_USER\" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]\numask 077\nwork=$(mktemp -d \"$RUNNER_TEMP/frontporch-deploy.XXXXXX\")\ntrap 'rm -rf -- \"$work\"' EXIT\nprintf '%s\\n' \"$DEPLOY_SSH_KEY\" > \"$work/key\"\nprintf '%s\\n' \"$DEPLOY_KNOWN_HOSTS\" > \"$work/known_hosts\"\nif ssh -F /dev/null -T -i \"$work/key\" -p 22 -l \"$DEPLOY_USER\" \\\n    -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \\\n    -o UserKnownHostsFile=\"$work/known_hosts\" -o GlobalKnownHostsFile=/dev/null \\\n    -o ClearAllForwardings=yes -o ConnectTimeout=15 \\\n    -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \\\n    \"$DEPLOY_HOST\" \"$GITHUB_SHA\" > \"$work/result\" 2>&1; then\n  echo \"Deployed revision $GITHUB_SHA; host verification passed.\" >> \"$GITHUB_STEP_SUMMARY\"\nelse\n  echo '::error::Deployment failed. Inspect private host deployment logs.'\n  exit 1\nfi\n"
+      }
+    ]
+  },
+  "deployment-policy": {
+    "runs-on": "ubuntu-latest",
+    "timeout-minutes": 5,
+    "steps": [
+      {
+        "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "with": {
+          "persist-credentials": false
+        }
+      },
+      {
+        "name": "Install workflow parser",
+        "run": "python -m pip install --disable-pip-version-check PyYAML==6.0.3"
+      },
+      {
+        "name": "Check deployment policy and denial scenarios",
+        "run": "python deploy/automation/check_workflows.py\npython -m unittest discover -s tests/deployment -v\nsh -n deploy/automation/receive.sh\n"
+      }
+    ]
+  },
+  "actions": [
+    "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+    "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020"
+  ]
+}
