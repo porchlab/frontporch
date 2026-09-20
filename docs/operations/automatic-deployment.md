@@ -41,9 +41,32 @@ registration interval can also be set to five minutes using the
 
 ### First rollout to an existing PBX
 
-The new volume initially contains no live registration database. Before the first
-deployment with this mount, schedule a brief maintenance window and migrate the
-current AstDB; mounting an empty volume alone loses the existing registrations.
+The new volume initially contains no live registration database. Choose either a
+planned registration reset or a database migration to preserve existing contacts.
+
+#### Planned registration reset
+
+If the owner accepts the one-time registration outage, no database migration or
+deployment hold is required:
+
+1. Merge during a maintenance window when phones are not in use. Let the normal
+   main checks and automatic deployment run.
+2. The replacement starts with an empty AstDB in the persistent volume. Incoming
+   calls to a phone remain unavailable until its ATA registers again, potentially
+   for the remainder of its previous hourly interval. The new five-minute limit
+   takes effect at that next registration; it does not shorten the old timer.
+3. Verify services and `pjsip show contacts` as the ATAs return, then test a
+   permitted call. An online, correctly configured ATA should renew automatically;
+   restarting it can trigger registration sooner if needed.
+
+Once registered, contacts are saved in the new volume and survive subsequent
+container replacements. This choice intentionally discards the old AstDB runtime
+state; Django data, device configuration, and calling permissions are unaffected.
+
+#### Preserve existing registrations
+
+If a registration outage is unacceptable, migrate the current AstDB during a
+brief maintenance window:
 
 1. Before merging the storage change, disable new automatic deployments and wait
    for any current deployment to finish. After the owner merges, wait for the
@@ -93,7 +116,7 @@ an unchanged container on an ordinary Compose up, reload preservation, and conta
 recovery after forced container replacement without another REGISTER. It also
 verifies a subsequent call reaches that phone. It removes only its uniquely named
 test containers and volumes and uses no production data. A second test exercises
-the first-rollout procedure: clean stop, database copy and integrity check, then
+the optional migration procedure: clean stop, database copy and integrity check, then
 replacement with the populated volume and a call without re-registration.
 
 ## GitHub merge controls
