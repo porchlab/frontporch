@@ -94,6 +94,31 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             policy.check(self.root)
 
+    def test_route_restriction_cannot_be_skipped_or_moved_after_ssh(self):
+        import copy
+        import yaml
+
+        file = self.root / ".github/workflows/tests.yml"
+        original = policy.read_workflow(file)
+        for mutation in ("remove", "skip", "after-ssh", "duplicate-up-flag"):
+            with self.subTest(mutation=mutation):
+                workflow = copy.deepcopy(original)
+                steps = workflow["jobs"]["deploy"]["steps"]
+                route_step = next(step for step in steps if step["name"] == "Disable subnet route acceptance")
+                if mutation == "remove":
+                    steps.remove(route_step)
+                elif mutation == "skip":
+                    route_step["if"] = "false"
+                elif mutation == "after-ssh":
+                    steps.remove(route_step)
+                    steps.append(route_step)
+                else:
+                    join_step = next(step for step in steps if step["name"] == "Join deployment network")
+                    join_step["with"]["args"] = "--accept-routes=false"
+                file.write_text(yaml.safe_dump(workflow))
+                with self.assertRaises(AssertionError):
+                    policy.check(self.root)
+
     def test_duplicate_yaml_keys_fail_closed(self):
         file = self.root / ".github/workflows/tests.yml"
         file.write_text(file.read_text() + "\npermissions: write-all\n")
