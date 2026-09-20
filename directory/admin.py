@@ -51,6 +51,7 @@ admin.site.unregister(User)
 
 @admin.register(User)
 class FrontPorchUserAdmin(UserAdmin):
+    list_display = (*UserAdmin.list_display, "last_login")
     add_form = AccountCreationForm
     form = AccountChangeForm
     add_fieldsets = (
