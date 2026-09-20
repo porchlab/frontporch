@@ -1,11 +1,17 @@
 from django.urls import path
 
-from . import views, portal, guardians
+from . import views, portal, guardians, family_invitations
 
 
 app_name = "directory"
 
 urlpatterns = [
+    path("families/invite/", family_invitations.invite, name="family_invite"),
+    path(
+        "families/invitations/<int:invitation_id>/<str:action>/",
+        family_invitations.invitation_action,
+        name="family_invitation_action",
+    ),
     path("phones/<int:device_id>/edit/", portal.phone_edit, name="phone_edit"),
     path("guardians/invite/", guardians.invite, name="guardian_invite"),
     path("guardians/join/<str:token>/", guardians.join, name="guardian_join"),
@@ -63,6 +69,7 @@ urlpatterns = [
     ),
     path("", portal.overview, name="dashboard"),
     path("register/", views.register, name="register"),
+    path("register/<str:token>/", views.register, name="register_invited"),
     path("children/new/", views.child_create, name="child_create"),
     path("children/<int:child_id>/edit/", views.child_update, name="child_update"),
     path(

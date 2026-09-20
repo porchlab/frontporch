@@ -7,7 +7,10 @@ not load its JavaScript or store household data in browser storage.
 
 ## Workflows
 
-- `/welcome/`, signup, email-or-username login, and POST logout.
+- `/welcome/`, invited signup, email-or-username login, and POST logout.
+- New-family invitations from any active guardian, with email delivery, resend,
+  cancellation, and a separate household on acceptance. No staff or primary role
+  is required to invite a new family.
 - Overview with setup progress, invitations, connected child pairs, and private activity.
 - Children, multiple actual devices per child, phone naming, inactive automatic
   reservations, quiet hours, and per-device shortcut keys 1–9.
@@ -35,6 +38,8 @@ approved scope, upgrade semantics, and deployment assumptions.
 2. Run `uv run python manage.py migrate`. Migrations 0016–0018 add portal state,
    materialize existing effective child pairs, carry pending requests into the
    inbox, and choose the initial primary guardian. Family listings start hidden.
+   Migration 0019 adds new-family invitations; existing families and accounts
+   remain intact. Open registration is disabled on both public and private portals.
 3. Review primary guardians in Admin. Existing legacy relationship rows are history;
    use child connections for current authorization. The old portal approval URLs
    return a migration notice rather than creating ineffective approvals.
@@ -59,6 +64,19 @@ Family discovery codes have 144 random bits and remain valid until rotated. A
 lookup is bound to the authenticated browser session and rechecked against the
 current code before an invitation can be sent. Guardian membership links have
 256 random bits, are stored as SHA-256 digests, and expire after seven days.
+New-family registration links have the same token strength and expiration, are
+bound to the recipient email, and can be redeemed only once. Resending invalidates
+the old link; cancelling or removing the inviting guardian's access also prevents
+redemption. Sending, replacing, cancelling, and accepting are recorded in family
+activity. An invitation grants no calling permission and does not join the
+inviter's household. Discovery codes cannot authorize registration.
+
+Any active guardian can send or manage their family's new-family invitations in
+Family settings. Guardian membership invitations remain limited to the primary
+guardian. Emailed links work on the public portal as well as the private portal.
+The first household in a fresh installation must be created by an operator in
+private Django Admin, with a user linked to a guardian; that family can then invite
+others. `FRONTPORCH_ALLOW_REGISTRATION=False` disables invited registration too.
 
 ## Verification
 

@@ -1,7 +1,9 @@
 from datetime import time
+import re
 
 from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.auth.models import User
+from django.core import mail
 from django.test import TestCase
 from django.urls import reverse
 
@@ -43,9 +45,18 @@ class ParentPortalTests(TestCase):
     def login(self):
         self.client.login(username="mara", password="secret-pass")
 
+    def registration_url(self):
+        self.login()
+        self.client.post(
+            reverse("directory:family_invite"), {"email": "parent@example.com"}
+        )
+        token = re.search(r"/register/([^/]+)/", mail.outbox[-1].body).group(1)
+        self.client.logout()
+        return reverse("directory:register_invited", args=[token])
+
     def test_registration_creates_user_family_and_parent_profile(self):
         response = self.client.post(
-            reverse("directory:register"),
+            self.registration_url(),
             {
                 "username": "new-parent",
                 "email": "parent@example.com",
@@ -66,7 +77,7 @@ class ParentPortalTests(TestCase):
 
     def test_registration_rejects_invalid_parent_phone(self):
         response = self.client.post(
-            reverse("directory:register"),
+            self.registration_url(),
             {
                 "username": "new-parent",
                 "email": "parent@example.com",

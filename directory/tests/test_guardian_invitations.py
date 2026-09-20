@@ -209,9 +209,13 @@ class GuardianInvitationTests(TestCase):
         self.assertEqual(self.family.children.get(), self.child)
 
     def test_signup_and_login_with_email_without_a_username(self):
+        self.client.post(
+            reverse("directory:family_invite"), {"email": "new@example.com"}
+        )
+        token = re.search(r"/register/([^/]+)/", mail.outbox[-1].body).group(1)
         self.client.logout()
         response = self.client.post(
-            reverse("directory:register"),
+            reverse("directory:register_invited", args=[token]),
             {
                 "email": "new@example.com",
                 "family_name": "Oak",

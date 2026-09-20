@@ -18,13 +18,10 @@
                     Give your kids the freedom to call their favorite people, with you close by.
                 </p>
                 <div class="hero-actions">
-                    {% if portal_allow_registration %}
-                        <a class="button large" href="{% url 'directory:register' %}">Set up your family {% icon 'arrow' %}</a>
-                    {% else %}
-                        <a class="button large" href="{% url 'login' %}">Log in to your family {% icon 'arrow' %}</a>
-                    {% endif %}
+                    <a class="button large" href="{% url 'login' %}">Log in to your family {% icon 'arrow' %}</a>
                     <a class="text-button" href="#how-it-works">How it works</a>
                 </div>
+                <p class="form-note">FrontPorch is invite only for now. Any family already here can invite yours. Open your email invitation to get started.</p>
                 <div class="hero-proof">{% icon 'shield' %} Parent-approved. Private by design.</div>
             </div>
             <div class="hero-stage">

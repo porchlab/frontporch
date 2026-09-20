@@ -81,4 +81,5 @@ class PortalUpgradeTests(TransactionTestCase):
             self.assertTrue(Parent.objects.get(pk=first_parent.pk).is_primary)
             self.assertTrue(Parent.objects.get(pk=second_parent.pk).is_primary)
         finally:
-            MigrationExecutor(connection).migrate([after])
+            executor = MigrationExecutor(connection)
+            executor.migrate(executor.loader.graph.leaf_nodes())

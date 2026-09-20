@@ -240,6 +240,9 @@ def family_settings(request):
             "family_form": family_form,
             "profile_form": profile_form,
             "guardians": parent.family.parents.all(),
+            "family_invitations": parent.family.family_invitations.filter(
+                status="pending"
+            ).select_related("invited_by__user"),
             "guardian_invitations": parent.family.guardian_invitations.filter(
                 status="pending"
             )

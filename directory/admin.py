@@ -8,6 +8,7 @@ from .models import (
     ConnectionInvitation,
     GuardianInvitation,
     FamilyActivity,
+    FamilyInvitation,
     ChildBlackoutPeriod,
     ChildLandline,
     ChildLandlineDialShortcut,
@@ -401,7 +402,7 @@ class ChildConnectionAdmin(admin.ModelAdmin):
     search_fields = ("child_a__name", "child_b__name")
 
 
-@admin.register(ConnectionInvitation, GuardianInvitation, FamilyActivity)
+@admin.register(ConnectionInvitation, GuardianInvitation, FamilyInvitation, FamilyActivity)
 class PortalHistoryAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False
@@ -413,4 +414,8 @@ class PortalHistoryAdmin(admin.ModelAdmin):
         return False
 
     def get_exclude(self, request, obj=None):
-        return ("token_digest",) if self.model is GuardianInvitation else ()
+        return (
+            ("token_digest",)
+            if self.model in {GuardianInvitation, FamilyInvitation}
+            else ()
+        )

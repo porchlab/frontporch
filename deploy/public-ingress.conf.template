@@ -9,12 +9,12 @@ real_ip_header CF-Connecting-IP;
 map "$request_method:$uri" $account_limit_key {
     default "";
     ~^POST:/accounts/login/?$ $binary_remote_addr;
-    ~^POST:/register/?$ $binary_remote_addr;
+    ~^POST:/register(?:/|$) $binary_remote_addr;
     ~^POST:/guardians/join/ $binary_remote_addr;
 }
 limit_req_zone $account_limit_key zone=account_entry:10m rate=5r/m;
 
-# Never log request paths: guardian invitation URLs contain bearer tokens.
+# Never log request paths: registration and guardian invitation URLs contain tokens.
 log_format portal_access '$remote_addr $request_method $status $body_bytes_sent $request_time';
 
 server {

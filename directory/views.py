@@ -1,3 +1,5 @@
+import hashlib
+
 from django.contrib import messages
 from django.conf import settings
 from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
@@ -10,6 +12,7 @@ from django.http import Http404
 from .services import record_activity
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.debug import sensitive_post_parameters
+from django.views.decorators.cache import never_cache
 
 from .forms import (
     ChildBlackoutPeriodForm,
@@ -25,6 +28,7 @@ from .models import (
     ConferenceGroup,
     ExternalContactPermission,
     FamilyContact,
+    FamilyInvitation,
 )
 
 
@@ -60,13 +64,27 @@ def _success(request, message):
 
 
 @sensitive_post_parameters("password1", "password2")
-def register(request):
+@never_cache
+def register(request, token=None):
     if not settings.FRONTPORCH_ALLOW_REGISTRATION:
         raise Http404
     if request.user.is_authenticated and _current_parent(request.user):
         return redirect("directory:dashboard")
+    if token is None:
+        return render(request, "directory/registration_invite_required.html", status=404)
+    invitation = get_object_or_404(
+        FamilyInvitation.objects.select_related("family", "invited_by__user"),
+        token_digest=hashlib.sha256(token.encode()).hexdigest(),
+    )
+    if not invitation.available:
+        return render(
+            request,
+            "directory/registration_invite_required.html",
+            {"expired": True},
+            status=410,
+        )
     if request.method == "POST":
-        form = ParentRegistrationForm(request.POST)
+        form = ParentRegistrationForm(request.POST, invitation=invitation)
         if form.is_valid():
             try:
                 user = form.save()
@@ -74,11 +92,16 @@ def register(request):
                 form.add_error(None, "; ".join(error.messages))
             else:
                 login(request, user)
-                _success(request, "Your family account is ready.")
+                messages.success(request, "Your family account is ready.")
                 return redirect("directory:dashboard")
     else:
-        form = ParentRegistrationForm()
-    return render(request, "directory/register.html", {"form": form})
+        form = ParentRegistrationForm(invitation=invitation)
+    response = render(
+        request, "directory/register.html", {"form": form, "invitation": invitation}
+    )
+    # Keep tokens off external referrers while preserving the form's CSRF origin.
+    response["Referrer-Policy"] = "same-origin"
+    return response
 
 
 @login_required

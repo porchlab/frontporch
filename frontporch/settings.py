@@ -185,4 +185,5 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 )
 
 FRONTPORCH_PUBLIC_URL = os.environ.get("FRONTPORCH_PUBLIC_URL", "").strip()
+# Enables invited registration only; there is no open signup route.
 FRONTPORCH_ALLOW_REGISTRATION = True

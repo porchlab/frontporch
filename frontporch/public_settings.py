@@ -33,7 +33,6 @@ SESSION_COOKIE_NAME = "__Host-frontporch_session"
 CSRF_COOKIE_NAME = "__Host-frontporch_csrf"
 SECURE_REFERRER_POLICY = "same-origin"
 
-# Existing families can log in and invited guardians can join. Initial family
-# enrollment remains available to the operator through the private portal.
-FRONTPORCH_ALLOW_REGISTRATION = False
+# New families need an email-bound invitation from an existing family's guardian.
+# The shared registration view enforces invitations on both portal processes.
 MIDDLEWARE = [*MIDDLEWARE, "frontporch.middleware.PrivateResponseMiddleware"]

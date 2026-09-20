@@ -16,7 +16,11 @@ Use this repository as application source and public examples only. Real neighbo
 
 ## Parent Portal
 
-Open the Django root URL for family signup or login. The portal provides children
+Open the Django root URL to log in. New family registration is invite only: any
+active guardian of an existing family can email an invitation from Family settings
+or the Family directory. Links expire in seven days and can be used once to create
+a separate family account. Calling still needs approval from both families.
+The portal provides children
 and phones, exact child-to-child invitations, private family discovery, contacts,
 quiet hours, dial shortcuts, guardian membership, and family settings. New phone
 reservations require installer activation. See the [implementation and upgrade

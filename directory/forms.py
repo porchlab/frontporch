@@ -11,6 +11,7 @@ from .models import (
     ExternalContactPermission,
     ExternalPhoneNumber,
     Family,
+    FamilyInvitation,
     FamilyContact,
     Parent,
 )
@@ -18,6 +19,13 @@ from .models import (
 
 class ParentRegistrationForm(UserCreationForm):
     username = forms.CharField(required=False, widget=forms.HiddenInput, max_length=150)
+
+    def __init__(self, *args, invitation, **kwargs):
+        self.invitation = invitation
+        super().__init__(*args, **kwargs)
+        self.fields["email"].initial = invitation.email
+        self.fields["email"].disabled = True
+        self.fields["email"].help_text = "This invitation is for this email address."
 
     def clean_username(self):
         import secrets
@@ -78,10 +86,22 @@ class ParentRegistrationForm(UserCreationForm):
         user = super().save(commit=False)
         user.email = self.cleaned_data["email"]
         if commit:
-            from .services import lock_email_identity
+            from .services import lock_email_identity, record_activity
 
+            # Recheck under locks: two submissions must never reuse one invitation.
+            Family.objects.select_for_update().get(pk=self.invitation.family_id)
+            invitation = FamilyInvitation.objects.select_for_update().get(
+                pk=self.invitation.pk
+            )
+            if not invitation.available or invitation.email != user.email:
+                raise ValidationError(
+                    "This invitation is no longer available. Ask an existing family for a new invitation."
+                )
             lock_email_identity(user.email)
-            if User.objects.filter(email__iexact=user.email).exists():
+            if (
+                User.objects.filter(email__iexact=user.email).exists()
+                or Parent.objects.filter(email__iexact=user.email).exists()
+            ):
                 raise ValidationError(
                     "An account already uses this email. Log in with that account."
                 )
@@ -90,7 +110,7 @@ class ParentRegistrationForm(UserCreationForm):
                 name=self.cleaned_data["family_name"],
                 directory_listed=self.cleaned_data["directory_listed"],
             )
-            Parent.objects.create(
+            parent = Parent.objects.create(
                 user=user,
                 family=family,
                 display_name=self.cleaned_data["display_name"],
@@ -100,7 +120,30 @@ class ParentRegistrationForm(UserCreationForm):
                 is_primary=True,
                 directory_visible=self.cleaned_data["directory_listed"],
             )
+            invitation.status = "accepted"
+            invitation.accepted_family = family
+            invitation.save(update_fields=["status", "accepted_family", "updated_at"])
+            record_activity(parent, "Your family account is ready.")
+            record_activity(
+                invitation.invited_by,
+                f"The {family.name} family accepted your invitation to FrontPorch.",
+            )
         return user
+
+
+class FamilyInvitationForm(forms.Form):
+    email = forms.EmailField(label="Parent or guardian’s email")
+
+    def clean_email(self):
+        email = self.cleaned_data["email"].strip().lower()
+        if (
+            User.objects.filter(email__iexact=email).exists()
+            or Parent.objects.filter(email__iexact=email).exists()
+        ):
+            raise forms.ValidationError(
+                "This email already has an account. Invite a parent from a new family."
+            )
+        return email
 
 
 class ChildForm(forms.ModelForm):

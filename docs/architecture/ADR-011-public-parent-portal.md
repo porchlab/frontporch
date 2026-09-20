@@ -25,8 +25,11 @@ file adds `portal`, `public-ingress`, and `cloudflared`, without host ports.
 The public Django process has its own settings and URL configuration: no admin
 routes, HTTPS-only secure cookies, explicit allowed host, no shared caching of
 dynamic responses, and no open family registration. Existing families can log
-in; email-bound guardian invitations continue to work. New families are enrolled
-through the private portal by an operator.
+in; email-bound guardian invitations continue to work. New families register using
+an email-bound, single-use invitation from any active guardian of an existing
+family. Registration links expire after seven days and do not grant calling
+permissions or membership in the inviting household. Operators bootstrap the first
+family through private Django Admin.
 
 The ingress enforces login/account-entry rate limits by Cloudflare's client IP,
 overwrites forwarding headers, rejects unknown hosts, and blocks admin paths.
