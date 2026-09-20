@@ -12,6 +12,90 @@ Asterisk configuration. Compose recreates Asterisk only for image/service change
 PostgreSQL stays running. Brief application downtime is expected; PBX image changes
 can interrupt calls. Superseded queued revisions are skipped.
 
+## Phone registration continuity
+
+The PBX step runs `compose up -d --no-deps asterisk`, without `--force-recreate`.
+Building an unchanged Asterisk image does not by itself restart the service.
+The following `render_asterisk_config --reload` runs `module reload res_pjsip.so`
+and `dialplan reload` through AMI; neither command restarts Asterisk. Keep this
+distinction when changing deployment scripts. Container replacements and process
+restarts can still interrupt active calls and belong in a maintenance window.
+
+`compose.yaml` mounts the named `asterisk-data` volume at `/var/lib/asterisk`,
+including `astdb.sqlite3`. Its Docker name defaults to `frontporch-asterisk-data`
+and can be set with `ASTERISK_VOLUME_NAME`. Keep that name stable. Asterisk stores
+dynamic phone contacts in AstDB, allowing unexpired registrations to survive a
+container replacement. The existing sound and private-prompt mounts are preserved.
+Only Asterisk mounts this new volume; Django remains the source of truth for
+devices and permissions. Include AstDB in the private backup policy and never
+publish it or remove the volume during an ordinary deployment.
+
+The `aor-single-reg` template negotiates a maximum registration lifetime of 300
+seconds. A compliant ATA requesting an hour receives a five-minute expiry and
+renews accordingly. This limits the stale-registration interval if a contact is
+lost; it does not restore an offline phone, preserve an active call through a
+restart, or shorten registrations already issued before the setting was applied.
+Confirm the negotiated interval on the actual ATAs after rollout. Their local
+registration interval can also be set to five minutes using the
+[Grandstream administration guide](https://documentation.grandstream.com/knowledge-base/ht80x-v2-administration-guide/).
+
+### First rollout to an existing PBX
+
+The new volume initially contains no live registration database. Before the first
+deployment with this mount, schedule a brief maintenance window and migrate the
+current AstDB; mounting an empty volume alone loses the existing registrations.
+
+1. Before merging the storage change, disable new automatic deployments and wait
+   for any current deployment to finish. After the owner merges, wait for the
+   required checks on that exact main revision. Prepare its images ahead of the
+   interruption, using an isolated checkout to warm the host's build cache without
+   replacing services. Keep automatic deployment held until the volume is seeded.
+2. Confirm there are no active calls with `asterisk -rx 'core show channels'` in
+   the existing container. Record its container/image IDs, deployed revision, and
+   `pjsip show contacts` privately. Keep the previous image for recovery.
+3. Stop only Asterisk cleanly, leaving the old container in place. Copy
+   `/var/lib/asterisk/astdb.sqlite3` from that stopped container into a private
+   backup directory. Do not copy a live SQLite database with an ordinary file copy.
+4. Create the named volume selected by `ASTERISK_VOLUME_NAME`. Using the prepared
+   Asterisk image and a temporary container, copy the backup to
+   `/var/lib/asterisk/astdb.sqlite3` in that volume and give it to the image's
+   `asterisk` user/group. Refuse to overwrite an existing database. Validate the
+   copied database before releasing deployment and retain the private backup.
+5. Release the held deployment for the tested main revision through the normal
+   workflow gates. The cached build, new Compose mount, and
+   `render_asterisk_config --reload` complete the rollout. Compose removes the old
+   container during replacement, so recovery must use the recorded image and
+   database backup, not depend on that container still existing.
+6. Verify the expected unexpired contacts and all services, then test a permitted
+   call and an unapproved destination. Confirm the actual ATAs negotiate the
+   shorter expiry as they refresh. If seeding fails before deployment, restart
+   the existing stopped container and keep deployment held. If replacement has
+   begun, preserve the backup and use the operator recovery procedure, including
+   the deployment failure latch. Do not start an empty replacement or run two
+   PBXs on the same SIP port.
+
+This migration is an operator step; the fixed host deployment command does not
+migrate AstDB or install a new copy of its own policy. Future container replacements
+reuse the populated volume automatically.
+
+### Local registration regression test
+
+Run the real registrar and a synthetic phone on an internal Docker network, with
+disposable configuration and no published SIP port:
+
+```sh
+docker build -f asterisk/Dockerfile -t frontporch-asterisk:registration-test .
+python deploy/test_asterisk_registration.py
+```
+
+The test checks authentication denial, negotiation of a 300-second registration,
+an unchanged container on an ordinary Compose up, reload preservation, and contact
+recovery after forced container replacement without another REGISTER. It also
+verifies a subsequent call reaches that phone. It removes only its uniquely named
+test containers and volumes and uses no production data. A second test exercises
+the first-rollout procedure: clean stop, database copy and integrity check, then
+replacement with the populated volume and a call without re-registration.
+
 ## GitHub merge controls
 
 Apply the three definitions in `.github/rulesets/` to the live repository; files

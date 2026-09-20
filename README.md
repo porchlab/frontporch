@@ -202,6 +202,11 @@ ASTERISK_GENERATED_CONFIG_DIR=/etc/asterisk/conf.d uv run python manage.py rende
 
 The generated files may contain SIP usernames, secrets, public numbers, caller IDs, and family-specific routing. Do not commit generated config from a real deployment.
 
+Compose preserves Asterisk's registration database in a named volume and
+negotiates phone registration lifetimes of at most five minutes. Existing
+deployments need a one-time database migration before enabling this volume; see
+[phone registration continuity](docs/operations/automatic-deployment.md#phone-registration-continuity).
+
 ### Group Calls
 
 Conference groups remain child-only and default-deny. Parents may continue to manage
