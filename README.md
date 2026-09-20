@@ -1,22 +1,45 @@
 # FrontPorch
 
-FrontPorch is an early parent-controlled neighborhood phone system for kids and families.
+FrontPorch is an open-source neighborhood phone system for kids and families, with parents and guardians in control of who can call whom.
+
+Remember picking up the phone to call a friend down the street? FrontPorch brings that experience to a small circle of trusted families: a simple corded phone in a child's room, familiar voices at the other end, and boundaries set by the adults who care for them.
+
+**The phone is a place, not a device.**
 
 **[Explore the live demo](https://front-demo.porchlab.app/#family/overview)** —
-Try the parent portal with a fictional family. No signup needed; changes stay in
-your browser tab.
+Try the parent portal with a fictional family. No signup or phone hardware needed.
 
-The goal is to recreate the old-school landline experience: a simple physical phone in a child's room, a small set of trusted people to call, and parents or guardians who decide the boundaries. FrontPorch is not a smartphone replacement, a social network, or a public directory.
+## How It Works
 
-The phone is a place, not a device.
+- **Kids pick up a phone and call someone they know.** A physical phone gives them a simple way to stay in touch with approved friends and family.
+- **Parents and guardians set the boundaries.** The parent portal manages contacts, quiet hours, and connections between children. Both families must approve a connection before their children can call each other.
+- **The phone network stays private.** Phones connect over a private network, and children have no public directory to browse. Calls require permission; outside calling is disabled unless explicitly enabled.
+
+## Browser Demo
+
+[Explore the demo family](https://front-demo.porchlab.app/#family/overview) to get a feel for the parent portal. Try adding a child, setting quiet hours, or choosing a contact for a phone's dial shortcut.
+
+The demo uses fictional data, and changes stay in your browser tab. Accounts, invitations, phone activation, and calls are simulated. Use fictional details while exploring; **Reset** restores the sample family.
+
+For contributors, the [browser demo guide](ui-prototype/README.md) explains how to run it locally. Django supplies its styles, fonts, icons, form definitions, and welcome content, and automated checks compare selected permission behaviors. See the [design and parity notes](ui-prototype/DESIGN.md) for intentional differences and the [hosting runbook](ui-prototype/deploy/cloudflare-pages.md) for publishing and verification.
+
+## Get Involved
+
+Parents, guardians, neighborhood organizers, designers, and developers are welcome. You do not need to write code to help make FrontPorch easier to use.
+
+- **Share feedback.** Try the demo and open an issue with a question, a confusing step, or an idea that would help your family. Use fictional examples and keep real family details out of public posts and screenshots.
+- **Improve the docs.** Clearer explanations, setup notes, and small corrections all help the next person get started.
+- **Contribute code or design.** Start with the [contributing guide](CONTRIBUTING.md) and [roadmap](ROADMAP.md). For larger changes, open a proposal describing the family or administrator workflow you want to improve.
+
+Ready to explore the code? Follow [Local Setup](#local-setup), or read the [architecture overview](ARCHITECTURE.md) to see how the pieces fit together.
 
 ## Project Status
 
-FrontPorch is an early pilot project. It is not a turnkey production system.
+FrontPorch is an early pilot project. Running it for real families still requires technical setup and ongoing care from an operator.
 
 The repository currently contains a Django project, foundational domain models, Django Admin exposure, deterministic Asterisk configuration generation, tests, and Docker Compose scaffolding for Django, PostgreSQL, and Asterisk. It includes a Django parent portal and a deployment, testing, and rollback runbook for the optional public portal. It does not yet include production provisioning automation, SIP trunk account management, PBX reload hardening, emergency calling, or a complete host-provisioning runbook.
 
-Use this repository as application source and public examples only. Real neighborhood configuration belongs outside the public repo.
+This repository shares the application source and public examples. Real neighborhood configuration belongs outside the public repo.
 
 ## Parent Portal
 
@@ -39,12 +62,6 @@ registration requires an invitation from an existing family, and invited guardia
 can join through their invitations. Django admin and maintenance remain on
 Tailscale; ATA connections to Asterisk use WireGuard. See the [public portal
 runbook](docs/operations/public-portal.md) for deployment prerequisites and tests.
-
-## Browser Demo
-
-The standalone [browser demo](ui-prototype/README.md) is a maintained tour of the Django parent portal, using fictional data stored per browser tab. Django supplies its generated styles, fonts, icons, form definitions, and welcome content; automated checks compare selected permission behaviors. Accounts, invitations, phone activation, and calls are simulated. See its [design and parity notes](ui-prototype/DESIGN.md) for intentional differences and the update workflow.
-
-Try the public demo at **[front-demo.porchlab.app](https://front-demo.porchlab.app)**. Its [Cloudflare Pages runbook](ui-prototype/deploy/cloudflare-pages.md) documents hosting, DNS, manual updates, verification, and rollback.
 
 ## Safety Model
 
