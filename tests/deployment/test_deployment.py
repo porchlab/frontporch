@@ -102,6 +102,40 @@ class WorkflowTests(unittest.TestCase):
 
 
 class HttpTests(unittest.TestCase):
+    def test_redirects_never_reach_an_alternate_origin_route(self):
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        from threading import Thread
+
+        requests = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                requests.append(self.path)
+                if self.path == "/alternate-route":
+                    self.send_response(200)
+                else:
+                    self.send_response(int(self.path.lstrip("/")))
+                    self.send_header("Location", "/alternate-route")
+                self.send_header("Cache-Control", "private, no-store")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def log_message(self, *_):
+                pass
+
+        with HTTPServer(("127.0.0.1", 0), Handler) as server:
+            worker = Thread(target=lambda: server.serve_forever(poll_interval=0.01))
+            worker.start()
+            try:
+                for code in (301, 302, 303, 307, 308):
+                    with self.subTest(code=code):
+                        observed, _ = http.status(f"http://127.0.0.1:{server.server_port}/{code}")
+                        self.assertEqual(observed, code)
+                self.assertNotIn("/alternate-route", requests)
+            finally:
+                server.shutdown()
+                worker.join(timeout=5)
+
     def test_public_routes_and_headers(self):
         from unittest.mock import patch
         calls = []
@@ -151,7 +185,12 @@ case "$*" in
   *'pg_dump'*) echo archive;;
   *'ps --all -q'*|*'ps -q db'*) echo container;;
   *'.State.Status'*) echo running;;
-  *'.State.Health.Status'*) echo healthy;;
+  *'.State.Health.Status'*)
+    if [ -f "$(dirname "$0")/fail-completion" ]; then
+      rm "$(dirname "$0")/state/stage"
+      mkdir "$(dirname "$0")/state/stage"
+    fi
+    echo healthy;;
 esac
 exit 0
 ''')
@@ -213,3 +252,13 @@ exit 0
         self.assertEqual((self.state / "deployed-revision").read_text().strip(), SHA)
         self.assertFalse((self.state / "failed").exists())
         self.assertFalse((self.state / "lock").exists())
+
+    def test_failed_completion_write_preserves_recovery_latch(self):
+        (self.root / "fail-completion").touch()
+        result = self.run_receiver()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.state / "failed").read_text().strip(), SHA)
+        self.assertFalse((self.state / "lock").exists())
+        calls = self.calls.read_text()
+        self.assertNotEqual(self.run_receiver().returncode, 0)
+        self.assertEqual(self.calls.read_text(), calls)

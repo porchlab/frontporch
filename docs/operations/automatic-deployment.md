@@ -125,7 +125,9 @@ administrator connectivity. Confirm the private host has a current off-NAS backu
 and tested restore procedure as required by the [portal runbook](public-portal.md).
 
 Merge the reviewed implementation through the owner gate; require the new policy
-check. Then create the private `state/enabled` marker and set the repository
+check. Install or refresh the host-owned script copies from that reviewed revision
+over the administrator connection, including any fixes made during PR review.
+Then create the private `state/enabled` marker and set the repository
 variable to `true`. Re-run the successful main Tests workflow to exercise the
 first deployment. Its underlying event remains `push`; no workflow-dispatch
 deployment entrypoint is added. Verify both app services change and ordinary
@@ -134,7 +136,8 @@ deployments preserve the database and unchanged Asterisk container IDs.
 The production job performs no checkout, evaluates no PR content, and retains no
 shared build cache. It requests only the fixed host command. GitHub receives a
 sanitized outcome; detailed logs, stage, prior revision, and deployed revision are
-stored privately on the host. Anonymous HTTP probes never log response bodies.
+stored privately on the host. Anonymous HTTP probes never log response bodies
+or follow redirects; the requested internal route must produce the expected status.
 Public-route probes run through the isolated ingress network with the trusted
 Cloudflare headers, checking welcome/login and admin denial. Cloudflare can
 challenge automated requests from the NAS; verify external access in a browser
@@ -151,7 +154,8 @@ manually removing a stale lock.
 
 The host writes `state/failed` before changing the checkout. Any later failure
 blocks automatic retries until an operator examines the private log, current
-containers, migrations, and backup. Build/backup failures do not restart services.
+containers, migrations, and backup. The marker is removed only after the final
+completion stage is successfully recorded. Build/backup failures do not restart services.
 Migrations and partial startup failures can leave mixed versions; do not blindly
 retry or automatically reverse migrations. GitHub/API failures before changes
 fail closed without latching recovery.

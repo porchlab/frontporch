@@ -101,8 +101,8 @@ deploy() {
     [ "$("$DOCKER" inspect --format '{{.State.Health.Status}}' "$db_container")" = healthy ]
     printf '%s\n' "$revision" > "$STATE_DIR/deployed-revision.tmp"
     mv "$STATE_DIR/deployed-revision.tmp" "$STATE_DIR/deployed-revision"
-    rm "$STATE_DIR/failed"
     stage complete
+    rm "$STATE_DIR/failed"
 }
 # Do not wrap deploy in an if/&&/||: that would disable shell errexit inside it.
 (set -e; deploy) > "$log" 2>&1

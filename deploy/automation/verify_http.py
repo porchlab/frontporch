@@ -2,15 +2,26 @@
 
 import time
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+
+class NoRedirects(HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, new_url):
+        # Readiness belongs to the requested service/route, not its destination.
+        # Returning None exposes the original 3xx response as an HTTPError.
+        return None
+
+
+ORIGIN_OPENER = build_opener(NoRedirects())
 
 
 def status(url, headers=None):
     try:
-        with urlopen(Request(url, headers=headers or {}), timeout=5) as response:
+        with ORIGIN_OPENER.open(Request(url, headers=headers or {}), timeout=5) as response:
             return response.status, response.headers
     except HTTPError as error:
-        return error.code, error.headers
+        with error:
+            return error.code, error.headers
 
 
 def verify(public_host):
