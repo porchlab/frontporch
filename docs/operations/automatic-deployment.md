@@ -15,18 +15,21 @@ can interrupt calls. Superseded queued revisions are skipped.
 ## GitHub merge controls
 
 Apply the three definitions in `.github/rulesets/` to the live repository; files
-alone do not enforce settings. `main.json` requires current `tests` and `parity`
-checks, PRs and resolved conversations, and blocks force pushes/deletion without
-bypass. The separate owner-merge and owner-review rules allow only the single-member
-`frontporch-release-owner` team a PR-only bypass. Team IDs are repository-specific;
+alone do not enforce settings. `main.json` requires current `tests`, `parity`, and
+`deployment-policy` checks, PRs and resolved conversations, and blocks force
+pushes/deletion. All three rulesets allow the single-member
+`frontporch-release-owner` team a PR-only bypass. This lets CarlosBorroto explicitly
+merge despite pending or failing checks while developing solo. It does not grant
+direct-push, force-push, or branch-deletion access. Team IDs are repository-specific;
 resolve the team when applying these examples to another repository.
 
 `CODEOWNERS` assigns every file to CarlosBorroto. New changes dismiss old approvals.
 Only the owner can merge. On self-authored PRs, their explicit merge is the review
-decision because GitHub does not permit self-approval. This bypass never waives
-the separate required-check rules. Agents must not merge on the owner's behalf
-without explicit merge authorization. After `deployment-policy` first runs, add
-it to the required checks with GitHub Actions as its expected source (15368).
+decision because GitHub does not permit self-approval. The merge bypass does not
+waive deployment checks: the main push workflow and Vault's independent gate still
+require successful tests, policy, and parity jobs before deploying. Agents must
+not merge or exercise the bypass without explicit owner authorization for that
+action. Required checks use GitHub Actions as their expected source (15368).
 
 The owner retains administrative power to change settings. Protect their account,
 and keep this team restricted to that person. Agent review is advisory; its check
@@ -93,7 +96,8 @@ the moment the runner joins, including before route acceptance is disabled.
 
 Create an OIDC trust credential with only `auth_keys` write and exactly the
 deployment tag. Use issuer `https://token.actions.githubusercontent.com`, subject
-`repo:porchlab/frontporch:environment:production`, and exact claim constraints:
+`repo:porchlab@300614051/frontporch@1291418820:environment:production`, and exact
+claim constraints:
 
 | Claim | Required value |
 | --- | --- |
@@ -102,6 +106,12 @@ deployment tag. Use issuer `https://token.actions.githubusercontent.com`, subjec
 | `ref` | `refs/heads/main` |
 | `event_name` | `push` |
 | `workflow_ref` | `porchlab/frontporch/.github/workflows/tests.yml@refs/heads/main` |
+
+This repository uses GitHub's [immutable subject format](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims),
+which includes owner and repository IDs. Verify the prefix with
+`gh api repos/porchlab/frontporch/actions/oidc/customization/sub --jq .sub_claim_prefix`
+and append `:environment:production`. Keep all custom claim constraints above;
+do not disable immutable subjects or loosen the subject to resolve a mismatch.
 
 The identity cannot edit policy or create credentials for other tags. Store its
 generated audience and client ID in GitHub. See the official
