@@ -10,21 +10,31 @@ The phone is a place, not a device.
 
 FrontPorch is an early pilot project. It is not a turnkey production system.
 
-The repository currently contains a Django project, foundational domain models, Django Admin exposure, deterministic Asterisk configuration generation, tests, and Docker Compose scaffolding for Django, PostgreSQL, and Asterisk. It includes a Django parent portal based on the approved UI prototype. It does not yet include production provisioning automation, SIP trunk account management, PBX reload hardening, emergency calling, or a complete deployment runbook.
+The repository currently contains a Django project, foundational domain models, Django Admin exposure, deterministic Asterisk configuration generation, tests, and Docker Compose scaffolding for Django, PostgreSQL, and Asterisk. It includes a Django parent portal and a deployment, testing, and rollback runbook for the optional public portal. It does not yet include production provisioning automation, SIP trunk account management, PBX reload hardening, emergency calling, or a complete host-provisioning runbook.
 
 Use this repository as application source and public examples only. Real neighborhood configuration belongs outside the public repo.
 
 ## Parent Portal
 
-Open the Django root URL for family signup or login. The portal provides children
+Open the Django root URL for login or, when enabled, family signup. The portal provides children
 and phones, exact child-to-child invitations, private family discovery, contacts,
 quiet hours, dial shortcuts, guardian membership, and family settings. New phone
 reservations require installer activation. See the [implementation and upgrade
 guide](docs/parent-ui-implementation.md) before deploying this version.
 
-## Parent UI Design Prototype
+The prepared public setup uses Cloudflare Tunnel at `front.porchlab.app` and
+FrontPorch login, with no Tailscale installation required for parents. Public
+family signup is disabled: operators enroll families through the private portal,
+while invited guardians can join through their invitations. Django admin and
+maintenance remain on Tailscale; ATA connections to Asterisk use WireGuard.
+Production deployment and tunnel activation are deferred. See the [public portal
+runbook](docs/operations/public-portal.md) for deployment prerequisites and tests.
 
-The standalone [parent UI prototype](ui-prototype/README.md) explores onboarding, children’s phones and dial shortcuts (1–9), child-specific connections, an opt-in parent directory, guardian invitations, and external contacts. It uses fictional browser-local data and runs separately from Django. See its [design notes](ui-prototype/DESIGN.md) for proposed behavior and backend integration gaps.
+## Browser Demo
+
+The standalone [browser demo](ui-prototype/README.md) is a maintained tour of the Django parent portal, using fictional data stored per browser tab. Django supplies its generated styles, fonts, icons, form definitions, and welcome content; automated checks compare selected permission behaviors. Accounts, invitations, phone activation, and calls are simulated. See its [design and parity notes](ui-prototype/DESIGN.md) for intentional differences and the update workflow.
+
+Try the public demo at **[front-demo.porchlab.app](https://front-demo.porchlab.app)**. Its [Cloudflare Pages runbook](ui-prototype/deploy/cloudflare-pages.md) documents hosting, DNS, manual updates, verification, and rollback.
 
 ## Safety Model
 
@@ -64,9 +74,11 @@ Keep these in a separate private deployment or configuration repo:
 - Real public phone numbers, DIDs, caller IDs, SIP usernames, and SIP trunk settings.
 - Real family, parent, guardian, child, address, email, school, or neighborhood data.
 - Generated Asterisk config from a real database, call logs, recordings, voicemail, screenshots, fixtures, seed data, and backups.
-- Production hostnames, deployment URLs, private tailnet names, provider account IDs, and server inventory.
+- Private deployment hostnames and URLs, private tailnet names, provider account IDs, and server inventory.
 
 Before publishing, run a secret scan and review both tracked files and ignored local files. Ignored files such as `.env` may still be present in a working tree even though they are not committed.
+
+The intended public portal hostname, fictional-data demo hostname, and demo Pages project name are deliberately documented in the public runbooks. Private infrastructure details, Cloudflare account identifiers, and credentials remain outside the repository.
 
 ## Architecture Overview
 
@@ -90,6 +102,9 @@ Django models
 
 ## Operational Checklists
 
+- [Parent portal implementation and upgrade guide](docs/parent-ui-implementation.md)
+- [Public parent portal: Cloudflare Tunnel deployment and testing](docs/operations/public-portal.md)
+- [Browser demo: Cloudflare Pages publishing and verification](ui-prototype/deploy/cloudflare-pages.md)
 - [GL.iNet Opal router setup checklist](docs/operations/opal-router-checklist.md)
 
 ## Local Setup

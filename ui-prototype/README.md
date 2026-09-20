@@ -60,25 +60,28 @@ page content**. Form labels, required flags, lengths, help, options, and default
 come from the real Django forms. For example, changing “Guardian name” in Django
 updates the demo after exporting; there is no second label to edit.
 
-From an installed project environment, with `DATABASE_URL` set as for normal
-Django development:
+Run these commands from the repository root in an installed project environment,
+with `DATABASE_URL` pointing to a local development PostgreSQL database and a
+role that can create a test database. Use the normal `frontporch.settings`, not the public deployment
+settings or production credentials:
 
 ```sh
 uv run --frozen python manage.py export_browser_demo
 uv run --frozen python manage.py export_browser_demo --check
 node --test ui-prototype/tests/*.test.cjs
-uv run --frozen python manage.py test directory.tests.test_browser_demo
+uv run --frozen python manage.py test directory.tests.test_browser_demo --noinput
 ```
 
 The export command reads source presentation only; it does not query the database
 or export deployment configuration, household records, or secrets. Generated
 files are committed so static hosting still requires **no build step**.
 
-The GitHub **Browser demo parity** workflow checks every PR for stale exports,
-exercises browser state transitions, and compares selected connections and
-revoked shortcut destinations against actual Django model outcomes. The export
+The GitHub **Browser demo parity** workflow checks pull requests and pushes to
+`main` and `ui-implementation` for stale exports, exercises browser state
+transitions, and compares selected connections and revoked shortcut destinations
+against actual Django model outcomes. The export
 check also runs in Django's normal test suite. The cross-runtime test needs Node;
-CI installs it explicitly.
+CI installs it explicitly. This workflow does not publish to Cloudflare Pages.
 
 | File | Ownership |
 | --- | --- |
@@ -94,12 +97,26 @@ workflow for changing parent-facing features.
 
 ## Hosting
 
-Publish the contents of `dist/` to static HTTPS hosting, using the existing
-[Cloudflare Pages instructions](deploy/cloudflare-pages.md). Run the checks above
-before publishing. No Django server or shared database is required. The public
-demo remains separate from the real parent portal.
+The shared demo is **[front-demo.porchlab.app](https://front-demo.porchlab.app)**,
+hosted on Cloudflare Pages. See the [demo setup and deployment
+runbook](deploy/cloudflare-pages.md) for the Pages project, DNS record, update
+commands, verification, and rollback. Upload this repository's
+`ui-prototype/dist/` after running the checks above; changes are published manually.
+No Django server or shared database is required. The runbook distinguishes the
+last recorded publication from subsequent source changes; merging to `main` does
+not update the hosted demo.
 
-The `_headers` file prohibits outbound connections and asks search engines not
-to index the site; it is still accessible to anyone with its URL. For a private
-preview, `deploy/nginx.conf` remains available. Deployment hostnames and credentials
-belong outside the repository.
+The real parent portal's prepared [Cloudflare Tunnel setup](../docs/operations/public-portal.md)
+uses `front.porchlab.app`, real FrontPorch login, and operator-controlled family
+enrollment. Its production deployment is deferred. The Pages demo intentionally
+keeps fictional signup available and never creates real accounts. Demo tools
+simulate installer and guardian actions; they are not public production controls.
+
+The `_headers` file allows same-origin static assets, blocks browser network API
+connections and form submissions, and asks search engines not to index the site;
+it is still accessible to anyone with its URL. For a private
+preview, `deploy/nginx.conf` remains available. Private deployment hostnames,
+private IPs, credentials, and operational paths belong outside the repository.
+The intentionally public, fictional-data demo hostname is documented in the
+runbook. No production FrontPorch services need to be rebuilt or reloaded to
+update this demo.
