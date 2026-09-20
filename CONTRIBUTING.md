@@ -132,3 +132,38 @@ When reviewing changes, prioritize:
 6. Readability and maintainability
 
 If a change makes the system harder for parents or operators to understand, it should have a strong reason.
+
+## Automated PR Review
+
+FrontPorch's Greptile configuration lives in [`.greptile/`](.greptile/).
+It focuses on logic and syntax findings, uses the existing project documentation
+as context, and adds [review guidance](.greptile/rules.md) for privacy,
+permissions, generated configuration, and browser demo behavior. Automatic
+approvals are disabled; maintainers assess findings and make merge decisions.
+
+Repository configuration takes effect only after the hosted integration is set
+up. A repository administrator completes these steps:
+
+1. Apply through [Greptile's open-source program](https://www.greptile.com/open-source)
+   for `https://github.com/porchlab/frontporch`. Confirm the project's eligibility
+   and free OSS status in Greptile; a trial alone does not confirm OSS approval.
+2. In Greptile's Code Providers setup, install its GitHub app for `porchlab`,
+   choosing **Only select repositories** and `frontporch`. Link that GitHub
+   organization and enable `porchlab/frontporch` for reviews.
+3. Leave automatic enabling of future repositories and draft reviews off in the
+   dashboard. Keep paid usage disabled for this free OSS setup.
+4. Merge the `.greptile/` configuration, then verify a review on a ready PR. Check
+   for a Greptile review and status check; configuration files alone do not prove
+   the integration is active.
+
+The configuration requests reviews when PRs are opened or marked ready and when
+new commits are pushed. For an existing PR, an authorized maintainer can request
+a review with a comment such as `@greptileai please review this PR`. Reply to
+individual findings with relevant code or policy context when they are incorrect.
+Keep existing tests and human review alongside Greptile's feedback.
+
+The hosted GitHub integration does not require a new GitHub Actions workflow or
+an API key in this repository. See Greptile's
+[setup guide](https://www.greptile.com/docs/quickstart) and
+[configuration reference](https://www.greptile.com/docs/code-review/greptile-config-reference)
+for account setup and supported settings.
