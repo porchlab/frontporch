@@ -83,6 +83,16 @@
             {% endif %}
         </section>
         <section class="panel settings-panel">
+            <h2>Your sign-in details.</h2>
+            <p>{{ request.user.email }}</p>
+            <div class="inline-actions">
+                <a class="button secondary" href="{% url 'account_email' %}">Change email</a>
+                <a class="button secondary" href="{% url 'account_change_password' %}">Change password</a>
+                <a class="button secondary" href="{% url 'socialaccount_connections' %}">Google &amp; Apple sign-in</a>
+            </div>
+            <p class="form-note">To use Apple’s Hide My Email, sign in here first and connect your Apple account.</p>
+        </section>
+        <section class="panel settings-panel">
             <h2>Invite a new family.</h2>
             <p class="dialog-intro">FrontPorch is invite only for now. Every family can welcome another family, and any guardian in your family can send an invitation. They’ll have their own family account.</p>
             {% if portal_allow_registration %}

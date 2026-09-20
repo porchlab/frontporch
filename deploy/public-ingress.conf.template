@@ -8,7 +8,7 @@ real_ip_header CF-Connecting-IP;
 # Shared-memory zones enforce one budget across all nginx workers.
 map "$request_method:$uri" $account_limit_key {
     default "";
-    ~^POST:/accounts/login/?$ $binary_remote_addr;
+    ~^POST:/accounts(?:/|$) $binary_remote_addr;
     ~^POST:/register(?:/|$) $binary_remote_addr;
     ~^POST:/guardians/join/ $binary_remote_addr;
 }

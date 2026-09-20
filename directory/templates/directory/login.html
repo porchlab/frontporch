@@ -13,6 +13,8 @@
                 {% icon 'arrow' %}
             </button>
         </form>
+        {% include "directory/provider_buttons.html" %}
+        <p class="auth-footnote"><a href="{% url 'account_reset_password' %}">Forgot your password?</a></p>
         <p class="auth-footnote">FrontPorch is invite only for now. Ask a family already here to send you an invitation, then open the link in your email.</p>
     </section>
 {% endblock %}

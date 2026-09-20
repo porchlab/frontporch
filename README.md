@@ -25,6 +25,9 @@ and phones, exact child-to-child invitations, private family discovery, contacts
 quiet hours, dial shortcuts, guardian membership, and family settings. New phone
 reservations require installer activation. See the [implementation and upgrade
 guide](docs/parent-ui-implementation.md) before deploying this version.
+Every guardian has a user account. Password recovery, email management, and optional
+Google/Apple sign-in use django-allauth; see the [guardian account upgrade and
+provider setup guide](docs/operations/guardian-accounts.md).
 
 ## Parent UI Design Prototype
 

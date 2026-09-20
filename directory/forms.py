@@ -1,9 +1,12 @@
 from django import forms
-from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
+from django.contrib.auth.forms import UserCreationForm
+from allauth.account.forms import LoginForm
+from allauth.account.models import EmailAddress
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
+from .accounts import sync_account_email, validate_account_email
 from .models import (
     Child,
     ChildBlackoutPeriod,
@@ -57,14 +60,11 @@ class ParentRegistrationForm(UserCreationForm):
 
     def clean_email(self):
         email = self.cleaned_data["email"].strip().lower()
-        if (
-            User.objects.filter(email__iexact=email).exists()
-            or Parent.objects.filter(email__iexact=email).exists()
-        ):
+        if User.objects.filter(email__iexact=email).exists():
             raise forms.ValidationError(
                 "An account already uses this email. Log in with that account."
             )
-        return email
+        return validate_account_email(email)
 
     def clean_family_name(self):
         family_name = self.cleaned_data["family_name"]
@@ -98,13 +98,7 @@ class ParentRegistrationForm(UserCreationForm):
                     "This invitation is no longer available. Ask an existing family for a new invitation."
                 )
             lock_email_identity(user.email)
-            if (
-                User.objects.filter(email__iexact=user.email).exists()
-                or Parent.objects.filter(email__iexact=user.email).exists()
-            ):
-                raise ValidationError(
-                    "An account already uses this email. Log in with that account."
-                )
+            validate_account_email(user.email)
             user.save()
             family = Family.objects.create(
                 name=self.cleaned_data["family_name"],
@@ -114,12 +108,12 @@ class ParentRegistrationForm(UserCreationForm):
                 user=user,
                 family=family,
                 display_name=self.cleaned_data["display_name"],
-                email=self.cleaned_data["email"],
                 phone=self.cleaned_data["phone"],
                 is_guardian=True,
                 is_primary=True,
                 directory_visible=self.cleaned_data["directory_listed"],
             )
+            sync_account_email(user, verified=True)
             invitation.status = "accepted"
             invitation.accepted_family = family
             invitation.save(update_fields=["status", "accepted_family", "updated_at"])
@@ -136,14 +130,11 @@ class FamilyInvitationForm(forms.Form):
 
     def clean_email(self):
         email = self.cleaned_data["email"].strip().lower()
-        if (
-            User.objects.filter(email__iexact=email).exists()
-            or Parent.objects.filter(email__iexact=email).exists()
-        ):
+        if User.objects.filter(email__iexact=email).exists():
             raise forms.ValidationError(
                 "This email already has an account. Invite a parent from a new family."
             )
-        return email
+        return validate_account_email(email)
 
 
 class ChildForm(forms.ModelForm):
@@ -476,10 +467,16 @@ class GuardianInvitationForm(forms.Form):
 
     def clean_email(self):
         email = self.cleaned_data["email"].strip().lower()
-        if Parent.objects.filter(email__iexact=email, is_guardian=True).exists():
+        if Parent.objects.filter(user__email__iexact=email, is_guardian=True).exists():
             raise forms.ValidationError(
                 "This email already belongs to a family account."
             )
+        if (
+            EmailAddress.objects.filter(email__iexact=email)
+            .exclude(user__email__iexact=email)
+            .exists()
+        ):
+            raise forms.ValidationError("Use this guardian’s current account email.")
         return email
 
 
@@ -501,20 +498,11 @@ class GuardianJoinForm(UserCreationForm):
         fields = ("username", "password1", "password2")
 
 
-class ParentAuthenticationForm(AuthenticationForm):
-    username = forms.CharField(
-        label="Email or username",
-        widget=forms.TextInput(attrs={"autofocus": True, "autocomplete": "username"}),
-    )
-
-    def clean(self):
-        identifier = self.cleaned_data.get("username", "").strip()
-        if "@" in identifier and not User.objects.filter(username=identifier).exists():
-            matches = list(
-                User.objects.filter(email__iexact=identifier).values_list(
-                    "username", flat=True
-                )[:2]
-            )
-            if len(matches) == 1:
-                self.cleaned_data["username"] = matches[0]
-        return super().clean()
+class ParentAuthenticationForm(LoginForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["password"].help_text = ""
+        self.fields["login"].label = "Email or username"
+        self.fields["login"].widget.attrs.update(
+            {"autofocus": True, "autocomplete": "username"}
+        )

@@ -1,3 +1,4 @@
+from directory.tests.factories import create_user
 from unittest.mock import patch
 
 from django.db import transaction
@@ -88,7 +89,11 @@ class AsteriskAutoReloadSignalTests(TransactionTestCase):
     def test_child_landline_shortcut_save_and_delete_apply_configuration(self, apply):
         with override_settings(ASTERISK_AUTO_APPLY_CONFIG=False):
             family = Family.objects.create(name="River House")
-            parent = Parent.objects.create(family=family, display_name="Mara")
+            parent = Parent.objects.create(
+                user=create_user(),
+                family=family,
+                display_name="Mara",
+            )
             source_child = Child.objects.create(family=family, name="Riley")
             target_child = Child.objects.create(family=family, name="Rowan")
             Device.objects.create(
@@ -129,7 +134,11 @@ class AsteriskAutoReloadSignalTests(TransactionTestCase):
     ):
         with override_settings(ASTERISK_AUTO_APPLY_CONFIG=False):
             family = Family.objects.create(name="Maple House")
-            parent = Parent.objects.create(family=family, display_name="Nico")
+            parent = Parent.objects.create(
+                user=create_user(),
+                family=family,
+                display_name="Nico",
+            )
             child = Child.objects.create(family=family, name="Rowan")
             number = ExternalPhoneNumber.objects.create(
                 normalized_number="+12125550100"

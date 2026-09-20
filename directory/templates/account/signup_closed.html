@@ -1,0 +1,8 @@
+{% extends "account/base_entrance.html" %}
+{% block head_title %}An invitation to FrontPorch{% endblock %}
+{% block content %}
+    <h1>Your invitation comes first.</h1>
+    <p class="dialog-intro">Ask a family already on FrontPorch to send you an invitation, then use the link in your email to create your account.</p>
+    <p>Already have an account? Log in with your password to connect Google or Apple in Family settings. You can also sign in with a provider that shares your account email.</p>
+    <a class="button" href="{% url 'account_login' %}">Log in</a>
+{% endblock %}

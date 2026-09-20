@@ -80,7 +80,7 @@ const PORTAL = {
     ],
     "login": [
       {
-        "name": "username",
+        "name": "login",
         "label": "Email or username",
         "required": true,
         "type": "text",

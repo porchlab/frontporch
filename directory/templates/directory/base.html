@@ -109,7 +109,7 @@
                     {% endfor %}
                 </div>
             {% endif %}
-            {% block content %}{% endblock %}
+            {% block content_container %}{% block content %}{% endblock %}{% endblock %}
         </main>
         <footer class="app-footer">
             <span>{% icon 'shield' %} Private by design. Connected by choice.</span>

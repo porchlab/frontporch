@@ -110,7 +110,7 @@ class PublicPortalTests(TestCase):
             "guardian", email="guardian@example.com", password="test-pass"
         )
         Parent.objects.create(
-            user=user, family=family, display_name="Taylor", email=user.email
+            user=user, family=family, display_name="Taylor"
         )
         client = Client(
             enforce_csrf_checks=True,
@@ -123,7 +123,7 @@ class PublicPortalTests(TestCase):
         response = client.post(
             reverse("login"),
             {
-                "username": user.email,
+                "login": user.email,
                 "password": "test-pass",
                 "csrfmiddlewaretoken": csrf_cookie.value,
             },

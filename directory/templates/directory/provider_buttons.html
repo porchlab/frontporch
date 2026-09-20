@@ -1,0 +1,9 @@
+{% load socialaccount %}
+{% get_providers as social_providers %}
+{% for provider in social_providers %}
+    <form class="spaced" method="post" action="{% provider_login_url provider.id process=process|default:'login' %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+        <button class="button secondary full-width" type="submit">{% if process == "connect" %}Connect{% else %}Continue with{% endif %} {{ provider.name }}</button>
+    </form>
+{% endfor %}

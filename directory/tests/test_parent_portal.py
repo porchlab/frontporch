@@ -30,14 +30,12 @@ class ParentPortalTests(TestCase):
             user=self.user,
             family=self.family,
             display_name="Mara",
-            email="mara@example.com",
         )
         self.other_user = User.objects.create_user(username="nico", password="secret-pass")
         self.other_parent = Parent.objects.create(
             user=self.other_user,
             family=self.other_family,
             display_name="Nico",
-            email="nico@example.com",
         )
         self.child = Child.objects.create(family=self.family, name="Alex")
         self.other_child = Child.objects.create(family=self.other_family, name="Emma")

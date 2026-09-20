@@ -1,5 +1,10 @@
 from django.contrib import admin
 from django import forms
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.forms import AdminUserCreationForm, UserChangeForm
+from django.contrib.auth.models import User
+
+from .accounts import sync_account_email, validate_account_email
 
 from .models import (
     AllowedChildFamilyRelationship,
@@ -25,6 +30,50 @@ from .models import (
 )
 
 
+class AccountEmailMixin:
+    def clean_email(self):
+        return validate_account_email(
+            self.cleaned_data.get("email", ""), user_id=self.instance.pk
+        )
+
+
+class AccountCreationForm(AccountEmailMixin, AdminUserCreationForm):
+    class Meta(AdminUserCreationForm.Meta):
+        fields = ("username", "email")
+
+
+class AccountChangeForm(AccountEmailMixin, UserChangeForm):
+    pass
+
+
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class FrontPorchUserAdmin(UserAdmin):
+    add_form = AccountCreationForm
+    form = AccountChangeForm
+    add_fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "username",
+                    "email",
+                    "usable_password",
+                    "password1",
+                    "password2",
+                )
+            },
+        ),
+    )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if not change or "email" in form.changed_data:
+            sync_account_email(obj)
+
+
 @admin.register(Family)
 class FamilyAdmin(admin.ModelAdmin):
     list_display = ("name", "created_at", "updated_at")
@@ -36,7 +85,10 @@ class FamilyAdmin(admin.ModelAdmin):
 class ParentAdmin(admin.ModelAdmin):
     list_display = ("display_name", "family", "email", "phone", "is_guardian")
     list_filter = ("family", "is_guardian")
-    search_fields = ("display_name", "email", "phone", "family__name")
+    search_fields = ("display_name", "user__email", "phone", "family__name")
+    readonly_fields = ("email",)
+    autocomplete_fields = ("user",)
+    list_select_related = ("family", "user")
     ordering = ("family__name", "display_name")
 
 
@@ -402,7 +454,9 @@ class ChildConnectionAdmin(admin.ModelAdmin):
     search_fields = ("child_a__name", "child_b__name")
 
 
-@admin.register(ConnectionInvitation, GuardianInvitation, FamilyInvitation, FamilyActivity)
+@admin.register(
+    ConnectionInvitation, GuardianInvitation, FamilyInvitation, FamilyActivity
+)
 class PortalHistoryAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False

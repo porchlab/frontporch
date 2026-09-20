@@ -1,3 +1,4 @@
+from directory.tests.factories import create_user
 from datetime import time
 
 from django.core.exceptions import ValidationError
@@ -31,8 +32,16 @@ class DirectoryDomainTests(TestCase):
         self.alex = Child.objects.create(family=self.family_a, name="Alex")
         self.emma = Child.objects.create(family=self.family_b, name="Emma")
         self.luca = Child.objects.create(family=self.family_b, name="Luca")
-        self.river_parent = Parent.objects.create(family=self.family_a, display_name="Mara")
-        self.maple_parent = Parent.objects.create(family=self.family_b, display_name="Nico")
+        self.river_parent = Parent.objects.create(
+            user=create_user(),
+            family=self.family_a,
+            display_name="Mara",
+        )
+        self.maple_parent = Parent.objects.create(
+            user=create_user(),
+            family=self.family_b,
+            display_name="Nico",
+        )
 
     def test_child_spoken_menu_name_uses_optional_pronunciation_override(self):
         self.assertEqual(self.alex.spoken_menu_name, "Alex")
@@ -58,6 +67,7 @@ class DirectoryDomainTests(TestCase):
 
     def test_parent_phone_number_normalizes_to_e164(self):
         parent = Parent.objects.create(
+            user=create_user(),
             family=self.family_a,
             display_name="Sofia",
             phone="(212) 555-0100",
@@ -68,6 +78,7 @@ class DirectoryDomainTests(TestCase):
     def test_parent_phone_number_rejects_invalid_value(self):
         with self.assertRaises(ValidationError):
             Parent.objects.create(
+                user=create_user(),
                 family=self.family_a,
                 display_name="Sofia",
                 phone="not a number",

@@ -12,6 +12,7 @@ dependencies = [
     "phonenumbers>=8.13,<9.0",
     "psycopg[binary]>=3.2,<4.0",
     "whitenoise>=6.8,<7.0",
+    "django-allauth[socialaccount]>=65.19.4,<66",
 ]
 
 [tool.uv]

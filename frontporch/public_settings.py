@@ -22,6 +22,8 @@ FRONTPORCH_PUBLIC_URL = f"https://{PUBLIC_HOST}"
 # Only public-ingress can reach this listener from the tunnel network. It
 # overwrites forwarded headers; never publish this container's port on the host.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# public-ingress replaces X-Forwarded-For with the Cloudflare client IP.
+ALLAUTH_TRUSTED_PROXY_COUNT = 1
 SECURE_SSL_REDIRECT = True
 SECURE_SSL_HOST = PUBLIC_HOST
 SECURE_HSTS_SECONDS = 3600

@@ -1,3 +1,4 @@
+from directory.tests.factories import create_user
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -25,7 +26,11 @@ class DirectoryAdminTests(TestCase):
         self.family = Family.objects.create(name="River House")
         self.child = Child.objects.create(family=self.family, name="Alex")
         self.target_child = Child.objects.create(family=self.family, name="Rowan")
-        self.parent = Parent.objects.create(family=self.family, display_name="Mara")
+        self.parent = Parent.objects.create(
+            user=create_user(),
+            family=self.family,
+            display_name="Mara",
+        )
         self.source_device = Device.objects.create(
             assigned_parent=self.parent,
             friendly_name="Mara kitchen phone",

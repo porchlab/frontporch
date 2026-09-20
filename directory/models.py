@@ -48,12 +48,9 @@ class Parent(TimeStampedModel):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="frontporch_parent",
-        null=True,
-        blank=True,
     )
     family = models.ForeignKey(Family, on_delete=models.CASCADE, related_name="parents")
     display_name = models.CharField(max_length=200)
-    email = models.EmailField(blank=True)
     phone = models.CharField(max_length=32, blank=True)
     is_guardian = models.BooleanField(default=True)
     is_primary = models.BooleanField(default=False)
@@ -76,6 +73,10 @@ class Parent(TimeStampedModel):
 
     def __str__(self):
         return f"{self.display_name} ({self.family})"
+
+    @property
+    def email(self):
+        return self.user.email
 
     def clean(self):
         if self.phone:

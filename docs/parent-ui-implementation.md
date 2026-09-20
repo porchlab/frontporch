@@ -8,6 +8,9 @@ not load its JavaScript or store household data in browser storage.
 ## Workflows
 
 - `/welcome/`, invited signup, email-or-username login, and POST logout.
+- Required guardian accounts, allauth password recovery and email management, and
+  Google/Apple sign-in for existing accounts. See the [account upgrade and provider
+  setup guide](operations/guardian-accounts.md).
 - New-family invitations from any active guardian, with email delivery, resend,
   cancellation, and a separate household on acceptance. No staff or primary role
   is required to invite a new family.
@@ -40,6 +43,9 @@ approved scope, upgrade semantics, and deployment assumptions.
    inbox, and choose the initial primary guardian. Family listings start hidden.
    Migration 0019 adds new-family invitations; existing families and accounts
    remain intact. Open registration is disabled on both public and private portals.
+   Migration 0020 provisions missing guardian accounts with random passwords and
+   makes account email authoritative. Review the account upgrade guide for email
+   conflict handling and recovery before deploying.
 3. Review primary guardians in Admin. Existing legacy relationship rows are history;
    use child connections for current authorization. The old portal approval URLs
    return a migration notice rather than creating ineffective approvals.

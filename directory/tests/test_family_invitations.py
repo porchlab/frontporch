@@ -36,7 +36,6 @@ class FamilyInvitationTests(TestCase):
             user=self.user,
             family=self.family,
             display_name="Taylor",
-            email=self.user.email,
         )
         self.client.force_login(self.user)
         self.signup_data = {
@@ -93,7 +92,7 @@ class FamilyInvitationTests(TestCase):
         self.assertRedirects(
             self.client.post(url, self.signup_data), reverse("directory:dashboard")
         )
-        parent = Parent.objects.get(email="new@example.com")
+        parent = Parent.objects.get(user__email="new@example.com")
         self.assertNotEqual(parent.family_id, self.family.pk)
         self.assertTrue(parent.is_primary)
         self.assertTrue(parent.is_guardian)

@@ -1,3 +1,4 @@
+from directory.tests.factories import create_user
 from django.contrib.auth.models import User
 from django.test import TestCase, Client
 from django.urls import reverse
@@ -31,9 +32,9 @@ class ParentUIWorkflowTests(TestCase):
             directory_visible=True,
         )
         cls.hidden_parent = m.Parent.objects.create(
+            user=create_user(email="private@example.com"),
             family=cls.hidden,
             display_name="Secret guardian",
-            email="private@example.com",
         )
         cls.child = m.Child.objects.create(family=cls.family, name="Casey")
         cls.sibling = m.Child.objects.create(family=cls.family, name="Riley")
@@ -356,7 +357,11 @@ class ParentUIWorkflowTests(TestCase):
         )
         self.assertContains(response, "A child with this name already belongs")
         self.assertEqual(self.family.children.count(), 2)
-        m.Parent.objects.create(family=self.family, display_name="Second guardian")
+        m.Parent.objects.create(
+            user=create_user(),
+            family=self.family,
+            display_name="Second guardian",
+        )
         response = self.client.post(
             reverse("directory:settings"),
             {"form": "profile", "display_name": "second GUARDIAN"},

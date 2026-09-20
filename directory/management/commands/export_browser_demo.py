@@ -87,7 +87,9 @@ def exported_assets():
         "forms": {
             name: [
                 field_definition(key, field)
-                for key, field in cls.base_fields.items()
+                for key, field in (
+                    cls().fields if name == "login" else cls.base_fields
+                ).items()
                 if not field.widget.is_hidden
             ]
             for name, cls in FORM_CLASSES.items()

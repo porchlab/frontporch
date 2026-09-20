@@ -1,6 +1,7 @@
 from io import StringIO
 
 from django.core.management import call_command
+from django.contrib.auth.models import User
 from django.test import TestCase
 
 from directory.models import Child, Device, Family, Parent
@@ -15,6 +16,8 @@ class SeedTestFamiliesCommandTests(TestCase):
 
         self.assertEqual(Family.objects.count(), 3)
         self.assertEqual(Parent.objects.count(), 6)
+        self.assertEqual(User.objects.count(), 6)
+        self.assertFalse(Parent.objects.filter(user=None).exists())
         self.assertEqual(Child.objects.count(), 6)
         self.assertEqual(Device.objects.count(), 15)
 
