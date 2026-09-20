@@ -46,6 +46,7 @@ jobs:
         run: uv run --frozen python manage.py export_browser_demo --check
       - name: Check browser workflows
         run: |
+          npm ci --prefix ui-prototype --ignore-scripts
           node --check ui-prototype/dist/app.js
           node --check ui-prototype/dist/model.js
           node --test ui-prototype/tests/*.test.cjs

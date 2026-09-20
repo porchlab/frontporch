@@ -79,8 +79,13 @@ Security-sensitive tests should include denial cases, not only allowed cases.
 Run the test suite locally before submitting application changes:
 
 ```bash
+npm ci --prefix ui-prototype --ignore-scripts
 uv run python manage.py test
 ```
+
+Use Node 24 for the cross-runtime tests. The locked `ui-prototype` development
+dependencies provide DOM parsing for the phonebook HTML-to-PDF integration tests;
+they are not needed to serve the application or demo.
 
 Pull requests to `main` require both GitHub Actions checks to pass:
 

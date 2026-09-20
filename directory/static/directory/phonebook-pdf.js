@@ -17,7 +17,7 @@ const PhonebookPDF = (() => {
           digits: clean(shortcut.querySelector("b")), label: clean(shortcut.querySelector("span")),
         })),
       })),
-      empty: clean(card.querySelector(".empty-phonebook")),
+      empty: [...card.querySelectorAll(".empty-phonebook > *")].map(clean).join(" "),
       reminders: [...card.querySelectorAll(".card-footer p")].map(clean),
       metadata: [...card.querySelectorAll(".card-footer > div > span")].map(clean),
     };
@@ -122,9 +122,15 @@ const PhonebookPDF = (() => {
       write(page === 1 ? "A little more hello." : "Phonebook continued", x + inner - 98, y + 11, 8);
       y += 30;
       const titleY = y;
-      paragraph(page === 1 ? data.title.replace(/ phonebook\.$/, "\nphonebook.") : data.title,
-        page === 1 ? 28 : 18, true, accent, page === 1 ? inner - 80 : inner);
-      if (page === 1) {
+      const firstTitle = data.title.replace(/ phonebook\.$/, "\nphonebook.");
+      const fullHeadingHeight = lines(firstTitle, 28, true, inner - 80).length * 28 * 1.1
+        + lines(data.identity, 10, false, inner).length * 13.5 + 30;
+      // Maximum-length names can make the decorative title taller than a page.
+      // Use the readable continuation layout in that case, retaining all text.
+      const largeTitle = page === 1 && y + fullHeadingHeight + 18 <= rowLimit;
+      paragraph(largeTitle ? firstTitle : data.title,
+        largeTitle ? 28 : 18, true, accent, largeTitle ? inner - 80 : inner);
+      if (largeTitle) {
         // A telephone receiver, drawn as vectors so it stays crisp in print.
         const phoneX = x + inner - 57, phoneY = titleY + 2;
         doc.setDrawColor(color ? "#b74b26" : accent); doc.setLineWidth(1.5);
@@ -139,16 +145,21 @@ const PhonebookPDF = (() => {
         write("hello!", phoneX + 4, phoneY + 53, 11, true, color ? "#b74b26" : accent);
       }
       y += 8; paragraph(data.identity, 10); y += 12; rule(y, accent); y += 10;
-      if (page === 1) {
-        for (const text of data.guide) { paragraph(text); y += 4; }
-        y += 5;
-      }
-      if (data.entries.length) {
-        rule(y, accent);
-        ["WHO TO CALL", "EXTENSION", "SHORTCUT"].forEach((label, i) => write(label, columns[i], y + 16, 8, true));
-        y += 25; rule(y, accent);
-      }
+    }
+    function tableHeading() {
+      rule(y, accent);
+      ["WHO TO CALL", "EXTENSION", "SHORTCUT"].forEach((label, i) => write(label, columns[i], y + 16, 8, true));
+      y += 25; rule(y, accent);
       pageStart = y;
+    }
+    function nextTablePage() { finishPage(); startPage(); tableHeading(); }
+    function flowingParagraph(text, size = 10) {
+      const leading = size * 1.35;
+      for (const line of lines(text, size, false, inner)) {
+        if (y + leading > rowLimit) { finishPage(); startPage(); }
+        write(line, x, y + size, size); y += leading;
+      }
+      y = Math.min(y + 4, rowLimit);
     }
 
     // Each cell is a stack of measured lines. Oversized rows can continue across
@@ -171,9 +182,20 @@ const PhonebookPDF = (() => {
     }
     const height = cells => Math.max(...cells.map(cell => cell.reduce((sum, line) => sum + line.height, 0))) + 16;
     startPage();
+    // Calling instructions can contain many dial-in numbers. Paginate them as
+    // body text, before introducing the table, and reserve the footer on every
+    // page even when the card has no permitted destinations yet.
+    for (const text of data.guide) flowingParagraph(text);
+    y = Math.min(y + 5, rowLimit);
+    if (data.entries.length) {
+      const firstCells = entryCells(data.entries[0]);
+      const firstLineHeight = Math.max(...firstCells.map(cell => cell[0]?.height || 0));
+      if (y + 25 + 16 + firstLineHeight > rowLimit) { finishPage(); startPage(); }
+      tableHeading();
+    }
     data.entries.forEach((entry, rowIndex) => {
       const cells = entryCells(entry);
-      if (y + height(cells) > rowLimit && y > pageStart) { finishPage(); startPage(); }
+      if (y + height(cells) > rowLimit && y > pageStart) nextTablePage();
       while (cells.some(cell => cell.length)) {
         const available = rowLimit - y - 16;
         const chunk = cells.map(cell => {
@@ -197,7 +219,7 @@ const PhonebookPDF = (() => {
         });
         y += rowHeight; rule(y);
         if (cells.some(cell => cell.length)) {
-          finishPage(); startPage();
+          nextTablePage();
           // Keep continued labels associated with their person and shortcut.
           if (!cells[0].length) cells[0] = cell(`${entry.name} (continued)`, 13, true, widths[0]);
           if (!cells[1].length) cells[1] = cell(entry.extension, 9, false, widths[1]);
@@ -205,7 +227,7 @@ const PhonebookPDF = (() => {
         }
       }
     });
-    if (!data.entries.length && data.empty) { paragraph(data.empty, 12); y += 10; }
+    if (!data.entries.length && data.empty) flowingParagraph(data.empty, 12);
     finishPage();
     return doc;
   }

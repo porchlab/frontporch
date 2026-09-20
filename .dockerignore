@@ -11,3 +11,4 @@ asterisk/spool/*
 asterisk/sounds/*
 !asterisk/sounds/.empty
 staticfiles/
+**/node_modules/

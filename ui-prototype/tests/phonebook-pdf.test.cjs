@@ -1,25 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
-const {root} = require('./harness.cjs');
-const {jsPDF} = require(path.join(root, 'vendor/jspdf.umd.min.js'));
+const {render, insidePages} = require('./phonebook-pdf-harness.cjs');
 
-function render(data, options) {
-  const drawn = [];
-  const context = vm.createContext({jspdf:{jsPDF:function(...args) {
-    const doc = new jsPDF(...args), text = doc.text.bind(doc);
-    doc.text = (value, x, y, ...rest) => {
-      drawn.push({value, x, y, page:doc.getNumberOfPages(), size:doc.getFontSize(), width:doc.getTextWidth(String(value))});
-      return text(value, x, y, ...rest);
-    };
-    return doc;
-  }}});
-  for (const file of ['phonebook-fonts.js', 'phonebook-pdf.js']) vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context);
-  const doc = vm.runInContext('PhonebookPDF', context).create(data, options);
-  return {doc, drawn};
-}
 const sample = () => ({
   title:'Casey’s phonebook.', identity:'Bedroom phone · My extension 4754',
   guide:['Pick up the phone. Dial an extension or use a shortcut.'],
@@ -31,13 +13,6 @@ const sample = () => ({
   empty:'', reminders:['Quiet hours still apply. If a call doesn’t connect, ask a grown-up.', 'FrontPorch cannot call 911. Use another phone for emergencies.'],
   metadata:['Made Sep 20, 2026 · Reprint when your circle changes.', 'FrontPorch demo · Fictional data.'],
 });
-function insidePages(doc, drawn) {
-  const pageWidth=doc.internal.pageSize.getWidth(), pageHeight=doc.internal.pageSize.getHeight();
-  for (const {value, x, y, width} of drawn) {
-    assert(x >= 36 && x + width <= pageWidth - 36, `Text outside horizontal margins: ${value}`);
-    assert(y >= 36 && y <= pageHeight - 36, `Text outside vertical margins: ${value}`);
-  }
-}
 test('direct PDFs embed fonts and preserve approved names, extensions and shortcuts on Letter and A4', () => {
   for (const paper of ['letter', 'a4']) for (const color of [false, true]) {
     const {doc, drawn} = render(sample(), {paper, color});
@@ -70,6 +45,22 @@ test('long lists repeat identity, headings and reminders without missing or spli
       const values=drawn.filter(item=>item.page===page).map(item=>item.value);
       assert(values.includes(data.identity)); assert(values.includes('WHO TO CALL')); assert(values.includes(data.reminders[1]));
     }
+    insidePages(doc,drawn);
+  }
+});
+test('long names and landline guides paginate before the first row without losing any number', () => {
+  const data=sample();
+  data.title=`${'W'.repeat(200)}’s phonebook.`;
+  data.identity=`${'W'.repeat(200)} · My extension 4754`;
+  const numbers=Array.from({length:100},(_,i)=>`+12025550${String(100+i).padStart(3,'0')}`);
+  data.guide=[`First, call FrontPorch: ${numbers.join(' or ')}`, 'At the menu, dial an extension or shortcut below.'];
+  for (const paper of ['letter','a4']) for (const entries of [data.entries, []]) {
+    const {doc,drawn}=render({...data,entries,empty:entries.length ? '' : 'No calls available yet.'},{paper});
+    if (entries.length) assert(doc.getNumberOfPages()>1);
+    const text=drawn.map(item=>item.value).join('\n');
+    for(const number of numbers) assert.equal(text.split(number).length-1,1,`Missing or repeated ${number}`);
+    assert(text.includes(data.guide[1]));
+    for(const entry of entries) assert(drawn.some(item=>item.value===entry.name));
     insidePages(doc,drawn);
   }
 });

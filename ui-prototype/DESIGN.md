@@ -108,12 +108,18 @@ eligibility, phonebook extensions and shortcuts, and child-pair revocation again
 the browser model. This is an executable guard against permission drift;
 it does not claim that two separate implementations can never diverge.
 
-PDF follow-up verification on 2026-09-20: 31 Node checks and all 278 Django tests
+PDF follow-up verification on 2026-09-20: 34 Node checks and all 279 Django tests
 passed. Chromium and WebKit downloads worked with the Pages security headers and
 made no PDF network requests. Sample PDFs rendered identically in both engines.
 Checks covered Letter/A4, both styles, 320/390-pixel layouts, long lists, Unicode
 names, missing sources, and real Django device/landline pages. Node tests exercise
 oversized rows, repeated identity and reminders, embedded fonts, and text bounds.
+Review regressions additionally cover maximum-length child/device names with
+100 dial-in numbers, including cards without entries. Calling guides flow across
+pages before the table starts. DOM integration checks render the real Django
+template (device, empty, inactive, landline menu, direct call, and pending dial-in)
+and demo cards, then run `readCard()` and the PDF generator. The locked LinkeDOM
+dependency is used only by tests.
 The PDF follow-up has not been published.
 
 Verified on 2026-09-19: 21 Node behavior/rendering checks and the full

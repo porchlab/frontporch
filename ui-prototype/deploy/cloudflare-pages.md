@@ -114,6 +114,7 @@ development environment. Use `frontporch.settings` and a local PostgreSQL
 `DATABASE_URL` whose role can create a test database, not production credentials:
 
 ```sh
+npm ci --prefix ui-prototype --ignore-scripts
 uv run --frozen python manage.py export_browser_demo
 uv run --frozen python manage.py export_browser_demo --check
 node --test ui-prototype/tests/*.test.cjs
