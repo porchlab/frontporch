@@ -10,6 +10,8 @@ services:
     healthcheck:
       disable: true
     volumes:
+      # Includes AstDB's registered phone contacts; retain across replacements.
+      - asterisk-data:/var/lib/asterisk
       - ${ASTERISK_ETC_DIR:?set ASTERISK_ETC_DIR}:/etc/asterisk
       - ${ASTERISK_CONF_D_DIR:?set ASTERISK_CONF_D_DIR}:/etc/asterisk/conf.d
       - ${ASTERISK_LOG_DIR:?set ASTERISK_LOG_DIR}:/var/log/asterisk
@@ -96,5 +98,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  asterisk-data:
+    name: ${ASTERISK_VOLUME_NAME:-frontporch-asterisk-data}
   postgres-data:
     name: ${POSTGRES_VOLUME_NAME:-frontporch-postgres}
