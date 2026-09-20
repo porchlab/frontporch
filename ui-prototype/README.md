@@ -27,6 +27,11 @@ copy of the original tab's session, but subsequent changes are independent.
 - Open **Demo tools** to simulate installer activation. **Enabled** describes
   configuration, not observed phone registration. Pending phones can have saved
   shortcuts, but only enabled destination phones appear in the picker.
+- Choose **Print phonebook** on a child's phone or shortcut page. The card uses
+  this tab's current approved extensions and that phone's active shortcuts.
+  Black and white is the default; choose **Color** for a more playful printout.
+  Print on Letter or A4 paper. Changing connections, contacts, or shortcuts and
+  reopening the preview updates the card. Printed cards are marked as fictional.
 - Add, edit, and pause multiple quiet-hour schedules. The fictional phone system
   uses **America/New_York**, explicitly shown on screen, independent of your browser.
 - Review the Cedar invitation and select children. Each selected sender child is
@@ -55,7 +60,7 @@ retaining household details, contacts, connections, shortcuts, and quiet hours.
 ## Keeping Django and the demo aligned
 
 Django is the source of truth for the product. The demo consumes generated copies
-of its **complete stylesheet, fonts, favicon, icons, form definitions, and welcome
+of its **complete stylesheet, print styles, fonts, favicon, icons, form definitions, and welcome
 page content**. Form labels, required flags, lengths, help, options, and defaults
 come from the real Django forms. For example, changing “Guardian name” in Django
 updates the demo after exporting; there is no second label to edit.
@@ -87,10 +92,11 @@ Cloudflare Pages. Neither workflow commits generated changes back to Git.
 
 | File | Ownership |
 | --- | --- |
-| `dist/styles.css`, `dist/fonts/`, `dist/favicon.svg` | Generated from Django static assets; do not edit here |
+| `dist/styles.css`, `dist/phonebook.css`, `dist/phonebook-print.js`, `dist/fonts/`, `dist/favicon.svg` | Generated from Django static assets; do not edit here |
 | `dist/portal-contract.js` | Generated icons, forms, and welcome content; do not edit |
 | `dist/model.js` | Fictional state, transitions, storage, and old-session migration |
 | `dist/app.js` | Browser rendering and interactions |
+| `dist/phonebook.html`, `dist/phonebook-page.js` | Standalone preview using tab state and shared print styles |
 | `dist/demo.css`, `dist/index.html` | Demo toolbar, preview controls, and dialog adaptations |
 | `tests/` | Browser state and cross-runtime scenario checks |
 

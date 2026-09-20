@@ -107,6 +107,8 @@ def exported_assets():
             + ";\n"
         ).encode(),
         "styles.css": static.joinpath("portal.css").read_bytes(),
+        "phonebook.css": static.joinpath("phonebook.css").read_bytes(),
+        "phonebook-print.js": static.joinpath("phonebook.js").read_bytes(),
         "favicon.svg": static.joinpath("favicon.svg").read_bytes(),
     }
     for path in sorted(static.joinpath("fonts").iterdir()):

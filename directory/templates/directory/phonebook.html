@@ -1,0 +1,90 @@
+{% load static portal_tags %}
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="robots" content="noindex,nofollow">
+        <title>{{ child.name }}’s phonebook · FrontPorch</title>
+        <link rel="icon" href="{% static 'directory/favicon.svg' %}" type="image/svg+xml">
+        <link rel="stylesheet" href="{% static 'directory/phonebook.css' %}">
+        <script src="{% static 'directory/phonebook.js' %}" defer></script>
+    </head>
+    <body class="{% if color %}color{% else %}monochrome{% endif %}">
+        <div class="print-controls">
+            <a class="back-link" href="{% url 'directory:child_detail' child.id %}">← Back to {{ child.name }}’s phones</a>
+            <div class="toolbar">
+                <form method="get">
+                    <label for="print-style">Print style</label>
+                    <select name="style" id="print-style">
+                        <option value="bw"{% if not color %} selected{% endif %}>Black &amp; white · low ink</option>
+                        <option value="color"{% if color %} selected{% endif %}>Color · a little more fun</option>
+                    </select>
+                    <button type="submit">Update preview</button>
+                </form>
+                <button type="button" class="print-button" data-print hidden>Print phonebook</button>
+            </div>
+            <p>Print at 100% on Letter or A4 paper, then trim around the border. Longer phonebooks continue onto another page. Turn off browser headers and footers for a clean card.</p>
+            <noscript><p>Use your browser’s Print command to print this card.</p></noscript>
+        </div>
+        <main class="phonebook" aria-label="{{ child.name }}’s phonebook">
+            <header class="card-heading">
+                <div class="wordmark">{% icon 'home' %} FrontPorch <span>A little more hello.</span></div>
+                <div class="card-title">
+                    <div>
+                        <h1>{{ child.name }}’s<br>phonebook.</h1>
+                        <p>{{ phone_name }} · My extension <strong>{{ phone_extension }}</strong></p>
+                    </div>
+                    <span class="phone-drawing" aria-hidden="true">{% icon 'phone' %}<span>hello!</span></span>
+                </div>
+            </header>
+            <section class="calling-guide" aria-label="How to call">
+                {% if not phone_active %}
+                    <p><strong>This phone is not enabled yet.</strong> Print a new card after your installer activates it.</p>
+                {% elif is_landline %}
+                    {% if dial_in_numbers %}
+                        <p><strong>First, call FrontPorch:</strong> {{ dial_in_numbers|join:" or " }}</p>
+                        {% if direct_call %}
+                            <p>Your call connects directly to {{ entries.0.name }}. No extension or shortcut is needed.</p>
+                        {% else %}
+                            <p>At the menu, dial an <strong>extension</strong> or a <strong>shortcut</strong> below.</p>
+                        {% endif %}
+                    {% else %}
+                        <p><strong>FrontPorch dial-in is not set up yet.</strong> Ask your installer to set it up, then print a new card.</p>
+                    {% endif %}
+                {% else %}
+                    <p>Pick up the phone. Dial an <strong>extension</strong> or use a <strong>shortcut</strong>.</p>
+                {% endif %}
+            </section>
+            {% if entries %}
+                <table>
+                    <colgroup><col class="person-column"><col class="extension-column"><col class="shortcut-column"></colgroup>
+                    <thead>
+                        <tr class="print-identity"><td colspan="3">{{ child.name }}’s phonebook · {{ phone_name }} · My extension {{ phone_extension }}</td></tr>
+                        <tr><th scope="col">Who to call</th><th scope="col">Extension</th><th scope="col">Shortcut</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in entries %}
+                            {% if forloop.last %}</tbody><tbody class="phonebook-ending">{% endif %}
+                            <tr>
+                                <td><strong class="person-name">{{ entry.name }}</strong><span class="entry-description">{{ entry.description }}</span></td>
+                                <td class="extension">{% if entry.extension %}{{ entry.extension }}{% else %}<span class="no-extension">Use shortcut</span>{% endif %}</td>
+                                <td>
+                                    {% for shortcut in entry.shortcuts %}
+                                        <span class="shortcut"><b>{{ shortcut.digits }}</b>{% if shortcut.label and shortcut.label != entry.name %}<span>{{ shortcut.label }}</span>{% endif %}</span>
+                                    {% empty %}
+                                        <span class="no-shortcut" aria-label="No shortcut">—</span>
+                                    {% endfor %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        <tr class="footer-row"><td colspan="3">{% include "directory/phonebook_footer.html" %}</td></tr>
+                    </tbody>
+                </table>
+            {% elif phone_active %}
+                <div class="empty-phonebook"><h2>No calls available yet.</h2><p>Ask a parent or guardian to check your connections and contacts, then print a new card.</p></div>
+            {% endif %}
+            {% if not entries %}{% include "directory/phonebook_footer.html" %}{% endif %}
+        </main>
+    </body>
+</html>

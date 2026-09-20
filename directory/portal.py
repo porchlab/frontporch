@@ -7,9 +7,12 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q, Prefetch
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_POST
+from django.utils import timezone
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_POST, require_safe
 
 from . import forms, models
+from . import phonebook as phonebook_service
 from .services import (
     record_activity,
     shortcut_destination_allowed,
@@ -90,6 +93,57 @@ def child_detail(request, child_id):
     child = get_object_or_404(_children(parent.family), pk=child_id)
     return render(
         request, "directory/child_detail.html", {"child": child, "section": "children"}
+    )
+
+
+@never_cache
+@login_required
+@require_safe
+def phonebook(request, device_id):
+    parent = _require_parent(request)
+    device = get_object_or_404(
+        models.Device.objects.select_related("assigned_child__family"),
+        pk=device_id,
+        assigned_child__family=parent.family,
+    )
+    return render(
+        request,
+        "directory/phonebook.html",
+        {
+            "child": device.assigned_child,
+            "phone_name": device.friendly_name,
+            "phone_extension": device.sip_extension,
+            "phone_active": device.is_active,
+            "entries": phonebook_service.device_phonebook(device),
+            "color": request.GET.get("style") == "color",
+            "printed_on": timezone.localdate(),
+        },
+    )
+
+
+@never_cache
+@login_required
+@require_safe
+def landline_phonebook(request, landline_id):
+    parent = _require_parent(request)
+    landline = get_object_or_404(
+        models.ChildLandline.objects.select_related("child__family"),
+        pk=landline_id,
+        child__family=parent.family,
+    )
+    return render(
+        request,
+        "directory/phonebook.html",
+        {
+            "child": landline.child,
+            "phone_name": "Landline",
+            "phone_extension": landline.dial_extension,
+            "phone_active": landline.is_active,
+            "is_landline": True,
+            **phonebook_service.landline_phonebook(landline),
+            "color": request.GET.get("style") == "color",
+            "printed_on": timezone.localdate(),
+        },
     )
 
 

@@ -5,14 +5,14 @@ const path = require('node:path');
 const vm = require('node:vm');
 const {runtime, root} = require('./harness.cjs');
 
-function ui() {
+function ui({phonebook = false} = {}) {
   const {context} = runtime();
   const listeners = {}, nodes = new Map();
-  const node = () => ({hidden:false, innerHTML:'', textContent:'', classList:{add() {}, remove() {}}, focus() {}, scrollIntoView() {}, close() {}, showModal() {}});
+  const node = () => ({hidden:false, innerHTML:'', textContent:'', classList:{add() {}, remove() {}}, setAttribute() {}, addEventListener() {}, focus() {}, scrollIntoView() {}, close() {}, showModal() {}});
   Object.assign(context, {
-    document:{addEventListener(name, handler) { listeners[name] = handler; }, querySelector(selector) { if (!nodes.has(selector)) nodes.set(selector, node()); return nodes.get(selector); }},
+    document:{body:{}, addEventListener(name, handler) { listeners[name] = handler; }, querySelector(selector) { if (!nodes.has(selector)) nodes.set(selector, node()); return nodes.get(selector); }},
     window:{sessionStorage:{getItem() {return null;}, setItem() {}}, addEventListener() {}, scrollTo() {}},
-    location:{hash:'#family/overview'}, setTimeout() {}, clearTimeout() {},
+    location:{hash:'#family/overview', search:'?phone=casey-phone', pathname:'/phonebook.html'}, URLSearchParams, setTimeout() {}, clearTimeout() {},
     FormData:class {
       constructor(form) { this.values = form.values; }
       get(key) { return this.values[key] ?? null; }
@@ -20,7 +20,7 @@ function ui() {
       getAll(key) { return [].concat(this.values[key] || []); }
     },
   });
-  for (const file of ['portal-contract.js', 'app.js']) vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context);
+  for (const file of ['portal-contract.js', phonebook ? 'phonebook-page.js' : 'app.js']) vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context);
   return {context, nodes, listeners, run:script => vm.runInContext(script, context)};
 }
 
@@ -33,6 +33,29 @@ test('all workspace renderers work with populated and empty households', () => {
   for (const page of ['overview', 'childrenPage', 'connectionsPage', 'directoryPage', 'invitationsPage', 'contactsPage', 'settingsPage']) {
     assert.match(run(`${page}()`), /<h1>/);
   }
+});
+test('phonebook links appear on child cards, child details and shortcut pages', () => {
+  const {run} = ui();
+  assert.match(run('childrenPage()'), /phonebook.html\?phone=casey-phone/);
+  assert.match(run('detailId="casey"; childPage()'), /phonebook.html\?phone=casey-phone/);
+  assert.match(run('detailId="casey-phone"; shortcutsPage()'), /phonebook.html\?phone=casey-phone/);
+});
+test('phonebooks escape all family values, keep the final row with the footer and handle unavailable sources', () => {
+  const {run, context, nodes} = ui({phonebook:true});
+  assert.equal(context.document.body.className, 'monochrome');
+  assert.match(nodes.get('#main').innerHTML, /Fictional data/);
+  assert.match(nodes.get('#main').innerHTML, /phonebook-ending/);
+  const html = run(`(() => {
+    const data=Demo.seed(), value='<img src=x onerror=alert(1)>';
+    data.family=value; data.children[0].name=value; data.children[0].devices[0].name=value;
+    data.contacts[0].name=value; data.children[0].devices[0].shortcuts[0].label=value;
+    return phonebookCard(data, 'casey-phone');
+  })()`);
+  assert(!html.includes('<img src=x')); assert(html.includes('&lt;img src=x'));
+  assert(!html.includes('+1202555'));
+  assert.match(run(`phonebookCard(Demo.seed(), 'river-phone-0')`), /Phone not found/);
+  assert.match(run(`(() => { const data=Demo.seed(); data.children[0].devices[0].active=false; return phonebookCard(data, 'casey-phone'); })()`), /not enabled yet/);
+  assert.match(run(`(() => { const data=Demo.seed(); data.contacts=[]; data.connections=[]; return phonebookCard(data, 'casey-phone'); })()`), /No calls available yet/);
 });
 test('family, child, contact and guardian values are escaped wherever rendered', () => {
   const {run} = ui();
