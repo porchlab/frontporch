@@ -225,10 +225,13 @@ class AsteriskConfigRenderer:
         return ""
 
     def _render_outbound_caller_id_context(self):
+        # On a called PJSIP channel, CONNECTEDLINE is the identity sent to the
+        # remote phone; CALLERID describes that remote phone instead. The `i`
+        # option updates the pending INVITE without sending a separate update.
         return [
             "[frontporch-outbound-caller-id]",
             'exten => s,1,ExecIf($["${CHANNEL(endpoint)}" = "voipms-endpoint"]'
-            "?Set(CALLERID(num)=${ARG1}))",
+            "?Set(CONNECTEDLINE(num,i)=${ARG1}))",
             " same => n,Return()",
             "",
         ]

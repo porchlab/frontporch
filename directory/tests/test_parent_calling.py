@@ -115,7 +115,7 @@ class ParentCallingTests(TestCase):
         self.assertEqual(
             handler.strip(),
             'exten => s,1,ExecIf($["${CHANNEL(endpoint)}" = "voipms-endpoint"]'
-            "?Set(CALLERID(num)=${ARG1}))\n"
+            "?Set(CONNECTEDLINE(num,i)=${ARG1}))\n"
             " same => n,Return()",
         )
 

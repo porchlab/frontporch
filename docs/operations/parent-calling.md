@@ -14,6 +14,12 @@ mobile calling. Staff can manage the same setting in Django Admin.
 Only active FrontPorch devices ring. Both rings those devices and the saved phone
 number simultaneously using the existing outbound trunk. Mobile voicemail can
 answer before another device; there is no separate answer-confirmation step.
+Internal phones receive the child's extension as caller ID. When a provider
+caller ID is configured, it applies only to the mobile leg. The pre-dial handler
+uses `CHANNEL(endpoint)` to identify that leg and `CONNECTEDLINE(num,i)` to set
+the identity in its outgoing SIP request. Run the isolated runtime regression
+with `uv run python -m deploy.test_parent_caller_id` after building the test image
+as described in [the test script](../../deploy/test_parent_caller_id.py).
 Disabled removes the destination and its shortcuts from generated call routes and
 phonebooks. It does not disable a parent's devices as callers or remove their
 number's existing recognition for incoming calls to FrontPorch.
