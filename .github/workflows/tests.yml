@@ -64,8 +64,123 @@ jobs:
           python -m unittest discover -s tests/deployment -v
           sh -n deploy/automation/receive.sh
 
-  deploy:
+  image-check:
+    needs: deployment-policy
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        with:
+          driver: docker
+      - name: Build Django image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          load: true
+          tags: frontporch-web:ci
+          platforms: linux/amd64
+      - name: Build Asterisk image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: asterisk/Dockerfile
+          load: true
+          tags: frontporch-asterisk:registration-test
+          platforms: linux/amd64
+      - name: Exercise both images without publishing
+        run: |
+          python deploy/test_release_image.py frontporch-web:ci
+          python deploy/test_asterisk_registration.py
+
+  images:
     needs: [tests, deployment-policy]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'porchlab/frontporch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: frontporch-images
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      web_digest: ${{ steps.web.outputs.digest }}
+      asterisk_digest: ${{ steps.existing.outputs.digest || steps.asterisk.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        with:
+          driver: docker
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Reuse the published image for unchanged Asterisk build inputs
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PBX_TAG: inputs-${{ hashFiles('asterisk/Dockerfile', 'asterisk/core-sounds-entrypoint.sh', '.dockerignore') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh api --paginate /orgs/porchlab/packages/container/frontporch-asterisk/versions \
+              > "$RUNNER_TEMP/pbx-versions.json" 2> "$RUNNER_TEMP/pbx-error"; then
+            digest=$(jq -r --arg tag "$PBX_TAG" '.[] | select(.metadata.container.tags | index($tag)) | .name' "$RUNNER_TEMP/pbx-versions.json")
+            if [[ -n "$digest" ]]; then
+              [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+              echo "digest=$digest" >> "$GITHUB_OUTPUT"
+            fi
+          elif ! grep -q '(HTTP 404)' "$RUNNER_TEMP/pbx-error"; then
+            cat "$RUNNER_TEMP/pbx-error" >&2
+            exit 1
+          fi
+      - name: Publish changed Asterisk image
+        id: asterisk
+        if: steps.existing.outputs.digest == ''
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: asterisk/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ghcr.io/porchlab/frontporch-asterisk:inputs-${{ hashFiles('asterisk/Dockerfile', 'asterisk/core-sounds-entrypoint.sh', '.dockerignore') }}
+          labels: org.opencontainers.image.source=https://github.com/porchlab/frontporch
+      - name: Publish Django image
+        id: web
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/porchlab/frontporch:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/porchlab/frontporch
+            org.opencontainers.image.revision=${{ github.sha }}
+      - name: Validate the published images before authorizing deployment
+        env:
+          WEB_DIGEST: ${{ steps.web.outputs.digest }}
+          ASTERISK_DIGEST: ${{ steps.existing.outputs.digest || steps.asterisk.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$WEB_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$ASTERISK_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          docker pull "ghcr.io/porchlab/frontporch@$WEB_DIGEST"
+          docker pull "ghcr.io/porchlab/frontporch-asterisk@$ASTERISK_DIGEST"
+          python deploy/test_release_image.py "ghcr.io/porchlab/frontporch@$WEB_DIGEST"
+          FRONTPORCH_ASTERISK_TEST_IMAGE="ghcr.io/porchlab/frontporch-asterisk@$ASTERISK_DIGEST" \
+            python deploy/test_asterisk_registration.py
+
+  deploy:
+    needs: [tests, deployment-policy, images]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'porchlab/frontporch' && vars.PRODUCTION_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -113,10 +228,14 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          WEB_DIGEST: ${{ needs.images.outputs.web_digest }}
+          ASTERISK_DIGEST: ${{ needs.images.outputs.asterisk_digest }}
         shell: bash
         run: |
           set -euo pipefail
           [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$WEB_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$ASTERISK_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
           [[ "$DEPLOY_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]
           umask 077
@@ -129,7 +248,7 @@ jobs:
               -o UserKnownHostsFile="$work/known_hosts" -o GlobalKnownHostsFile=/dev/null \
               -o ClearAllForwardings=yes -o ConnectTimeout=15 \
               -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
-              "$DEPLOY_HOST" "$GITHUB_SHA" > "$work/result" 2>&1; then
+              "$DEPLOY_HOST" "$GITHUB_SHA $WEB_DIGEST $ASTERISK_DIGEST" > "$work/result" 2>&1; then
             echo "Deployed revision $GITHUB_SHA; host verification passed." >> "$GITHUB_STEP_SUMMARY"
           else
             echo '::error::Deployment failed. Inspect private host deployment logs.'

@@ -2,21 +2,78 @@
 
 After an owner-controlled merge, the Tests workflow deploys the exact tested
 `main` revision through an ephemeral GitHub-hosted Tailscale client. The private
-host accepts a single commit SHA through a forced SSH command; it independently
-verifies the latest main revision and successful `tests`, `deployment-policy`,
-and `parity` jobs. No production connection is available to PR tests or reviewers.
+host accepts a commit SHA and two image digests through a forced SSH command;
+it independently verifies the latest main revision and successful `tests`,
+`deployment-policy`, `images`, and `parity` jobs. No production connection is
+available to PR tests or reviewers.
 
-The public portal uses both Compose files. Ordinary deployments recreate web and
-portal, run migrations through web startup, refresh ingress, and render/reload
+Production uses `compose.yaml`, `compose.public.yaml`, and `compose.registry.yaml`,
+in that order. Ordinary deployments recreate web and portal, run migrations
+through web startup, refresh ingress, and render/reload
 Asterisk configuration. Compose recreates Asterisk only for image/service changes.
 PostgreSQL stays running. Brief application downtime is expected; PBX image changes
 can interrupt calls. Superseded queued revisions are skipped.
 
+## Registry images
+
+The Tests workflow builds `linux/amd64` images on GitHub-hosted runners with the
+standard Docker build/push actions. PRs build and test without registry write
+access. On main, the separate `images` job publishes to GHCR and tests the actual
+published digests before deployment can run. It has `contents: read` and
+`packages: write` using its ephemeral `GITHUB_TOKEN`; it has no production
+environment, Tailscale identity, or deployment secrets. The Docker driver uses
+the runner's existing daemon without adding a privileged BuildKit container.
+
+- `ghcr.io/porchlab/frontporch:sha-<full-commit>` supplies both web and portal.
+- `ghcr.io/porchlab/frontporch-asterisk:inputs-<hash>` changes only when its
+  Dockerfile, entrypoint, or build-context exclusions change. A matching published
+  package version is reused, so Django-only updates keep the exact PBX digest.
+  If future Dockerfile changes copy additional inputs, add those paths to both
+  `hashFiles` expressions in the workflow. Base-image updates require changing
+  the reviewed Dockerfile digest; mutable upstream tags cannot refresh it silently.
+
+The build action's digest outputs feed the deploy job. The SSH request is exactly
+`<40-character-commit> sha256:<64-hex-web-digest> sha256:<64-hex-asterisk-digest>`,
+with single spaces. The forced command rejects malformed or extra input before
+accessing Docker. It fixes both GHCR repository names, verifies main and its
+successful jobs independently, pulls the supplied digests, checks the Django
+revision and both source labels, and rechecks main before backup/migrations.
+Labels are consistency checks, not cryptographic provenance: workflow and package
+writers remain trusted release publishers. No host registry token is required.
+
+Both packages must be public for anonymous host pulls. They contain repository
+code and public dependencies only. Database state, generated phone configuration,
+private prompts, AstDB, and secrets stay in the existing private mounts/volumes.
+Keep the package write ACL restricted to trusted publishers; never grant PR jobs
+write access. Public GHCR packages support anonymous pulls, but newly published
+packages initially default to private ([GitHub registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)).
+
+The receiver writes validated references to private `state/target-images.env`.
+The registry overlay removes all application `build` declarations; startup also
+uses `--no-build --pull never`. A failed pull stops before migrations or service
+replacement. Successful deployments record `deployed-images.env`, preserving the
+previous references in `previous-images.env`. Retain these image versions in GHCR
+for the operator recovery period; do not automatically prune deployed images.
+
+Local development keeps the original source-build Compose workflow. To inspect
+or manage an installed registry deployment, use the same project name and files:
+
+```sh
+docker compose --env-file .env --env-file /private/deploy-state/deployed-images.env \
+  -f compose.yaml -f compose.public.yaml -f compose.registry.yaml ps
+```
+
+Use `target-images.env` when examining a partial deployment, after inspecting its
+private log and stage; it may differ from the last successful release. Substitute
+the actual private state path. The checked-out source still provides Compose and
+ingress configuration, so its revision must match the selected images.
+
 ## Phone registration continuity
 
-The PBX step runs `compose up -d --no-deps asterisk`, without `--force-recreate`.
-Building an unchanged Asterisk image does not by itself restart the service.
-The following `render_asterisk_config --reload` runs `module reload res_pjsip.so`
+The PBX step runs `compose up -d --no-build --pull never --no-deps asterisk`,
+without `--force-recreate`. Pulling an unchanged Asterisk digest does not by itself
+restart the service. The following `render_asterisk_config --reload` runs
+`module reload res_pjsip.so`
 and `dialplan reload` through AMI; neither command restarts Asterisk. Keep this
 distinction when changing deployment scripts. Container replacements and process
 restarts can still interrupt active calls and belong in a maintenance window.
@@ -138,6 +195,9 @@ require successful tests, policy, and parity jobs before deploying. Agents must
 not merge or exercise the bypass without explicit owner authorization for that
 action. Required checks use GitHub Actions as their expected source (15368).
 
+Deployment additionally requires the main-push `images` job. The PR `image-check`
+job exercises builds and real container tests; review its result before merging.
+
 The owner retains administrative power to change settings. Protect their account,
 and keep this team restricted to that person. Agent review is advisory; its check
 can be added separately when the reviewer integration is ready.
@@ -243,8 +303,30 @@ uv run --no-project --with PyYAML==6.0.3 python -m unittest discover -s tests/de
 sh -n deploy/automation/receive.sh
 ```
 
-Verify malformed commands, a short SHA, shell access, PTY, and forwarding are
-rejected by the actual deployment key. Verify Tailscale policy tests and existing
+For the first transition from host builds to registry images:
+
+1. Disable deployment before merging this change. The previous host receiver
+   cannot accept the new three-field request. Existing services keep running.
+2. After the owner merges, let the main `images` job publish and validate both
+   packages. Set each package's visibility to public through the owner's package
+   settings, retaining restricted write access. Confirm anonymous digest pulls
+   work on the host and that its architecture is `linux/amd64`.
+3. Install reviewed copies of `receive.sh` and `verify_revision.py` outside the
+   checkout through the existing administrator connection. The forced-command
+   wrapper and SSH restrictions remain the same: the original command is still
+   passed as one quoted argument. No automatic script installation or access
+   changes occur in CI.
+4. Re-enable deployment and re-run **all jobs** of the successful main Tests run
+   to populate the image outputs. The first registry deployment can replace
+   Asterisk once because its image reference changes; choose a maintenance
+   window and preserve the registration volume described above.
+
+If another commit reaches main before activation, use its successful push run.
+The receiver never accepts a superseded revision, even during this transition.
+
+Verify malformed commands, short SHAs, malformed/extra digests, shell access,
+PTY, and forwarding are rejected by the actual deployment key. Verify Tailscale
+policy tests and existing
 administrator connectivity. Confirm the private host has a current off-NAS backup
 and tested restore procedure as required by the [portal runbook](public-portal.md).
 
@@ -253,8 +335,9 @@ check. Install or refresh the host-owned script copies from that reviewed revisi
 over the administrator connection, including any fixes made during PR review.
 Then create the private `state/enabled` marker and set the repository
 variable to `true`. Re-run the successful main Tests workflow to exercise the
-first deployment. Its underlying event remains `push`; no workflow-dispatch
-deployment entrypoint is added. Verify both app services change and ordinary
+first deployment (re-run all jobs to supply both image outputs). Its underlying
+event remains `push`; no workflow-dispatch deployment entrypoint is added.
+Verify both app services change and ordinary
 deployments preserve the database and unchanged Asterisk container IDs.
 
 The production job performs no checkout, evaluates no PR content, and retains no
@@ -279,7 +362,7 @@ manually removing a stale lock.
 The host writes `state/failed` before changing the checkout. Any later failure
 blocks automatic retries until an operator examines the private log, current
 containers, migrations, and backup. The marker is removed only after the final
-completion stage is successfully recorded. Build/backup failures do not restart services.
+completion stage is successfully recorded. Pull/backup failures do not restart services.
 Migrations and partial startup failures can leave mixed versions; do not blindly
 retry or automatically reverse migrations. GitHub/API failures before changes
 fail closed without latching recovery.
@@ -289,7 +372,11 @@ migrations. They remain private on the NAS; retain/copy/prune them under the
 existing operator backup policy. They supplement, not replace, off-NAS backups.
 For rollback, disable deployment, select the recorded previous revision, establish
 schema compatibility (or restore through the tested restore procedure), and use
-the manual portal deployment runbook. The automatic command intentionally rejects
+the manual portal deployment runbook with the registry overlay and recorded
+`previous-images.env`. Restore the matching reviewed source revision for Compose
+and ingress files, pull the recorded digests, and use `--no-build --pull never`
+after pulling. Never rebuild an old tag or assume reversing an image reverses a
+migration. The automatic command intentionally rejects
 old SHAs. After recovery, verify services and remove `state/failed`; then re-enable
 and re-run a successful main workflow if a deployment is still needed.
 

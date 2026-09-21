@@ -304,6 +304,12 @@ FrontPorch does not control calls the child places directly from that landline o
 
 The included Compose files are development scaffolding for Django, PostgreSQL, and Asterisk.
 
+Automatic production deployments build and validate images in GitHub Actions,
+publish to GHCR, and pull exact image digests on the host. Web and portal share
+one Django image; unchanged Asterisk images are reused. Production adds
+`compose.registry.yaml` after the base and public overlays. See the
+[registry deployment and rollout instructions](docs/operations/automatic-deployment.md#registry-images).
+
 Create a private `.env` from `.env.example`, replace placeholder secrets, and bind services only to private addresses such as a Tailscale address:
 
 ```dotenv

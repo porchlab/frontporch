@@ -7,7 +7,7 @@ import time
 from urllib.request import Request, urlopen
 
 
-REQUIRED_JOBS = {"tests.yml": ("tests", "deployment-policy"), "browser-demo.yml": ("parity",)}
+REQUIRED_JOBS = {"tests.yml": ("tests", "deployment-policy", "images"), "browser-demo.yml": ("parity",)}
 
 
 def get_json(path):

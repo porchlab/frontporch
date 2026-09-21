@@ -46,14 +46,16 @@ def check(root):
     assert workflow["permissions"] == {"contents": "read"}, "Workflow permissions changed"
     assert workflow["jobs"]["deploy"] == expected["deploy"], "Deployment job differs from reviewed policy"
     assert workflow["jobs"]["deployment-policy"] == expected["deployment-policy"], "Policy job changed"
+    for name in ("images", "image-check"):
+        assert workflow["jobs"][name] == expected[name], "Image job differs from reviewed policy"
     assert set(workflow) == {"name", "on", "permissions", "jobs"}, "Unexpected workflow settings"
-    assert set(workflow["jobs"]) == {"tests", "deployment-policy", "deploy"}, "Unexpected job"
+    assert set(workflow["jobs"]) == {"tests", "deployment-policy", "image-check", "images", "deploy"}, "Unexpected job"
     for path in (root / ".github/workflows").glob("*.*"):
         data = read_workflow(path)
         assert not ({"pull_request_target", "workflow_run"} & data["on"].keys()), "Privileged trigger forbidden"
         assert data.get("permissions") == {"contents": "read"}, "Unexpected workflow permissions"
         for name, job in data["jobs"].items():
-            if path.name == "tests.yml" and name == "deploy":
+            if path.name == "tests.yml" and name in ("deploy", "images", "image-check"):
                 continue  # Entire job is compared above, including inline shell.
             assert job.get("runs-on") == "ubuntu-latest", "Only GitHub-hosted jobs allowed"
             assert "uses" not in job and "environment" not in job, "Unexpected reusable workflow/environment"

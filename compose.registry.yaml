@@ -1,0 +1,12 @@
+# Production overlay; use AFTER compose.yaml and compose.public.yaml.
+# The host-owned receiver supplies these digest references in a private env file.
+services:
+  web:
+    build: !reset null
+    image: ${FRONTPORCH_WEB_IMAGE:?set the release image digest}
+  portal:
+    build: !reset null
+    image: ${FRONTPORCH_WEB_IMAGE:?set the release image digest}
+  asterisk:
+    build: !reset null
+    image: ${FRONTPORCH_ASTERISK_IMAGE:?set the release image digest}
