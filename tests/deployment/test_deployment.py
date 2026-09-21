@@ -20,6 +20,9 @@ gate = module("verify_revision")
 policy = module("check_workflows")
 http = module("verify_http")
 SHA = "a" * 40
+WEB_DIGEST = "sha256:" + "c" * 64
+ASTERISK_DIGEST = "sha256:" + "d" * 64
+REQUEST = f"{SHA} {WEB_DIGEST} {ASTERISK_DIGEST}"
 
 
 class RevisionTests(unittest.TestCase):
@@ -34,7 +37,7 @@ class RevisionTests(unittest.TestCase):
                     "path": workflow_path or f".github/workflows/{file}",
                     "repository": {"full_name": "porchlab/frontporch"},
                     "head_repository": {"full_name": "porchlab/frontporch"}}]}
-            names = ("tests", "deployment-policy") if "/runs/1/" in path else ("parity",)
+            names = ("tests", "deployment-policy", "images") if "/runs/1/" in path else ("parity",)
             return {"jobs": [{"name": name, "status": "completed", "conclusion": conclusion} for name in names]}
         return get
 
@@ -58,6 +61,26 @@ class RevisionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             gate.authorized("porchlab/frontporch", "main; touch /tmp/no", lambda _: self.fail("network called"))
 
+    def test_missing_or_unsuccessful_publisher_cannot_authorize(self):
+        for conclusion in (None, "failure", "skipped", "cancelled"):
+            get = self.fixture()
+
+            def response(path):
+                data = get(path)
+                if "/runs/1/" in path:
+                    if conclusion is None:
+                        data["jobs"] = [job for job in data["jobs"] if job["name"] != "images"]
+                    else:
+                        data["jobs"][-1]["conclusion"] = conclusion
+                return data
+
+            with self.subTest(conclusion=conclusion):
+                if conclusion is None:
+                    self.assertFalse(gate.authorized("porchlab/frontporch", SHA, response))
+                else:
+                    with self.assertRaises(ValueError):
+                        gate.authorized("porchlab/frontporch", SHA, response)
+
 
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
@@ -79,7 +102,7 @@ class WorkflowTests(unittest.TestCase):
             ("environment: production", "environment: staging"),
             ("--accept-routes=false", "--accept-routes=true"),
             ("StrictHostKeyChecking=yes", "StrictHostKeyChecking=no"),
-            ("needs: [tests, deployment-policy]", "needs: []"),
+            ("needs: [tests, deployment-policy, images]", "needs: []"),
             ("cancel-in-progress: false", "cancel-in-progress: true"),
         ):
             with self.subTest(after=after):
@@ -87,6 +110,32 @@ class WorkflowTests(unittest.TestCase):
                 with self.assertRaises(AssertionError):
                     policy.check(self.root)
         file.write_text(original)
+
+    def test_publishing_permissions_and_guards_cannot_spread_to_pr_jobs(self):
+        import copy
+        import yaml
+
+        file = self.root / ".github/workflows/tests.yml"
+        original = policy.read_workflow(file)
+        for mutation in ("pr-publish", "pr-write", "production", "oidc", "no-tests", "mutable-action"):
+            workflow = copy.deepcopy(original)
+            images = workflow["jobs"]["images"]
+            if mutation == "pr-publish":
+                images["if"] = "github.event_name == 'pull_request'"
+            elif mutation == "pr-write":
+                workflow["jobs"]["image-check"]["permissions"] = {"contents": "read", "packages": "write"}
+            elif mutation == "production":
+                images["environment"] = "production"
+            elif mutation == "oidc":
+                images["permissions"]["id-token"] = "write"
+            elif mutation == "no-tests":
+                images["needs"] = []
+            else:
+                images["steps"][0]["uses"] = "actions/checkout@main"
+            with self.subTest(mutation=mutation):
+                file.write_text(yaml.safe_dump(workflow))
+                with self.assertRaises(AssertionError):
+                    policy.check(self.root)
 
     def test_rejects_new_credential_job(self):
         file = self.root / ".github/workflows/other.yml"
@@ -202,6 +251,15 @@ if [ -f "$(dirname "$0")/fail" ]; then
   case "$*" in *"$pattern"*) exit 1;; esac
 fi
 case "$*" in
+  *'org.opencontainers.image.revision'*)
+    if [ -f "$(dirname "$0")/wrong-revision" ]; then echo incorrect; else echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; fi;;
+  *'org.opencontainers.image.source'*)
+    if [ -f "$(dirname "$0")/wrong-source" ]; then echo incorrect; else echo https://github.com/porchlab/frontporch; fi;;
+  *'verify_revision.py'*)
+    if [ -f "$(dirname "$0")/superseded" ]; then
+      test ! -f "$(dirname "$0")/authorized-once" || exit 1
+      touch "$(dirname "$0")/authorized-once"
+    fi;;
   *'remote get-url origin'*) echo git@github.com:porchlab/frontporch.git;;
   *'branch --show-current'*) echo main;;
   *'status --porcelain'*) test ! -f "$(dirname "$0")/dirty" || echo ' M compose.yaml';;
@@ -228,7 +286,7 @@ exit 0
         (self.root / "config.sh").write_text("\n".join(f"{key}={shlex.quote(str(value))}" for key, value in values.items()))
         (self.state / "enabled").touch()
 
-    def run_receiver(self, command=SHA):
+    def run_receiver(self, command=REQUEST):
         return subprocess.run(["sh", str(self.root / "receive.sh"), command], capture_output=True, text=True, timeout=10)
 
     def test_arbitrary_commands_and_short_sha_never_reach_docker(self):
@@ -244,6 +302,21 @@ exit 0
         self.assertNotEqual(self.run_receiver().returncode, 0)
         self.assertFalse(self.calls.exists())
 
+    def test_malformed_digests_and_extra_inputs_never_reach_docker(self):
+        for command in (SHA, REQUEST + " extra", REQUEST.replace(" ", "\n", 1),
+                        REQUEST.replace(" ", "  ", 1),
+                        f"{'a' * 39} {WEB_DIGEST} {ASTERISK_DIGEST}",
+                        f"{SHA.upper()} {WEB_DIGEST} {ASTERISK_DIGEST}",
+                        f"{SHA} latest {ASTERISK_DIGEST}",
+                        f"{SHA} ghcr.io/attacker/image@{WEB_DIGEST} {ASTERISK_DIGEST}",
+                        f"{SHA} {WEB_DIGEST[:-1]} {ASTERISK_DIGEST}",
+                        f"{SHA} {WEB_DIGEST.upper()} {ASTERISK_DIGEST}",
+                        f"{SHA} {WEB_DIGEST} {ASTERISK_DIGEST[:-1]}",
+                        f"{SHA} {WEB_DIGEST} $(id)"):
+            with self.subTest(command=command):
+                self.assertNotEqual(self.run_receiver(command).returncode, 0)
+        self.assertFalse(self.calls.exists())
+
     def test_dirty_checkout_is_preserved(self):
         (self.root / "dirty").touch()
         self.assertNotEqual(self.run_receiver().returncode, 0)
@@ -251,7 +324,7 @@ exit 0
         self.assertFalse((self.state / "failed").exists())
 
     def test_failure_stops_later_stages_and_requires_recovery(self):
-        for failure, forbidden in (("build web", "pg_dump"), ("pg_dump", "--force-recreate"),
+        for failure, forbidden in (("pull web", "pg_dump"), ("pg_dump", "--force-recreate"),
                                    ("--wait-timeout", "render_asterisk_config"),
                                    ("render_asterisk_config", "verify_http.py")):
             with self.subTest(failure=failure):
@@ -270,13 +343,51 @@ exit 0
         result = self.run_receiver()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         calls = self.calls.read_text()
-        stages = ["verify_revision.py", "merge --ff-only", "build web", "pg_dump", "--wait-timeout", "--force-recreate portal", "render_asterisk_config", "verify_http.py"]
+        stages = ["verify_revision.py", "merge --ff-only", "pull web", "org.opencontainers.image.revision", "pg_dump", "--wait-timeout", "--force-recreate portal", "render_asterisk_config", "verify_http.py"]
         self.assertEqual(sorted(calls.index(stage) for stage in stages), [calls.index(stage) for stage in stages])
         self.assertNotIn("up -d db", calls)
         self.assertNotIn("--force-recreate asterisk", calls)
+        self.assertNotIn("build web", calls)
+        startups = [line for line in calls.splitlines() if " up -d " in line]
+        self.assertEqual(len(startups), 4)
+        self.assertTrue(all("--no-build --pull never --no-deps" in line for line in startups))
+        self.assertTrue(all("compose.registry.yaml" in line for line in startups))
+        self.assertEqual((self.state / "target-images.env").read_text(),
+                         (self.state / "deployed-images.env").read_text())
+        self.assertEqual((self.state / "deployed-images.env").read_text(),
+                         f"FRONTPORCH_WEB_IMAGE=ghcr.io/porchlab/frontporch@{WEB_DIGEST}\n"
+                         f"FRONTPORCH_ASTERISK_IMAGE=ghcr.io/porchlab/frontporch-asterisk@{ASTERISK_DIGEST}\n")
         self.assertEqual((self.state / "deployed-revision").read_text().strip(), SHA)
         self.assertFalse((self.state / "failed").exists())
         self.assertFalse((self.state / "lock").exists())
+
+    def test_wrong_image_revision_or_source_cannot_migrate_or_replace_services(self):
+        for marker in ("wrong-revision", "wrong-source"):
+            with self.subTest(marker=marker):
+                (self.root / marker).touch()
+                self.calls.unlink(missing_ok=True)
+                (self.state / "failed").unlink(missing_ok=True)
+                self.assertNotEqual(self.run_receiver().returncode, 0)
+                calls = self.calls.read_text()
+                self.assertNotIn("pg_dump", calls)
+                self.assertNotIn(" up -d ", calls)
+                self.assertTrue((self.state / "failed").exists())
+                (self.root / marker).unlink()
+
+    def test_superseded_during_pull_does_not_migrate_or_restart(self):
+        (self.root / "superseded").touch()
+        self.assertNotEqual(self.run_receiver().returncode, 0)
+        calls = self.calls.read_text()
+        self.assertIn("pull web", calls)
+        self.assertNotIn("pg_dump", calls)
+        self.assertNotIn(" up -d ", calls)
+        self.assertTrue((self.state / "failed").exists())
+
+    def test_previous_image_references_are_preserved_for_operator_recovery(self):
+        previous = "previous validated image references\n"
+        (self.state / "deployed-images.env").write_text(previous)
+        self.assertEqual(self.run_receiver().returncode, 0)
+        self.assertEqual((self.state / "previous-images.env").read_text(), previous)
 
     def test_failed_completion_write_preserves_recovery_latch(self):
         (self.root / "fail-completion").touch()

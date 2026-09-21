@@ -97,6 +97,13 @@ occur during container execution.
 
 ## Stage and validate
 
+The commands below describe source-build installation. Hosts using automatic
+registry deployment must instead include `compose.registry.yaml` and the private
+image-reference env file for every Compose command, pull the recorded digests,
+and start with `--no-build --pull never`. See the [registry deployment
+instructions](automatic-deployment.md#registry-images) for the complete flow and
+first-rollout requirements. Do not mix source builds into a registry deployment.
+
 Take a database backup and record the deployed revision before changing code.
 Update/build the private and public application from the same reviewed revision.
 Do not run migrations in both processes concurrently.

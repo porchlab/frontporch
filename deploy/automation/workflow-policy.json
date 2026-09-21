@@ -2,7 +2,8 @@
   "deploy": {
     "needs": [
       "tests",
-      "deployment-policy"
+      "deployment-policy",
+      "images"
     ],
     "if": "github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'porchlab/frontporch' && vars.PRODUCTION_DEPLOY_ENABLED == 'true'",
     "runs-on": "ubuntu-latest",
@@ -52,10 +53,12 @@
           "DEPLOY_HOST": "${{ secrets.DEPLOY_HOST }}",
           "DEPLOY_USER": "${{ secrets.DEPLOY_USER }}",
           "DEPLOY_SSH_KEY": "${{ secrets.DEPLOY_SSH_KEY }}",
-          "DEPLOY_KNOWN_HOSTS": "${{ secrets.DEPLOY_KNOWN_HOSTS }}"
+          "DEPLOY_KNOWN_HOSTS": "${{ secrets.DEPLOY_KNOWN_HOSTS }}",
+          "WEB_DIGEST": "${{ needs.images.outputs.web_digest }}",
+          "ASTERISK_DIGEST": "${{ needs.images.outputs.asterisk_digest }}"
         },
         "shell": "bash",
-        "run": "set -euo pipefail\n[[ \"$GITHUB_SHA\" =~ ^[0-9a-f]{40}$ ]]\n[[ \"$DEPLOY_HOST\" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]\n[[ \"$DEPLOY_USER\" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]\numask 077\nwork=$(mktemp -d \"$RUNNER_TEMP/frontporch-deploy.XXXXXX\")\ntrap 'rm -rf -- \"$work\"' EXIT\nprintf '%s\\n' \"$DEPLOY_SSH_KEY\" > \"$work/key\"\nprintf '%s\\n' \"$DEPLOY_KNOWN_HOSTS\" > \"$work/known_hosts\"\nif ssh -F /dev/null -T -i \"$work/key\" -p 22 -l \"$DEPLOY_USER\" \\\n    -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \\\n    -o UserKnownHostsFile=\"$work/known_hosts\" -o GlobalKnownHostsFile=/dev/null \\\n    -o ClearAllForwardings=yes -o ConnectTimeout=15 \\\n    -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \\\n    \"$DEPLOY_HOST\" \"$GITHUB_SHA\" > \"$work/result\" 2>&1; then\n  echo \"Deployed revision $GITHUB_SHA; host verification passed.\" >> \"$GITHUB_STEP_SUMMARY\"\nelse\n  echo '::error::Deployment failed. Inspect private host deployment logs.'\n  exit 1\nfi\n"
+        "run": "set -euo pipefail\n[[ \"$GITHUB_SHA\" =~ ^[0-9a-f]{40}$ ]]\n[[ \"$WEB_DIGEST\" =~ ^sha256:[0-9a-f]{64}$ ]]\n[[ \"$ASTERISK_DIGEST\" =~ ^sha256:[0-9a-f]{64}$ ]]\n[[ \"$DEPLOY_HOST\" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]\n[[ \"$DEPLOY_USER\" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]]\numask 077\nwork=$(mktemp -d \"$RUNNER_TEMP/frontporch-deploy.XXXXXX\")\ntrap 'rm -rf -- \"$work\"' EXIT\nprintf '%s\\n' \"$DEPLOY_SSH_KEY\" > \"$work/key\"\nprintf '%s\\n' \"$DEPLOY_KNOWN_HOSTS\" > \"$work/known_hosts\"\nif ssh -F /dev/null -T -i \"$work/key\" -p 22 -l \"$DEPLOY_USER\" \\\n    -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \\\n    -o UserKnownHostsFile=\"$work/known_hosts\" -o GlobalKnownHostsFile=/dev/null \\\n    -o ClearAllForwardings=yes -o ConnectTimeout=15 \\\n    -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \\\n    \"$DEPLOY_HOST\" \"$GITHUB_SHA $WEB_DIGEST $ASTERISK_DIGEST\" > \"$work/result\" 2>&1; then\n  echo \"Deployed revision $GITHUB_SHA; host verification passed.\" >> \"$GITHUB_STEP_SUMMARY\"\nelse\n  echo '::error::Deployment failed. Inspect private host deployment logs.'\n  exit 1\nfi\n"
       }
     ]
   },
@@ -83,5 +86,139 @@
     "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
     "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
     "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020"
-  ]
+  ],
+  "images": {
+    "needs": [
+      "tests",
+      "deployment-policy"
+    ],
+    "if": "github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'porchlab/frontporch'",
+    "runs-on": "ubuntu-latest",
+    "timeout-minutes": 30,
+    "concurrency": {
+      "group": "frontporch-images",
+      "cancel-in-progress": false
+    },
+    "permissions": {
+      "contents": "read",
+      "packages": "write"
+    },
+    "outputs": {
+      "web_digest": "${{ steps.web.outputs.digest }}",
+      "asterisk_digest": "${{ steps.existing.outputs.digest || steps.asterisk.outputs.digest }}"
+    },
+    "steps": [
+      {
+        "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "with": {
+          "persist-credentials": false
+        }
+      },
+      {
+        "uses": "docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f",
+        "with": {
+          "driver": "docker"
+        }
+      },
+      {
+        "uses": "docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9",
+        "with": {
+          "registry": "ghcr.io",
+          "username": "${{ github.actor }}",
+          "password": "${{ github.token }}"
+        }
+      },
+      {
+        "name": "Reuse the published image for unchanged Asterisk build inputs",
+        "id": "existing",
+        "env": {
+          "GH_TOKEN": "${{ github.token }}",
+          "PBX_TAG": "inputs-${{ hashFiles('asterisk/Dockerfile', 'asterisk/core-sounds-entrypoint.sh', '.dockerignore') }}"
+        },
+        "shell": "bash",
+        "run": "set -euo pipefail\nif gh api --paginate /orgs/porchlab/packages/container/frontporch-asterisk/versions \\\n    > \"$RUNNER_TEMP/pbx-versions.json\" 2> \"$RUNNER_TEMP/pbx-error\"; then\n  digest=$(jq -r --arg tag \"$PBX_TAG\" '.[] | select(.metadata.container.tags | index($tag)) | .name' \"$RUNNER_TEMP/pbx-versions.json\")\n  if [[ -n \"$digest\" ]]; then\n    [[ \"$digest\" =~ ^sha256:[0-9a-f]{64}$ ]]\n    echo \"digest=$digest\" >> \"$GITHUB_OUTPUT\"\n  fi\nelif ! grep -q '(HTTP 404)' \"$RUNNER_TEMP/pbx-error\"; then\n  cat \"$RUNNER_TEMP/pbx-error\" >&2\n  exit 1\nfi\n"
+      },
+      {
+        "name": "Publish changed Asterisk image",
+        "id": "asterisk",
+        "if": "steps.existing.outputs.digest == ''",
+        "uses": "docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8",
+        "with": {
+          "context": ".",
+          "file": "asterisk/Dockerfile",
+          "platforms": "linux/amd64",
+          "push": true,
+          "provenance": false,
+          "tags": "ghcr.io/porchlab/frontporch-asterisk:inputs-${{ hashFiles('asterisk/Dockerfile', 'asterisk/core-sounds-entrypoint.sh', '.dockerignore') }}",
+          "labels": "org.opencontainers.image.source=https://github.com/porchlab/frontporch"
+        }
+      },
+      {
+        "name": "Publish Django image",
+        "id": "web",
+        "uses": "docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8",
+        "with": {
+          "context": ".",
+          "platforms": "linux/amd64",
+          "push": true,
+          "tags": "ghcr.io/porchlab/frontporch:sha-${{ github.sha }}",
+          "labels": "org.opencontainers.image.source=https://github.com/porchlab/frontporch\norg.opencontainers.image.revision=${{ github.sha }}\n"
+        }
+      },
+      {
+        "name": "Validate the published images before authorizing deployment",
+        "env": {
+          "WEB_DIGEST": "${{ steps.web.outputs.digest }}",
+          "ASTERISK_DIGEST": "${{ steps.existing.outputs.digest || steps.asterisk.outputs.digest }}"
+        },
+        "shell": "bash",
+        "run": "set -euo pipefail\n[[ \"$WEB_DIGEST\" =~ ^sha256:[0-9a-f]{64}$ ]]\n[[ \"$ASTERISK_DIGEST\" =~ ^sha256:[0-9a-f]{64}$ ]]\ndocker pull \"ghcr.io/porchlab/frontporch@$WEB_DIGEST\"\ndocker pull \"ghcr.io/porchlab/frontporch-asterisk@$ASTERISK_DIGEST\"\npython deploy/test_release_image.py \"ghcr.io/porchlab/frontporch@$WEB_DIGEST\"\nFRONTPORCH_ASTERISK_TEST_IMAGE=\"ghcr.io/porchlab/frontporch-asterisk@$ASTERISK_DIGEST\" \\\n  python deploy/test_asterisk_registration.py\n"
+      }
+    ]
+  },
+  "image-check": {
+    "needs": "deployment-policy",
+    "if": "github.event_name == 'pull_request'",
+    "runs-on": "ubuntu-latest",
+    "timeout-minutes": 30,
+    "steps": [
+      {
+        "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "with": {
+          "persist-credentials": false
+        }
+      },
+      {
+        "uses": "docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f",
+        "with": {
+          "driver": "docker"
+        }
+      },
+      {
+        "name": "Build Django image",
+        "uses": "docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8",
+        "with": {
+          "context": ".",
+          "load": true,
+          "tags": "frontporch-web:ci",
+          "platforms": "linux/amd64"
+        }
+      },
+      {
+        "name": "Build Asterisk image",
+        "uses": "docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8",
+        "with": {
+          "context": ".",
+          "file": "asterisk/Dockerfile",
+          "load": true,
+          "tags": "frontporch-asterisk:registration-test",
+          "platforms": "linux/amd64"
+        }
+      },
+      {
+        "name": "Exercise both images without publishing",
+        "run": "python deploy/test_release_image.py frontporch-web:ci\npython deploy/test_asterisk_registration.py\n"
+      }
+    ]
+  }
 }

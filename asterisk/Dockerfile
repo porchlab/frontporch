@@ -1,4 +1,4 @@
-FROM andrius/asterisk:22-cert
+FROM andrius/asterisk:22-cert@sha256:e4bcb7e012d8e96215159eb64483a922f4852a673f8f16e2a16bbe3e7d240476
 
 # Asterisk's official "current" English Core Sounds package is release 1.6.1.
 # Pin both the release and archive digest so image builds remain reproducible.
