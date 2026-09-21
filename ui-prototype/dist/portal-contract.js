@@ -263,8 +263,34 @@ const PORTAL = {
         "label": "Your phone number",
         "required": false,
         "type": "text",
-        "help": "Your children can call this number. It never appears in the directory.",
+        "help": "Used when you choose to ring your phone number. It never appears in the directory.",
         "max_length": 32
+      },
+      {
+        "name": "call_destination",
+        "label": "Where calls to you ring",
+        "required": true,
+        "type": "select",
+        "help": "Your children use the same extension and shortcuts for every choice.",
+        "initial": "frontporch",
+        "choices": [
+          [
+            "frontporch",
+            "FrontPorch phones"
+          ],
+          [
+            "phone",
+            "My phone number"
+          ],
+          [
+            "both",
+            "Both"
+          ],
+          [
+            "disabled",
+            "Do not ring me"
+          ]
+        ]
       },
       {
         "name": "directory_visible",

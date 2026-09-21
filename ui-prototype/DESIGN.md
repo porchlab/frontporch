@@ -46,7 +46,7 @@ advertised as currently online.
 Each phone has a standalone printable phonebook using the same print styles as
 Django. Its entries come from the existing simulated destination checks, with
 shared extensions deduplicated and only that phone's active, still-authorized
-shortcuts included. Parent phone shortcuts have no invented extension. Paused
+shortcuts included. Parent calls have one stable extension, with shortcuts on the same entry and a guardian-controlled ring setting. Paused
 or revoked targets are omitted, and inactive source phones show a setup notice.
 The preview reads current session state, defaults to black and white, offers
 color, and marks printed cards as fictional demo data. Downloadable PDFs use the
@@ -65,7 +65,7 @@ from another family.
 
 Changes live in `sessionStorage`, not in a shared backend. A new visitor receives
 fictional fixtures. Refreshing preserves the tab's progress; Reset restores the
-sample family. Versions 1–6 migrate to version 7 without dropping approved pairs,
+sample family. Versions 1–7 migrate to version 8 without dropping approved pairs,
 contacts, phone extensions, shortcut keys, or quiet schedules. One-way legacy
 states require review before they become reciprocal permissions.
 

@@ -36,6 +36,7 @@ class DirectoryDomainTests(TestCase):
             user=create_user(),
             family=self.family_a,
             display_name="Mara",
+            dial_extension="201",
         )
         self.maple_parent = Parent.objects.create(
             user=create_user(),
@@ -747,6 +748,7 @@ class DirectoryDomainTests(TestCase):
 
     def test_dial_shortcut_can_target_same_family_parent_phone(self):
         self.river_parent.phone = "212-555-0100"
+        self.river_parent.call_destination = "phone"
         self.river_parent.save()
         source = Device.objects.create(
             assigned_child=self.alex,
@@ -759,11 +761,11 @@ class DirectoryDomainTests(TestCase):
         shortcut = DialShortcut.objects.create(
             source_device=source,
             digits="2",
-            parent_phone_target=self.river_parent,
+            parent_target=self.river_parent,
             approved_by=self.river_parent,
         )
 
-        self.assertEqual(shortcut.parent_phone_target.phone, "+12125550100")
+        self.assertEqual(shortcut.parent_target.phone, "+12125550100")
 
     def test_dial_shortcut_can_target_same_family_child_landline(self):
         source = Device.objects.create(
@@ -926,7 +928,7 @@ class DirectoryDomainTests(TestCase):
             DialShortcut.objects.create(
                 source_device=source,
                 digits="2",
-                parent_phone_target=self.maple_parent,
+                parent_target=self.maple_parent,
                 approved_by=self.river_parent,
             )
 
@@ -943,7 +945,7 @@ class DirectoryDomainTests(TestCase):
             DialShortcut.objects.create(
                 source_device=source,
                 digits="2",
-                parent_phone_target=self.river_parent,
+                parent_target=self.river_parent,
                 approved_by=self.river_parent,
             )
 

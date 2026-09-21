@@ -100,7 +100,14 @@ class AsteriskConfigRenderer:
                         source_endpoint=target_rules[0].source_endpoint,
                         target_endpoints=targets,
                         outbound_caller_id=self._outbound_caller_id_for_target(
-                            target,
+                            next(
+                                (
+                                    item
+                                    for item in targets
+                                    if hasattr(item, "normalized_number")
+                                ),
+                                target,
+                            ),
                             configuration.outbound_caller_id,
                         ),
                     )
@@ -122,6 +129,8 @@ class AsteriskConfigRenderer:
             )
 
         lines.extend(self._render_blackout_context())
+        if configuration.outbound_caller_id:
+            lines.extend(self._render_outbound_caller_id_context())
         lines.extend(self._render_public_inbound_context(configuration))
         lines.extend(self._render_conference_contexts(configuration))
         lines.extend(self._render_conference_redial_context())
@@ -130,6 +139,8 @@ class AsteriskConfigRenderer:
 
     def _render_shortcut_rules(self, rules, outbound_caller_id=""):
         rule = rules[0]
+        if rule.target_extension:
+            return [f"exten => {rule.digits},1,Goto({rule.target_extension},1)", ""]
         if rule.is_conference:
             return self._render_conference_entry(
                 rule.conference_route,
@@ -179,14 +190,29 @@ class AsteriskConfigRenderer:
 
         blackout_checks = self._call_blackout_checks(source_endpoint, target_endpoint)
         outbound_setup = []
+        dial_options = "r(ring)" if generate_ringback else ""
         if outbound_caller_id:
-            outbound_setup.append(f"Set(CALLERID(num)={outbound_caller_id})")
+            if any(
+                not hasattr(endpoint, "normalized_number")
+                for endpoint in target_endpoints
+            ):
+                # A combined Dial inherits the caller's identity on every leg.
+                # Change it only on the trunk leg so internal phones see the child.
+                dial_options += (
+                    f"b(frontporch-outbound-caller-id^s^1({outbound_caller_id}))"
+                )
+            else:
+                outbound_setup.append(f"Set(CALLERID(num)={outbound_caller_id})")
 
-        dial_options = ",r(ring)" if generate_ringback else ""
-        applications = blackout_checks + outbound_setup + [
-            f"Dial({dial_target},30{dial_options})",
-            "Hangup()",
-        ]
+        dial_options = f",{dial_options}" if dial_options else ""
+        applications = (
+            blackout_checks
+            + outbound_setup
+            + [
+                f"Dial({dial_target},30{dial_options})",
+                "Hangup()",
+            ]
+        )
         return (
             [f"{first_prefix}{applications[0]}"]
             + [f" same => n,{application}" for application in applications[1:]]
@@ -194,9 +220,21 @@ class AsteriskConfigRenderer:
         )
 
     def _outbound_caller_id_for_target(self, target_endpoint, outbound_caller_id):
-        if outbound_caller_id and hasattr(target_endpoint, "child_landline_id"):
+        if outbound_caller_id and hasattr(target_endpoint, "normalized_number"):
             return outbound_caller_id
         return ""
+
+    def _render_outbound_caller_id_context(self):
+        # On a called PJSIP channel, CONNECTEDLINE is the identity sent to the
+        # remote phone; CALLERID describes that remote phone instead. The `i`
+        # option updates the pending INVITE without sending a separate update.
+        return [
+            "[frontporch-outbound-caller-id]",
+            'exten => s,1,ExecIf($["${CHANNEL(endpoint)}" = "voipms-endpoint"]'
+            "?Set(CONNECTEDLINE(num,i)=${ARG1}))",
+            " same => n,Return()",
+            "",
+        ]
 
     def _call_blackout_checks(self, source_endpoint=None, target_endpoint=None):
         windows = []
@@ -851,6 +889,8 @@ def _atomic_write(destination, content):
 def _endpoint_sort_identity(endpoint):
     if hasattr(endpoint, "device_id"):
         return ("sip", endpoint.device_id)
+    if hasattr(endpoint, "parent_id"):
+        return ("parent", endpoint.parent_id)
     return ("landline", endpoint.child_landline_id)
 
 

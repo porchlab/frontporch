@@ -17,4 +17,6 @@ data.connections = data.connections.filter(c => c.peerId !== input.revokedPeer);
 result.push(snapshot());
 data.contacts = [];
 result.push(snapshot());
+data.guardians[0].callDestination = "disabled";
+result.push(snapshot());
 process.stdout.write(JSON.stringify(result));

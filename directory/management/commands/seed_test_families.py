@@ -78,14 +78,17 @@ class Command(BaseCommand):
                         password=secrets.token_urlsafe(48),
                     )
                     parent = Parent.objects.create(
-                        family=family, display_name=display_name, user=user
+                        family=family,
+                        display_name=display_name,
+                        user=user,
+                        dial_extension=extension,
                     )
                 elif not parent.is_guardian:
                     parent.is_guardian = True
                     parent.save(update_fields=["is_guardian", "updated_at"])
                 parent_count += 1
                 self._upsert_device(
-                    extension=extension,
+                    extension=parent.dial_extension,
                     friendly_name=f"{display_name} phone",
                     assigned_parent=parent,
                 )

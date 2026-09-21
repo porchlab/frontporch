@@ -36,11 +36,13 @@ class AsteriskConfigurationBuilderTests(TestCase):
             user=create_user(),
             family=self.river,
             display_name="Mara",
+            dial_extension="201",
         )
         self.maple_parent = Parent.objects.create(
             user=create_user(),
             family=self.maple,
             display_name="Nico",
+            dial_extension="202",
         )
 
         self.alex_device = Device.objects.create(
@@ -632,7 +634,7 @@ class AsteriskConfigurationBuilderTests(TestCase):
         self.assertEqual(configuration.shortcut_rules[0].source_endpoint.extension, "101")
         self.assertEqual(configuration.shortcut_rules[0].digits, "1")
         self.assertEqual(
-            configuration.shortcut_rules[0].target_endpoint.extension,
+            configuration.shortcut_rules[0].target_extension,
             "201",
         )
 
@@ -695,7 +697,16 @@ class AsteriskConfigurationBuilderTests(TestCase):
         configuration = build_asterisk_configuration()
 
         self.assertEqual(
-            [rule.target_endpoint.username for rule in configuration.shortcut_rules],
+            [rule.target_extension for rule in configuration.shortcut_rules],
+            ["201"],
+        )
+        self.assertEqual(
+            [
+                rule.target_endpoint.username
+                for rule in configuration.dialplan_rules
+                if rule.source_endpoint.device_id == self.alex_device.pk
+                and rule.dialed_extension == "201"
+            ],
             ["mara-201", "mara-linphone"],
         )
 
@@ -725,19 +736,28 @@ class AsteriskConfigurationBuilderTests(TestCase):
 
     def test_parent_phone_shortcut_rule_targets_parent_phone(self):
         self.river_parent.phone = "212-555-0100"
+        self.river_parent.call_destination = "phone"
         self.river_parent.save()
         DialShortcut.objects.create(
             source_device=self.alex_device,
             digits="2",
-            parent_phone_target=self.river_parent,
+            parent_target=self.river_parent,
             approved_by=self.river_parent,
         )
 
         configuration = build_asterisk_configuration()
 
         self.assertEqual(configuration.shortcut_rules[0].digits, "2")
-        self.assertTrue(configuration.shortcut_rules[0].is_external)
-        self.assertEqual(configuration.shortcut_rules[0].normalized_number, "+12125550100")
+        self.assertEqual(configuration.shortcut_rules[0].target_extension, "201")
+        self.assertEqual(
+            [
+                rule.target_endpoint.normalized_number
+                for rule in configuration.dialplan_rules
+                if rule.source_endpoint.device_id == self.alex_device.pk
+                and rule.dialed_extension == "201"
+            ],
+            ["+12125550100"],
+        )
 
     def test_child_landline_shortcut_rule_targets_landline_endpoint(self):
         number, _ = ExternalPhoneNumber.objects.get_or_create_normalized("+1 212 555 0100")

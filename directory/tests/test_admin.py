@@ -30,6 +30,7 @@ class DirectoryAdminTests(TestCase):
             user=create_user(),
             family=self.family,
             display_name="Mara",
+            dial_extension="201",
         )
         self.source_device = Device.objects.create(
             assigned_parent=self.parent,
@@ -152,7 +153,7 @@ class DirectoryAdminTests(TestCase):
                 "digits": "3",
                 "internal_target_device": "",
                 "external_target_extension": "",
-                "parent_phone_target": "",
+                "parent_target": "",
                 "child_landline_target": "",
                 "conference_group_target": group.id,
                 "label": "Friends",
@@ -176,7 +177,7 @@ class DirectoryAdminTests(TestCase):
                 "digits": "2",
                 "internal_target_device": "",
                 "external_target_extension": "",
-                "parent_phone_target": "",
+                "parent_target": "",
                 "child_landline_target": self.landline.id,
                 "conference_group_target": "",
                 "label": "Alex landline",

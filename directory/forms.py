@@ -319,14 +319,16 @@ class GuardianProfileForm(forms.ModelForm):
 
     class Meta:
         model = Parent
-        fields = ("display_name", "phone", "directory_visible")
+        fields = ("display_name", "phone", "call_destination", "directory_visible")
         labels = {
             "display_name": "Your name",
             "phone": "Your phone number",
+            "call_destination": "Where calls to you ring",
             "directory_visible": "Show my name when our family is listed",
         }
         help_texts = {
-            "phone": "Your children can call this number. It never appears in the directory."
+            "phone": "Used when you choose to ring your phone number. It never appears in the directory.",
+            "call_destination": "Your children use the same extension and shortcuts for every choice.",
         }
 
 
@@ -344,7 +346,7 @@ class ShortcutForm(forms.Form):
 
     def __init__(self, *args, source, parent, instance=None, **kwargs):
         from .models import DialShortcut
-        from .services import shortcut_destinations
+        from .services import shortcut_destinations, shortcut_targets
 
         self.source, self.parent = source, parent
         self.instance = instance or DialShortcut(
@@ -356,7 +358,7 @@ class ShortcutForm(forms.Form):
                 (
                     key
                     for key, (field, obj, label) in self.destinations.items()
-                    if getattr(instance, field + "_id") == obj.pk
+                    if shortcut_targets(instance, field, obj.pk)
                 ),
                 "",
             )
@@ -391,7 +393,7 @@ class ShortcutForm(forms.Form):
         for field in (
             "internal_target_device",
             "external_target_extension",
-            "parent_phone_target",
+            "parent_target",
             "child_landline_target",
             "conference_group_target",
         ):

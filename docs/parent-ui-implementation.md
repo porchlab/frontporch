@@ -21,7 +21,7 @@ not load its JavaScript or store household data in browser storage.
   defaults to black and white, with an optional color style. Each card lists all
   currently authorized, active destination extensions and this phone's enabled
   shortcuts, including family contacts and enabled groups. Shared extensions
-  appear once; parent phone shortcuts without an extension are marked as such.
+  appear once; each parent has one extension with their shortcuts on the same row.
   Landline cards follow the child-only dial-in flow and include the available
   FrontPorch access numbers. Cards require guardian access to the child's family
   and are served with `no-store` caching. **Download PDF** creates a file with
@@ -35,7 +35,7 @@ not load its JavaScript or store household data in browser storage.
   invitation status, shared-code discovery, and code rotation.
 - Family-private external contact creation/edit/removal with normalized numbers,
   duplicate validation, automatic extensions, and family-wide calling approval.
-- Family details, guardian profiles, visibility controls, setup/911-notice preferences,
+- Family details, guardian profiles with a choice of where calls ring, visibility controls, setup/911-notice preferences,
   and primary-guardian membership invitations with new/existing-account acceptance.
 - Existing conference management is retained. Staff still enable conference calling.
 
@@ -60,6 +60,10 @@ by Django, and phone credentials are never placed in parent HTML.
 
 See [ADR-010](architecture/ADR-010-parent-portal-and-child-connections.md) for the
 approved scope, upgrade semantics, and deployment assumptions.
+
+Parent calling uses one stable extension for FrontPorch phones and the parent's
+saved phone number. See the [parent calling and upgrade guide](operations/parent-calling.md)
+for routing choices, migration behavior, and rollback requirements.
 
 ## Upgrade and operation
 

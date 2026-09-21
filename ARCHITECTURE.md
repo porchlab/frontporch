@@ -104,6 +104,12 @@ child, parent, or family. Each device retains independent SIP credentials and a
 single-contact AOR. The generated dialplan groups those endpoints into one
 simultaneous ring target. Extensions may not be shared across different owners.
 
+Parents have one stable extension shared by their FrontPorch devices and optional
+mobile route. Their configured ring setting determines the active destinations;
+shortcuts route through that same extension. See the
+[parent calling guide](docs/operations/parent-calling.md) for the migration and
+same-family permission boundaries.
+
 The hand-written configuration under `asterisk/etc/` provides local scaffolding and includes generated FrontPorch files from `asterisk/etc/conf.d/`. Business logic should remain in Django and generated files should be treated as disposable output.
 
 ## Networking

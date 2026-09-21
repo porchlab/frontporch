@@ -22,6 +22,7 @@
         </section>
         <section class="panel settings-panel">
             <h2>Your guardian profile</h2>
+            <p class="form-note">Your calling extension is <strong>{{ portal_parent.dial_extension }}</strong>.</p>
             <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="form" value="profile">
