@@ -38,6 +38,15 @@ class RegistrationTests(unittest.TestCase):
         workspace = tempfile.TemporaryDirectory(prefix=self.prefix, dir=ROOT / ".local")
         self.addCleanup(workspace.cleanup)
         self.workspace = Path(workspace.name)
+        # The upstream entrypoint chowns bind-mounted configuration to Asterisk.
+        # Restore ownership of this disposable fixture after Compose teardown so
+        # a non-root Linux runner can remove its TemporaryDirectory.
+        self.addCleanup(
+            docker, "run", "--rm", "--network", "none",
+            "--volume", f"{self.workspace}:/fixture",
+            "--entrypoint", "chown", "python:3.12-slim-bookworm",
+            "-Rh", f"{os.getuid()}:{os.getgid()}", "/fixture",
+        )
         config = json.loads(docker(
             "compose", "--env-file", str(ROOT / ".env.example"),
             "-f", str(ROOT / "compose.yaml"), "config", "--format", "json",
