@@ -94,13 +94,38 @@ class ParentCallingTests(TestCase):
                 self.assertEqual(context.count("exten => 5300,1,"), 1)
                 dial = next(line for line in context.splitlines() if "Dial(" in line)
                 self.assertEqual(
-                    set(dial.split("Dial(", 1)[1].split(",30)", 1)[0].split("&")),
+                    set(dial.split("Dial(", 1)[1].split(",30", 1)[0].split("&")),
                     expected,
                 )
                 self.assertEqual(
-                    "Set(CALLERID(num)=2025550199)" in context, mode != "frontporch"
+                    "Set(CALLERID(num)=2025550199)" in context, mode == "phone"
                 )
                 self.assertEqual(config, build_asterisk_configuration())
+
+    def test_ring_both_sets_provider_caller_id_only_on_the_trunk_channel(self):
+        context = self.rendered_context()
+        self.assertNotIn("Set(CALLERID(", context)
+        self.assertIn("b(frontporch-outbound-caller-id^s^1(2025550199))", context)
+        rendered = AsteriskConfigRenderer().render_extensions(
+            build_asterisk_configuration()
+        )
+        handler = rendered.split("[frontporch-outbound-caller-id]\n", 1)[1].split(
+            "\n[", 1
+        )[0]
+        self.assertEqual(
+            handler.strip(),
+            'exten => s,1,ExecIf($["${CHANNEL(endpoint)}" = "voipms-endpoint"]'
+            "?Set(CALLERID(num)=${ARG1}))\n"
+            " same => n,Return()",
+        )
+
+    @override_settings(ASTERISK_OUTBOUND_CALLER_ID="")
+    def test_ring_both_without_provider_caller_id_keeps_original_identity(self):
+        context = self.rendered_context()
+        self.assertNotIn("CALLERID(", context)
+        self.assertNotIn("b(frontporch-outbound-caller-id", context)
+        self.assertIn("PJSIP/fictional-desk", context)
+        self.assertIn("PJSIP/12025550188@voipms-endpoint", context)
 
     def test_phonebook_has_one_parent_and_device_shortcuts_become_parent_aliases(self):
         shortcut = m.DialShortcut.objects.create(

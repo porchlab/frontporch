@@ -129,6 +129,8 @@ class AsteriskConfigRenderer:
             )
 
         lines.extend(self._render_blackout_context())
+        if configuration.outbound_caller_id:
+            lines.extend(self._render_outbound_caller_id_context())
         lines.extend(self._render_public_inbound_context(configuration))
         lines.extend(self._render_conference_contexts(configuration))
         lines.extend(self._render_conference_redial_context())
@@ -188,14 +190,29 @@ class AsteriskConfigRenderer:
 
         blackout_checks = self._call_blackout_checks(source_endpoint, target_endpoint)
         outbound_setup = []
+        dial_options = "r(ring)" if generate_ringback else ""
         if outbound_caller_id:
-            outbound_setup.append(f"Set(CALLERID(num)={outbound_caller_id})")
+            if any(
+                not hasattr(endpoint, "normalized_number")
+                for endpoint in target_endpoints
+            ):
+                # A combined Dial inherits the caller's identity on every leg.
+                # Change it only on the trunk leg so internal phones see the child.
+                dial_options += (
+                    f"b(frontporch-outbound-caller-id^s^1({outbound_caller_id}))"
+                )
+            else:
+                outbound_setup.append(f"Set(CALLERID(num)={outbound_caller_id})")
 
-        dial_options = ",r(ring)" if generate_ringback else ""
-        applications = blackout_checks + outbound_setup + [
-            f"Dial({dial_target},30{dial_options})",
-            "Hangup()",
-        ]
+        dial_options = f",{dial_options}" if dial_options else ""
+        applications = (
+            blackout_checks
+            + outbound_setup
+            + [
+                f"Dial({dial_target},30{dial_options})",
+                "Hangup()",
+            ]
+        )
         return (
             [f"{first_prefix}{applications[0]}"]
             + [f" same => n,{application}" for application in applications[1:]]
@@ -206,6 +223,15 @@ class AsteriskConfigRenderer:
         if outbound_caller_id and hasattr(target_endpoint, "normalized_number"):
             return outbound_caller_id
         return ""
+
+    def _render_outbound_caller_id_context(self):
+        return [
+            "[frontporch-outbound-caller-id]",
+            'exten => s,1,ExecIf($["${CHANNEL(endpoint)}" = "voipms-endpoint"]'
+            "?Set(CALLERID(num)=${ARG1}))",
+            " same => n,Return()",
+            "",
+        ]
 
     def _call_blackout_checks(self, source_endpoint=None, target_endpoint=None):
         windows = []
