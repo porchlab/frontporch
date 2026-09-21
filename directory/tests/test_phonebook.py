@@ -17,12 +17,15 @@ class PhonebookTests(TestCase):
             family=cls.family,
             user=create_user(),
             display_name="Taylor",
+            dial_extension="5103",
+            call_destination="both",
             phone="2025550199",
         )
         cls.other_parent = m.Parent.objects.create(
             family=cls.remote,
             user=create_user(),
             display_name="Morgan",
+            dial_extension="5203",
         )
         cls.child = m.Child.objects.create(family=cls.family, name="Casey")
         cls.sibling = m.Child.objects.create(family=cls.family, name="Riley")
@@ -111,7 +114,7 @@ class PhonebookTests(TestCase):
             "2", internal_target_device=cls.friend_phone, label="Best buddy"
         )
         cls.shortcut_to("3", external_target_extension=cls.contact_extension)
-        cls.shortcut_to("4", parent_phone_target=cls.parent)
+        cls.shortcut_to("4", parent_target=cls.parent)
         cls.shortcut_to("5", conference_group_target=cls.group)
         cls.shortcut_to("6", child_landline_target=cls.friend_landline)
         cls.shortcut_to("7", internal_target_device=cls.sibling_phone, is_active=False)
@@ -190,7 +193,7 @@ class PhonebookTests(TestCase):
         self.assertContains(response, "Casey’s")
         self.assertContains(response, "Grandma")
         self.assertContains(response, "Best buddy")
-        self.assertContains(response, "Use shortcut")
+        self.assertNotContains(response, "Use shortcut")
         self.assertContains(response, "Quiet hours still apply")
         self.assertContains(response, "Download PDF")
         self.assertContains(response, "US Letter")
@@ -262,7 +265,7 @@ class PhonebookTests(TestCase):
         m.ExternalNumberExtension.objects.filter(pk=self.contact_extension.pk).update(
             is_active=False
         )
-        m.DialShortcut.objects.filter(parent_phone_target=self.parent).update(
+        m.DialShortcut.objects.filter(parent_target=self.parent).update(
             approved_by=None
         )
         entries = self.entries()

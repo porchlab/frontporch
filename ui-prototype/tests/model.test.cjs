@@ -42,11 +42,11 @@ test('phonebooks recheck revoked connections, removed contacts, paused shortcuts
   source.active = false;
   assert.equal(Demo.phonebook(data, source.id).length, 0);
 });
-test('phonebooks include enabled member groups and parent phone shortcuts without inventing an extension', () => {
-  const data = Demo.seed(); data.guardians[0].phone = '+12025550199';
+test('phonebooks group parent extensions and shortcuts and include enabled member groups', () => {
+  const data = Demo.seed(); data.guardians[0].phone = '+12025550199'; data.guardians[0].callDestination = 'phone';
   assert(!Demo.phonebook(data, 'casey-phone').some(e => e.extension === ''));
   Demo.saveShortcut(data, 'casey-phone', '', {digits:'1', target:'parent:primary', label:'Mom', active:true});
-  const parent = Demo.phonebook(data, 'casey-phone').find(e => e.extension === '');
+  const parent = Demo.phonebook(data, 'casey-phone').find(e => e.extension === data.guardians[0].extension);
   assert.equal(parent.name, 'Morgan'); assert.equal(parent.shortcuts[0].digits, '1');
   const group = Demo.saveGroup(data, '', {name:'Home', is_active:true}, ['casey', 'jordan']);
   group.extension = Demo.nextExtension(data); group.enabled = true;
@@ -57,7 +57,7 @@ test('phonebooks include enabled member groups and parent phone shortcuts withou
   group.enabled = true; group.members = ['jordan', 'other-child'];
   assert(!Demo.phonebook(data, 'casey-phone').some(e => e.extension === group.extension));
   data.guardians[0].phone = '';
-  assert(!Demo.phonebook(data, 'casey-phone').some(e => e.extension === ''));
+  assert(!Demo.phonebook(data, 'casey-phone').some(e => e.extension === data.guardians[0].extension));
 });
 
 // These assertions describe product outcomes, including denial and revocation.
@@ -223,4 +223,39 @@ test('old one-way states return to review without inventing new permissions', ()
   const data = Demo.migrateLegacy({family:'Maple', parent:'Morgan', children:[{id:'casey', name:'Casey'}], families:[{id:'river', name:'River', incoming:['Alex'], outgoing:[]}], contacts:[], invites:[]});
   assert.equal(data.connections.length, 0);
   assert.equal(data.invitations[0].status, 'pending');
+});
+
+
+test('parent calling preferences preserve one extension and reject an unavailable phone number', () => {
+  const data = Demo.seed(), parent = data.guardians[0], extension = parent.extension;
+  parent.devices = [{active:true}];
+  for (const mode of ['frontporch','phone','both']) {
+    Demo.saveProfile(data, {display_name:'Morgan', phone:'+12025550199', call_destination:mode});
+    const entries = Demo.phonebook(data, 'casey-phone').filter(e => e.name === 'Morgan');
+    assert.equal(entries.length, 1); assert.equal(entries[0].extension, extension);
+  }
+  Demo.saveShortcut(data, 'casey-phone', '', {digits:'1', target:'parent:primary', active:true});
+  assert.throws(() => Demo.saveProfile(data, {display_name:'Morgan', phone:'', call_destination:'both'}));
+  assert.equal(parent.callDestination, 'both');
+  Demo.saveProfile(data, {display_name:'Morgan', phone:parent.phone, call_destination:'disabled'});
+  assert(!Demo.phonebook(data, 'casey-phone').some(e => e.extension === extension));
+  assert(data.children[0].devices[0].shortcuts.some(s => s.target === 'parent:primary'));
+});
+
+test('version 7 parent shortcuts gain a stable extension without enabling unconfigured phone numbers', () => {
+  const data = Demo.seed(), parent = data.guardians[0], storage = memory();
+  delete parent.extension; delete parent.callDestination;
+  parent.phone = '+12025550199';
+  data.children[0].devices[0].shortcuts.push({id:'parent-key', digits:'1', target:'parent:primary', active:true, label:'Mom'});
+  data.guardians.push({id:'other', name:'Taylor', phone:'+12025550188', active:true});
+  storage.setItem(Demo.STORAGE_KEY, JSON.stringify({version:7, data}));
+  const upgraded = Demo.load(storage), upgradedParent = upgraded.guardians[0];
+  assert.equal(upgradedParent.callDestination, 'phone');
+  assert.equal(upgraded.guardians[1].callDestination, 'frontporch');
+  const entry = Demo.phonebook(upgraded, 'casey-phone').find(e => e.name === 'Morgan');
+  assert.equal(entry.extension, upgradedParent.extension);
+  assert.equal(entry.shortcuts[0].digits, '1');
+  assert.equal(upgraded.children[0].devices[0].extension, '4754');
+  Demo.save(storage, upgraded);
+  assert.equal(Demo.load(storage).guardians[0].extension, upgradedParent.extension);
 });

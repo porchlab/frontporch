@@ -31,7 +31,7 @@ def shortcut_destination_allowed(shortcut):
     from .models import (
         _devices_may_call,
         _device_may_call_external,
-        _device_may_call_parent_phone,
+        _device_may_call_parent,
         _device_may_call_child_landline,
     )
 
@@ -43,11 +43,13 @@ def shortcut_destination_allowed(shortcut):
         return False
     if shortcut.internal_target_device_id:
         target = shortcut.internal_target_device
+        if target.assigned_parent_id:
+            return _device_may_call_parent(source, target.assigned_parent)
         return target.is_active and _devices_may_call(source, target)
     if shortcut.external_target_extension_id:
         return _device_may_call_external(source, shortcut.external_target_extension)
-    if shortcut.parent_phone_target_id:
-        return _device_may_call_parent_phone(source, shortcut.parent_phone_target)
+    if shortcut.parent_target_id:
+        return _device_may_call_parent(source, shortcut.parent_target)
     if shortcut.child_landline_target_id:
         return _device_may_call_child_landline(source, shortcut.child_landline_target)
     if shortcut.conference_group_target_id:
@@ -63,6 +65,13 @@ def shortcut_destination_allowed(shortcut):
     return False
 
 
+def shortcut_targets(shortcut, target_field, target_id):
+    """A reassigned parent device resolves to its owner's logical destination."""
+    if target_field == "parent_target" and shortcut.internal_target_device_id:
+        return shortcut.internal_target_device.assigned_parent_id == target_id
+    return getattr(shortcut, target_field + "_id") == target_id
+
+
 def shortcut_destinations(source):
     """Return only approved targets; contact labels are scoped to this family."""
     from .models import (
@@ -73,7 +82,7 @@ def shortcut_destinations(source):
         ConferenceGroup,
         _devices_may_call,
         _device_may_call_external,
-        _device_may_call_parent_phone,
+        _device_may_call_parent,
         _device_may_call_child_landline,
     )
 
@@ -81,7 +90,7 @@ def shortcut_destinations(source):
     for device in Device.objects.filter(is_active=True).select_related(
         "assigned_child__family", "assigned_parent__family", "assigned_family"
     ):
-        if _devices_may_call(source, device):
+        if not device.assigned_parent_id and _devices_may_call(source, device):
             destinations[f"device:{device.pk}"] = (
                 "internal_target_device",
                 device,
@@ -97,12 +106,12 @@ def shortcut_destinations(source):
                 extension,
                 f"{contact.label} · External contact",
             )
-    for parent in Parent.objects.filter(family=source.owning_family).exclude(phone=""):
-        if _device_may_call_parent_phone(source, parent):
+    for parent in Parent.objects.filter(family=source.owning_family):
+        if _device_may_call_parent(source, parent):
             destinations[f"parent:{parent.pk}"] = (
-                "parent_phone_target",
+                "parent_target",
                 parent,
-                f"{parent.display_name} · Phone",
+                f"{parent.display_name} · Extension {parent.dial_extension}",
             )
     for landline in ChildLandline.objects.filter(is_active=True).select_related(
         "child__family"

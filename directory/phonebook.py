@@ -10,7 +10,11 @@ from dataclasses import dataclass, field
 from django.db.models import Q
 
 from . import models
-from .services import shortcut_destination_allowed, shortcut_destinations
+from .services import (
+    shortcut_destination_allowed,
+    shortcut_destinations,
+    shortcut_targets,
+)
 
 
 @dataclass
@@ -50,6 +54,12 @@ def device_phonebook(source):
     for target_field, target, _ in shortcut_destinations(source).values():
         if target_field == "internal_target_device":
             entry = _device_entry(target)
+        elif target_field == "parent_target":
+            entry = PhonebookEntry(
+                target.display_name,
+                f"{target.family.name} family",
+                target.dial_extension,
+            )
         elif target_field == "external_target_extension":
             # Add all external extensions below, including legacy per-child grants.
             continue
@@ -62,8 +72,6 @@ def device_phonebook(source):
         elif target_field == "conference_group_target" and target.dial_extension:
             entry = PhonebookEntry(target.name, "Group call", target.dial_extension)
         else:
-            # A parent's ordinary phone has no FrontPorch extension. Include it
-            # only when this device has an approved, active shortcut to it.
             continue
         entry = entries.setdefault(entry.extension, entry)
         target_entries[(target_field, target.pk)] = entry
@@ -101,7 +109,7 @@ def device_phonebook(source):
             "internal_target_device__assigned_parent__family",
             "internal_target_device__assigned_family",
             "external_target_extension__external_phone_number",
-            "parent_phone_target",
+            "parent_target",
             "child_landline_target__child__family",
             "conference_group_target",
         )
@@ -109,21 +117,14 @@ def device_phonebook(source):
     ):
         if not shortcut_destination_allowed(shortcut):
             continue
-        if shortcut.parent_phone_target_id:
-            parent = shortcut.parent_phone_target
-            entry = entries.setdefault(
-                ("parent", parent.pk),
-                PhonebookEntry(parent.display_name, "Parent phone · shortcut only", ""),
-            )
-        else:
-            entry = next(
-                (
-                    entry
-                    for (target_field, target_id), entry in target_entries.items()
-                    if getattr(shortcut, target_field + "_id") == target_id
-                ),
-                None,
-            )
+        entry = next(
+            (
+                entry
+                for (target_field, target_id), entry in target_entries.items()
+                if shortcut_targets(shortcut, target_field, target_id)
+            ),
+            None,
+        )
         if entry is not None:
             entry.shortcuts.append({"digits": shortcut.digits, "label": shortcut.label})
     return _sorted_entries(entries.values())

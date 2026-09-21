@@ -76,6 +76,12 @@ If the parent uses a mobile phone, FrontPorch places the PSTN call through the S
 
 Children never know the parent's real phone number. The PBX performs the mapping.
 
+Parent calling now implements this through one stable extension per parent and
+one configurable destination: FrontPorch phones, the saved phone number, both,
+or disabled. Shortcuts alias the same extension. Existing device and mobile
+shortcuts are unified by migration 0021; see the
+[parent calling upgrade guide](../operations/parent-calling.md).
+
 ### Cost Philosophy
 
 The expected call distribution is:
@@ -127,7 +133,6 @@ Tradeoffs:
 Future versions may support:
 
 - SIP applications for parents
-- simultaneous ringing with mobile and SIP
 - hosted SIP proxy
 - multiple DIDs
 - family-specific public numbers

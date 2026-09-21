@@ -2,7 +2,7 @@
 
 // Fictional, tab-local state. Django remains the authority for real permissions.
 const Demo = (() => {
-  const VERSION = 7;
+  const VERSION = 8;
   const STORAGE_KEY = "frontporch-design-v1";
   const TIME_ZONE = "America/New_York";
   const id = () => globalThis.crypto.randomUUID();
@@ -11,7 +11,7 @@ const Demo = (() => {
   const clone = value => JSON.parse(JSON.stringify(value));
   const device = (key, name, extension, active = true) => ({id:key, name, extension, active, shortcuts:[]});
   const child = (key, name, color = "yellow", devices = []) => ({id:key, name, color, notes:"", devices, quietHours:[]});
-  const guardian = (key, name, email, primary = false) => ({id:key, name, email, primary, active:true, phone:"", directoryVisible:false, emergencyNoticeDismissed:false});
+  const guardian = (key, name, email, primary = false) => ({id:key, name, email, primary, active:true, phone:"", extension:"", callDestination:"frontporch", devices:[], directoryVisible:false, emergencyNoticeDismissed:false});
 
   function network() {
     return [
@@ -34,6 +34,7 @@ const Demo = (() => {
 
   function seed() {
     const primary = guardian("primary", "Morgan", "morgan@example.com", true);
+    primary.extension = "5200";
     const casey = child("casey", "Casey", "yellow", [device("casey-phone", "Bedroom phone", "4754")]);
     casey.devices[0].shortcuts.push({id:"casey-alex", digits:"2", target:"device:river-phone-0", label:"Alex", active:true, targetName:"Alex’s phone"});
     casey.quietHours.push({id:"homework", label:"Homework", day_group:"weekdays", start_time:"16:00", end_time:"17:00", is_active:true, notes:""});
@@ -74,6 +75,7 @@ const Demo = (() => {
       ...data.children.flatMap(c => c.devices.map(p => p.extension)),
       ...data.network.flatMap(f => f.children.flatMap(c => c.devices.map(p => p.extension))),
       ...Object.values(data.contactExtensions), ...data.groups.map(g => g.extension),
+      ...data.guardians.map(g => g.extension),
     ]);
     for (let n = 5200; n <= 9999; n++) if (!used.has(String(n))) return String(n);
     throw new Error("No free extensions are available in this demo.");
@@ -148,8 +150,12 @@ const Demo = (() => {
     }
     for (const contact of data.contacts) result.push({key:`contact:${contact.phone}`, name:contact.name, detail:`Extension ${contact.extension}`, group:"Family contacts",
       extension:contact.extension, description:"Family contact"});
-    for (const parent of data.guardians.filter(g => g.phone)) result.push({key:`parent:${parent.id}`, name:parent.name, detail:"Phone", group:"Your family’s phones",
-      extension:"", description:"Parent phone · shortcut only"});
+    for (const parent of data.guardians) {
+      const ringsPhone = ["phone", "both"].includes(parent.callDestination) && parent.phone;
+      const ringsFrontporch = ["frontporch", "both"].includes(parent.callDestination) && (parent.devices || []).some(p => p.active);
+      if (parent.extension && (ringsPhone || ringsFrontporch)) result.push({key:`parent:${parent.id}`, name:parent.name,
+        detail:`Extension ${parent.extension}`, group:"Your family’s phones", extension:parent.extension, description:`${data.family} family`});
+    }
     for (const group of data.groups.filter(g => g.is_active && g.enabled && g.extension && g.members.length >= 2 && g.members.includes(source.child.id)))
       result.push({key:`group:${group.id}`, name:group.name, detail:`Extension ${group.extension}`, group:"Group calls",
         extension:group.extension, description:"Group call"});
@@ -163,8 +169,7 @@ const Demo = (() => {
       const key = target.extension || target.key;
       const entry = entries.get(key) || {name:target.phonebookName || target.name,
         description:target.description, extension:target.extension, shortcuts:[]};
-      // Parent phones become callable only through an assigned shortcut.
-      if (target.extension) entries.set(key, entry);
+      entries.set(key, entry);
       targets.set(target.key, {key, entry});
     }
     for (const shortcut of [...source.phone.shortcuts].sort((a, b) => a.digits.localeCompare(b.digits))) {
@@ -239,6 +244,7 @@ const Demo = (() => {
     assert(!member?.active, "This account already has guardian access.");
     assert(!data.guardians.some(g => g.id !== member?.id && same(g.name, invitation.name)), "A guardian with this name already belongs to your family.");
     if (!member) { member = guardian(id(), invitation.name, invitation.email); data.guardians.push(member); }
+    if (!member.extension) member.extension = nextExtension(data);
     member.active = true;
     invitation.status = "accepted";
     return member;
@@ -253,7 +259,10 @@ const Demo = (() => {
     const parent = actor(data);
     assert(parent, "Choose an active guardian.");
     assert(!data.guardians.some(g => g.id !== parent.id && same(g.name, values.display_name)), "A guardian with this name already belongs to your family.");
-    Object.assign(parent, {name:values.display_name, phone:normalizePhone(values.phone), directoryVisible:values.directory_visible});
+    const phone = normalizePhone(values.phone), callDestination = values.call_destination || parent.callDestination;
+    assert(["frontporch", "phone", "both", "disabled"].includes(callDestination), "Choose where calls to you ring.");
+    assert(!["phone", "both"].includes(callDestination) || phone, "Enter a phone number or choose FrontPorch phones.");
+    Object.assign(parent, {name:values.display_name, phone, callDestination, directoryVisible:values.directory_visible});
   }
   function saveGroup(data, groupId, values, members) {
     members = selectedChildren(data, members);
@@ -334,6 +343,17 @@ const Demo = (() => {
       });
     }
     data.activity = clone(old.activity || []);
+    // Allocate after all legacy device/contact numbers have been retained.
+    for (const parent of data.guardians) parent.extension = "";
+    return migrateParentCalls(data);
+  }
+  function migrateParentCalls(data) {
+    for (const parent of data.guardians) {
+      if (!parent.extension) parent.extension = nextExtension(data);
+      const approvedMobile = parent.phone && data.children.some(c => c.devices.some(p => p.active && p.shortcuts.some(s => s.active && s.target === `parent:${parent.id}`)));
+      parent.callDestination ||= approvedMobile ? "phone" : "frontporch";
+      parent.devices ||= [];
+    }
     return data;
   }
   function load(storage) {
@@ -341,6 +361,7 @@ const Demo = (() => {
       const saved = JSON.parse(storage.getItem(STORAGE_KEY));
       if (saved?.version === VERSION && Array.isArray(saved.data?.network)
           && Array.isArray(saved.data?.children) && saved.data?.guardians?.some(g => g.primary)) return saved.data;
+      if (saved?.version === 7 && Array.isArray(saved.data?.network) && saved.data?.guardians?.some(g => g.primary)) return migrateParentCalls(saved.data);
       if ([1,2,3,4,5,6].includes(saved?.version) && Array.isArray(saved.data?.children)) return migrateLegacy(saved.data);
     } catch { /* Storage may be unavailable; a fresh in-memory demo still works. */ }
     return seed();

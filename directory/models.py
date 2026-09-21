@@ -8,7 +8,7 @@ import secrets
 
 
 def lock_extension_namespace():
-    # Extensions span four model tables and may be shared only by the same owner.
+    # Extensions span five model tables and may be shared only by the same owner.
     # Serialize allocation AND validation across parent and staff writes.
     with connection.cursor() as cursor:
         cursor.execute("SELECT pg_advisory_xact_lock(%s)", [0x46504F524348])
@@ -52,6 +52,17 @@ class Parent(TimeStampedModel):
     family = models.ForeignKey(Family, on_delete=models.CASCADE, related_name="parents")
     display_name = models.CharField(max_length=200)
     phone = models.CharField(max_length=32, blank=True)
+    dial_extension = models.CharField(max_length=4, unique=True, blank=True)
+    call_destination = models.CharField(
+        max_length=12,
+        default="frontporch",
+        choices=[
+            ("frontporch", "FrontPorch phones"),
+            ("phone", "My phone number"),
+            ("both", "Both"),
+            ("disabled", "Do not ring me"),
+        ],
+    )
     is_guardian = models.BooleanField(default=True)
     is_primary = models.BooleanField(default=False)
     directory_visible = models.BooleanField(default=False)
@@ -81,10 +92,70 @@ class Parent(TimeStampedModel):
     def clean(self):
         if self.phone:
             self.phone = ExternalPhoneNumber.normalize(self.phone)
+        errors = {}
+        if self.call_destination in {"phone", "both"} and not self.phone:
+            errors["phone"] = "Enter a phone number or choose FrontPorch phones."
+        if self.dial_extension:
+            # Preserve existing three-digit parent extensions during the upgrade.
+            if (
+                not self.dial_extension.isascii()
+                or not self.dial_extension.isdigit()
+                or len(self.dial_extension) not in {3, 4}
+                or ExternalNumberExtension._extension_is_reserved(self.dial_extension)
+            ):
+                errors["dial_extension"] = (
+                    "Use a three- or four-digit non-reserved extension."
+                )
+            elif (
+                Device.objects.filter(sip_extension=self.dial_extension)
+                .exclude(pk__in=self.devices.values("pk") if self.pk else [])
+                .exists()
+                or ExternalNumberExtension.objects.filter(
+                    dial_extension=self.dial_extension
+                ).exists()
+                or ChildLandline.objects.filter(
+                    dial_extension=self.dial_extension, is_active=True
+                ).exists()
+                or ConferenceGroup.objects.filter(
+                    dial_extension=self.dial_extension
+                ).exists()
+            ):
+                errors["dial_extension"] = (
+                    "This extension is already assigned to another destination."
+                )
+            if (
+                self.pk
+                and Parent.objects.filter(pk=self.pk)
+                .exclude(dial_extension=self.dial_extension)
+                .exists()
+            ):
+                errors["dial_extension"] = (
+                    "A parent's calling extension cannot be changed."
+                )
+        if errors:
+            raise ValidationError(errors)
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
+        lock_extension_namespace()
+        if not self.dial_extension:
+            self.dial_extension = ExternalNumberExtension._assign_extension()
         self.full_clean()
         super().save(*args, **kwargs)
+
+    @property
+    def rings_frontporch(self):
+        return self.call_destination in {"frontporch", "both"}
+
+    @property
+    def rings_phone(self):
+        return self.call_destination in {"phone", "both"} and bool(self.phone)
+
+    def has_call_destination(self, source=None):
+        devices = self.devices.filter(is_active=True)
+        if source is not None:
+            devices = devices.exclude(pk=source.pk)
+        return bool(self.rings_phone or (self.rings_frontporch and devices.exists()))
 
 
 class Child(TimeStampedModel):
@@ -347,12 +418,32 @@ class Device(TimeStampedModel):
             errors["sip_extension"] = (
                 "This extension is already assigned to a conference group."
             )
+        if self.sip_extension:
+            if (
+                Parent.objects.filter(dial_extension=self.sip_extension)
+                .exclude(pk=self.assigned_parent_id)
+                .exists()
+            ):
+                errors["sip_extension"] = (
+                    "This extension is already assigned to a parent."
+                )
+            if (
+                self.assigned_parent_id
+                and not Parent.objects.filter(
+                    pk=self.assigned_parent_id, dial_extension=self.sip_extension
+                ).exists()
+            ):
+                errors["sip_extension"] = "Use the assigned parent's calling extension."
         if errors:
             raise ValidationError(errors)
 
     @transaction.atomic
     def save(self, *args, **kwargs):
         lock_extension_namespace()
+        if self.assigned_parent_id and not self.sip_extension:
+            self.sip_extension = Parent.objects.values_list(
+                "dial_extension", flat=True
+            ).get(pk=self.assigned_parent_id)
         self.full_clean()
         super().save(*args, **kwargs)
 
@@ -474,6 +565,10 @@ class ExternalNumberExtension(TimeStampedModel):
                 )
             elif self._extension_is_reserved(self.dial_extension):
                 errors["dial_extension"] = "This extension is reserved."
+            elif Parent.objects.filter(dial_extension=self.dial_extension).exists():
+                errors["dial_extension"] = (
+                    "This extension is already assigned to a parent."
+                )
             elif Device.objects.filter(sip_extension=self.dial_extension).exists():
                 errors["dial_extension"] = (
                     "This extension is already assigned to a device."
@@ -527,6 +622,8 @@ class ExternalNumberExtension(TimeStampedModel):
         for _ in range(100):
             candidate = _random_four_digit_extension()
             if cls._extension_is_reserved(candidate):
+                continue
+            if Parent.objects.filter(dial_extension=candidate).exists():
                 continue
             if Device.objects.filter(sip_extension=candidate).exists():
                 continue
@@ -602,6 +699,10 @@ class ChildLandline(TimeStampedModel):
                 )
             elif ExternalNumberExtension._extension_is_reserved(self.dial_extension):
                 errors["dial_extension"] = "This extension is reserved."
+            elif Parent.objects.filter(dial_extension=self.dial_extension).exists():
+                errors["dial_extension"] = (
+                    "This extension is already assigned to a parent."
+                )
             elif Device.objects.filter(sip_extension=self.dial_extension).exists():
                 errors["dial_extension"] = (
                     "This extension is already assigned to a device."
@@ -648,6 +749,8 @@ class ChildLandline(TimeStampedModel):
         for _ in range(100):
             candidate = _random_four_digit_extension()
             if ExternalNumberExtension._extension_is_reserved(candidate):
+                continue
+            if Parent.objects.filter(dial_extension=candidate).exists():
                 continue
             if Device.objects.filter(sip_extension=candidate).exists():
                 continue
@@ -856,10 +959,10 @@ class DialShortcut(TimeStampedModel):
         null=True,
         blank=True,
     )
-    parent_phone_target = models.ForeignKey(
+    parent_target = models.ForeignKey(
         Parent,
         on_delete=models.CASCADE,
-        related_name="phone_targeted_by_shortcuts",
+        related_name="targeted_by_shortcuts",
         null=True,
         blank=True,
     )
@@ -900,35 +1003,35 @@ class DialShortcut(TimeStampedModel):
                     (
                         models.Q(internal_target_device__isnull=False)
                         & models.Q(external_target_extension__isnull=True)
-                        & models.Q(parent_phone_target__isnull=True)
+                        & models.Q(parent_target__isnull=True)
                         & models.Q(child_landline_target__isnull=True)
                         & models.Q(conference_group_target__isnull=True)
                     )
                     | (
                         models.Q(internal_target_device__isnull=True)
                         & models.Q(external_target_extension__isnull=False)
-                        & models.Q(parent_phone_target__isnull=True)
+                        & models.Q(parent_target__isnull=True)
                         & models.Q(child_landline_target__isnull=True)
                         & models.Q(conference_group_target__isnull=True)
                     )
                     | (
                         models.Q(internal_target_device__isnull=True)
                         & models.Q(external_target_extension__isnull=True)
-                        & models.Q(parent_phone_target__isnull=False)
+                        & models.Q(parent_target__isnull=False)
                         & models.Q(child_landline_target__isnull=True)
                         & models.Q(conference_group_target__isnull=True)
                     )
                     | (
                         models.Q(internal_target_device__isnull=True)
                         & models.Q(external_target_extension__isnull=True)
-                        & models.Q(parent_phone_target__isnull=True)
+                        & models.Q(parent_target__isnull=True)
                         & models.Q(child_landline_target__isnull=False)
                         & models.Q(conference_group_target__isnull=True)
                     )
                     | (
                         models.Q(internal_target_device__isnull=True)
                         & models.Q(external_target_extension__isnull=True)
-                        & models.Q(parent_phone_target__isnull=True)
+                        & models.Q(parent_target__isnull=True)
                         & models.Q(child_landline_target__isnull=True)
                         & models.Q(conference_group_target__isnull=False)
                     )
@@ -941,6 +1044,13 @@ class DialShortcut(TimeStampedModel):
         return f"{self.source_device} dials {self.digits}"
 
     def clean(self):
+        if (
+            self.internal_target_device_id
+            and self.internal_target_device.assigned_parent_id
+        ):
+            if not self.parent_target_id:
+                self.parent_target = self.internal_target_device.assigned_parent
+                self.internal_target_device = None
         errors = {}
         if self.digits not in {"1", "2", "3", "4", "5", "6", "7", "8", "9"}:
             errors["digits"] = "Shortcut digits must be one of 1 through 9."
@@ -950,7 +1060,7 @@ class DialShortcut(TimeStampedModel):
             for target in (
                 self.internal_target_device,
                 self.external_target_extension,
-                self.parent_phone_target,
+                self.parent_target,
                 self.child_landline_target,
                 self.conference_group_target,
             )
@@ -980,11 +1090,11 @@ class DialShortcut(TimeStampedModel):
                 errors["external_target_extension"] = (
                     "Source device is not allowed to call this external number."
                 )
-            if self.parent_phone_target_id and not _device_may_call_parent_phone(
+            if self.parent_target_id and not _device_may_call_parent(
                 self.source_device,
-                self.parent_phone_target,
+                self.parent_target,
             ):
-                errors["parent_phone_target"] = (
+                errors["parent_target"] = (
                     "Source device is not allowed to call this parent phone."
                 )
             if self.child_landline_target_id and not _device_may_call_child_landline(
@@ -1118,6 +1228,8 @@ class ChildLandlineDialShortcut(TimeStampedModel):
 def _devices_may_call(source, target):
     if source.pk == target.pk:
         return False
+    if target.assigned_parent_id:
+        return _device_may_call_parent(source, target.assigned_parent)
     if source.owning_family.pk == target.owning_family.pk:
         return True
     return bool(
@@ -1153,11 +1265,10 @@ def _device_may_call_external(source, external_extension):
     ).exists()
 
 
-def _device_may_call_parent_phone(source, parent):
+def _device_may_call_parent(source, parent):
     return bool(
-        source.assigned_child_id
-        and parent.family_id == source.owning_family.id
-        and parent.phone
+        parent.family_id == source.owning_family.id
+        and parent.has_call_destination(source)
     )
 
 
@@ -1216,6 +1327,10 @@ class ConferenceGroup(TimeStampedModel):
                 )
             elif ExternalNumberExtension._extension_is_reserved(self.dial_extension):
                 errors["dial_extension"] = "This extension is reserved."
+            elif Parent.objects.filter(dial_extension=self.dial_extension).exists():
+                errors["dial_extension"] = (
+                    "This extension is already assigned to a parent."
+                )
             elif Device.objects.filter(sip_extension=self.dial_extension).exists():
                 errors["dial_extension"] = (
                     "This extension is already assigned to a device."
@@ -1258,6 +1373,8 @@ class ConferenceGroup(TimeStampedModel):
         for _ in range(100):
             candidate = _random_four_digit_extension()
             if ExternalNumberExtension._extension_is_reserved(candidate):
+                continue
+            if Parent.objects.filter(dial_extension=candidate).exists():
                 continue
             if Device.objects.filter(sip_extension=candidate).exists():
                 continue

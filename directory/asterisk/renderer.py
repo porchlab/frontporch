@@ -100,7 +100,14 @@ class AsteriskConfigRenderer:
                         source_endpoint=target_rules[0].source_endpoint,
                         target_endpoints=targets,
                         outbound_caller_id=self._outbound_caller_id_for_target(
-                            target,
+                            next(
+                                (
+                                    item
+                                    for item in targets
+                                    if hasattr(item, "normalized_number")
+                                ),
+                                target,
+                            ),
                             configuration.outbound_caller_id,
                         ),
                     )
@@ -130,6 +137,8 @@ class AsteriskConfigRenderer:
 
     def _render_shortcut_rules(self, rules, outbound_caller_id=""):
         rule = rules[0]
+        if rule.target_extension:
+            return [f"exten => {rule.digits},1,Goto({rule.target_extension},1)", ""]
         if rule.is_conference:
             return self._render_conference_entry(
                 rule.conference_route,
@@ -194,7 +203,7 @@ class AsteriskConfigRenderer:
         )
 
     def _outbound_caller_id_for_target(self, target_endpoint, outbound_caller_id):
-        if outbound_caller_id and hasattr(target_endpoint, "child_landline_id"):
+        if outbound_caller_id and hasattr(target_endpoint, "normalized_number"):
             return outbound_caller_id
         return ""
 
@@ -851,6 +860,8 @@ def _atomic_write(destination, content):
 def _endpoint_sort_identity(endpoint):
     if hasattr(endpoint, "device_id"):
         return ("sip", endpoint.device_id)
+    if hasattr(endpoint, "parent_id"):
+        return ("parent", endpoint.parent_id)
     return ("landline", endpoint.child_landline_id)
 
 

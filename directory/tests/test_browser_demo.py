@@ -48,13 +48,23 @@ class BrowserDemoAssetsTests(SimpleTestCase):
 class PhonebookDOMTests(SimpleTestCase):
     def test_django_card_variants_pass_through_the_real_dom_extractor(self):
         entries = [
-            PhonebookEntry("Alex", "River family", "7000", [
-                {"digits": "1", "label": "Alex"},
-                {"digits": "2", "label": "Best & <buddy>"},
-            ]),
-            PhonebookEntry("Élodie", "Parent phone · shortcut only", "", [
-                {"digits": "4", "label": "Call home"},
-            ]),
+            PhonebookEntry(
+                "Alex",
+                "River family",
+                "7000",
+                [
+                    {"digits": "1", "label": "Alex"},
+                    {"digits": "2", "label": "Best & <buddy>"},
+                ],
+            ),
+            PhonebookEntry(
+                "Élodie",
+                "Maple family",
+                "5200",
+                [
+                    {"digits": "4", "label": "Call home"},
+                ],
+            ),
             PhonebookEntry("Grandma <June>", "Family contact", "6100"),
         ]
         base = {
@@ -146,6 +156,9 @@ class BrowserDemoPermissionParityTests(TestCase):
             user=create_user(),
             family=local,
             display_name="Morgan",
+            phone="2025550188",
+            call_destination="both",
+            dial_extension="5820",
         )
         remote_parent = Parent.objects.create(
             user=create_user(),
@@ -171,6 +184,13 @@ class BrowserDemoPermissionParityTests(TestCase):
                     is_active=True,
                 )
             )
+        parent_device = Device.objects.create(
+            assigned_parent=local_parent,
+            friendly_name="Morgan's desk",
+            sip_extension="5820",
+            sip_username="fictional-parent-desk",
+            sip_secret="fictional-parent-secret",
+        )
         # A second device owned by the same child is an allowed local destination.
         second = Device.objects.create(
             assigned_child=children[0],
@@ -219,7 +239,16 @@ class BrowserDemoPermissionParityTests(TestCase):
                     ],
                 }
             ],
-            "guardians": [],
+            "guardians": [
+                {
+                    "id": str(local_parent.pk),
+                    "name": local_parent.display_name,
+                    "phone": local_parent.phone,
+                    "extension": local_parent.dial_extension,
+                    "callDestination": "both",
+                    "devices": [{"active": True}],
+                }
+            ],
             "groups": [],
             "connections": [],
             "contacts": [
@@ -263,6 +292,20 @@ class BrowserDemoPermissionParityTests(TestCase):
             }
         )
 
+        DialShortcut.objects.create(
+            source_device=devices[0],
+            digits="2",
+            parent_target=local_parent,
+            approved_by=local_parent,
+        )
+        data["children"][0]["devices"][0]["shortcuts"].append(
+            {
+                "digits": "2",
+                "active": True,
+                "target": f"parent:{local_parent.pk}",
+            }
+        )
+
         def snapshot():
             return {
                 "pairs": sorted(
@@ -270,7 +313,11 @@ class BrowserDemoPermissionParityTests(TestCase):
                     for pair in ChildConnection.objects.filter(is_active=True)
                 ),
                 "targets": sorted(
-                    label if field != "internal_target_device" else target.friendly_name
+                    (
+                        target.friendly_name
+                        if field == "internal_target_device"
+                        else target.display_name if field == "parent_target" else label
+                    )
                     for field, target, label in shortcut_destinations(
                         devices[0]
                     ).values()
@@ -291,6 +338,9 @@ class BrowserDemoPermissionParityTests(TestCase):
         ChildConnection.objects.filter(child_b=peers[0]).update(is_active=False)
         expected.append(snapshot())
         contact.delete()
+        expected.append(snapshot())
+        local_parent.call_destination = "disabled"
+        local_parent.save()
         expected.append(snapshot())
         result = subprocess.run(
             [shutil.which("node"), "ui-prototype/tests/parity-runner.cjs"],

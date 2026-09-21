@@ -124,9 +124,26 @@ class LandlineChildEndpoint:
 
 
 @dataclass(frozen=True)
+class ParentPhoneEndpoint:
+    parent_id: int
+    owner_id: int
+    owner_display_name: str
+    family_id: int
+    extension: str
+    normalized_number: str
+    owner_type: str = "parent"
+    child_id: int | None = None
+    blackout_windows: tuple[BlackoutWindow, ...] = ()
+
+    @property
+    def dial_target(self):
+        return f"PJSIP/{self.normalized_number.removeprefix('+')}@voipms-endpoint"
+
+
+@dataclass(frozen=True)
 class DialplanRule:
     source_endpoint: SipEndpoint
-    target_endpoint: SipEndpoint | LandlineChildEndpoint
+    target_endpoint: SipEndpoint | LandlineChildEndpoint | ParentPhoneEndpoint
 
     @property
     def dialed_extension(self):
@@ -192,6 +209,7 @@ class DialShortcutRule:
     external_number_extension_id: int | None = None
     normalized_number: str = ""
     conference_route: "ConferenceRoute | None" = None
+    target_extension: str = ""
 
     @property
     def is_external(self):

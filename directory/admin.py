@@ -84,13 +84,23 @@ class FamilyAdmin(admin.ModelAdmin):
 
 @admin.register(Parent)
 class ParentAdmin(admin.ModelAdmin):
-    list_display = ("display_name", "family", "email", "phone", "is_guardian")
+    list_display = (
+        "display_name",
+        "family",
+        "email",
+        "dial_extension",
+        "call_destination",
+        "is_guardian",
+    )
     list_filter = ("family", "is_guardian")
     search_fields = ("display_name", "user__email", "phone", "family__name")
     readonly_fields = ("email",)
     autocomplete_fields = ("user",)
     list_select_related = ("family", "user")
     ordering = ("family__name", "display_name")
+
+    def get_readonly_fields(self, request, obj=None):
+        return ("email", "dial_extension") if obj else ("email",)
 
 
 @admin.register(Child)
@@ -335,8 +345,8 @@ class DialShortcutAdmin(admin.ModelAdmin):
         "internal_target_device__sip_extension",
         "external_target_extension__dial_extension",
         "external_target_extension__external_phone_number__normalized_number",
-        "parent_phone_target__display_name",
-        "parent_phone_target__phone",
+        "parent_target__display_name",
+        "parent_target__phone",
         "child_landline_target__child__name",
         "child_landline_target__child__family__name",
         "child_landline_target__dial_extension",
@@ -353,7 +363,7 @@ class DialShortcutAdmin(admin.ModelAdmin):
         return (
             obj.internal_target_device
             or obj.external_target_extension
-            or obj.parent_phone_target
+            or obj.parent_target
             or obj.child_landline_target
             or obj.conference_group_target
         )

@@ -18,13 +18,13 @@ function demoCard(changes = '', options = {}) {
   return result;
 }
 
-test('demo HTML passes escaped names, final rows, multiple shortcuts and shortcut-only contacts to the PDF', () => {
+test('demo HTML passes escaped names, final rows, multiple shortcuts and parent extensions to the PDF', () => {
   for (const color of [false,true]) {
     const {data,drawn}=demoCard(`
       data.children[0].name='Casey & "C"';
       data.children[0].devices[0].name='Bedroom <north>';
       data.contacts[0].name='Grandma <June> & Élodie';
-      data.guardians[0].phone='+12025550199';
+      data.guardians[0].phone='+12025550199'; data.guardians[0].callDestination='phone';
       Demo.saveShortcut(data,'casey-phone','',{digits:'3',target:'device:river-phone-0',label:'Best & <buddy>',active:true});
       Demo.saveShortcut(data,'casey-phone','',{digits:'4',target:'parent:primary',label:'Call home',active:true});
     `,{color});
@@ -34,7 +34,7 @@ test('demo HTML passes escaped names, final rows, multiple shortcuts and shortcu
       {name:'Alex',description:'River family',extension:'7000',shortcuts:[{digits:'2',label:''},{digits:'3',label:'Best & <buddy>'}]},
       {name:'Drew’s mobile',description:'Family contact',extension:'6101',shortcuts:[]},
       {name:'Grandma <June> & Élodie',description:'Family contact',extension:'6100',shortcuts:[]},
-      {name:'Morgan',description:'Parent phone · shortcut only',extension:'Use shortcut',shortcuts:[{digits:'4',label:'Call home'}]},
+      {name:'Morgan',description:'Maple family',extension:'5200',shortcuts:[{digits:'4',label:'Call home'}]},
     ]);
     assert.equal(data.guide[0],'Pick up the phone. Dial an extension or use a shortcut.');
     assert.match(data.reminders[0],/Quiet hours still apply/);

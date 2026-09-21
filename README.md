@@ -290,6 +290,11 @@ For now, landline setup is staff-managed in Django Admin. Staff links a child to
 
 Each child also has an optional staff-managed **spoken name**. This is a plain pronunciation spelling used only for generated spoken menus; it does not change the child's displayed name. For example, a displayed name of `Rowan` could use `ROH-wan` if the default voice needs help. Leave the field blank to speak the normal child name. Changing either the displayed name or spoken name triggers the normal configuration-apply workflow when automatic application is enabled.
 
+Parents use one stable FrontPorch extension. In Family settings, each guardian can
+choose to ring their active FrontPorch phones, saved phone number, both, or neither.
+Shortcuts use the same extension and appear on the same phonebook row. See the
+[parent calling and upgrade guide](docs/operations/parent-calling.md).
+
 Grandparents and other ordinary external contacts are managed as family contacts. Adding a family contact normalizes the phone number, creates or reuses its four-digit FrontPorch extension, and allows the children in that family to communicate with that number. Optional one-digit dial shortcuts still require parent or guardian approval.
 
 FrontPorch devices call that child by dialing the child's FrontPorch extension. Asterisk routes the call through the SIP trunk to the landline number.

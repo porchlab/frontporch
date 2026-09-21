@@ -14,6 +14,7 @@ from .domain import (
     InboundLandlineShortcutRule,
     LandlineChildEndpoint,
     PublicInboundNumber,
+    ParentPhoneEndpoint,
     SipEndpoint,
 )
 from .tts import (
@@ -166,9 +167,34 @@ def build_asterisk_configuration():
         )
     )
 
+    parents = {
+        parent.pk: parent
+        for parent in Parent.objects.select_related("family").order_by("pk")
+    }
+    parent_phone_endpoints = tuple(
+        ParentPhoneEndpoint(
+            parent_id=parent.pk,
+            owner_id=parent.pk,
+            owner_display_name=str(parent),
+            family_id=parent.family_id,
+            extension=parent.dial_extension,
+            normalized_number=parent.phone,
+        )
+        for parent in parents.values()
+        if parent.rings_phone
+    )
+    calling_targets = (
+        tuple(
+            endpoint
+            for endpoint in routable_endpoints
+            if endpoint.owner_type != "parent"
+            or parents[endpoint.owner_id].rings_frontporch
+        )
+        + parent_phone_endpoints
+    )
     rules = []
     for source in endpoints:
-        for target in routable_endpoints:
+        for target in calling_targets:
             if source == target:
                 continue
             if _endpoints_may_call(source, target, approved_child_pairs):
@@ -521,7 +547,7 @@ def build_asterisk_configuration():
             "internal_target_device",
             "external_target_extension",
             "external_target_extension__external_phone_number",
-            "parent_phone_target",
+            "parent_target",
             "child_landline_target",
             "conference_group_target",
         )
@@ -532,7 +558,24 @@ def build_asterisk_configuration():
         source = endpoints_by_device_id.get(shortcut.source_device_id)
         if not source:
             continue
-        if shortcut.internal_target_device_id:
+        if (
+            shortcut.internal_target_device_id
+            and shortcut.internal_target_device.assigned_parent_id
+        ):
+            parent = shortcut.internal_target_device.assigned_parent
+            if any(
+                rule.source_endpoint == source
+                and rule.dialed_extension == parent.dial_extension
+                for rule in rules
+            ):
+                shortcut_rules.append(
+                    DialShortcutRule(
+                        source_endpoint=source,
+                        digits=shortcut.digits,
+                        target_extension=parent.dial_extension,
+                    )
+                )
+        elif shortcut.internal_target_device_id:
             target = endpoints_by_device_id.get(shortcut.internal_target_device_id)
             if not target:
                 continue
@@ -565,14 +608,19 @@ def build_asterisk_configuration():
                     ),
                 )
             )
-        elif shortcut.parent_phone_target_id and shortcut.parent_phone_target.phone:
-            shortcut_rules.append(
-                DialShortcutRule(
-                    source_endpoint=source,
-                    digits=shortcut.digits,
-                    normalized_number=shortcut.parent_phone_target.phone,
+        elif shortcut.parent_target_id:
+            extension = shortcut.parent_target.dial_extension
+            if any(
+                rule.source_endpoint == source and rule.dialed_extension == extension
+                for rule in rules
+            ):
+                shortcut_rules.append(
+                    DialShortcutRule(
+                        source_endpoint=source,
+                        digits=shortcut.digits,
+                        target_extension=extension,
+                    )
                 )
-            )
         elif shortcut.child_landline_target_id:
             target = landline_endpoints_by_id.get(shortcut.child_landline_target_id)
             if not target:
@@ -637,4 +685,6 @@ def _endpoints_may_call(source, target, approved_child_pairs):
 def _endpoint_sort_identity(endpoint):
     if hasattr(endpoint, "device_id"):
         return ("sip", endpoint.device_id)
+    if hasattr(endpoint, "parent_id"):
+        return ("parent", endpoint.parent_id)
     return ("landline", endpoint.child_landline_id)

@@ -17,6 +17,7 @@ from .services import (
     record_activity,
     shortcut_destination_allowed,
     shortcut_destinations,
+    shortcut_targets,
 )
 from .views import _require_parent
 
@@ -280,9 +281,11 @@ def family_settings(request):
             form.save()
             record_activity(
                 parent,
-                "Updated family settings."
-                if form == family_form
-                else "Updated guardian profile.",
+                (
+                    "Updated family settings."
+                    if form == family_form
+                    else f"Updated guardian profile. Calls ring: {parent.get_call_destination_display()}."
+                ),
             )
             messages.success(request, "Your changes are saved.")
             return redirect("directory:settings")
@@ -351,7 +354,7 @@ def shortcuts(request, device_id):
         "approved_by",
         "internal_target_device",
         "external_target_extension",
-        "parent_phone_target",
+        "parent_target",
         "child_landline_target__child",
         "conference_group_target",
     ):
@@ -360,7 +363,7 @@ def shortcuts(request, device_id):
             (
                 label
                 for _, (field, obj, label) in destinations.items()
-                if getattr(shortcut, field + "_id") == obj.pk
+                if shortcut_targets(shortcut, field, obj.pk)
             ),
             "Destination unavailable",
         )
