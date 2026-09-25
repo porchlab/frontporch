@@ -63,6 +63,13 @@ can join through their invitations. Django admin and maintenance remain on
 Tailscale; ATA connections to Asterisk use WireGuard. See the [public portal
 runbook](docs/operations/public-portal.md) for deployment prerequisites and tests.
 
+Staff with family deletion permission can delete families through Django Admin,
+individually or with the bulk delete action. The confirmation lists related records
+that will also be deleted, including the family's activity history. Activity stays
+read-only outside this family deletion flow, and Django Admin logs the family
+deletion. Permissions for other related records still apply; protected references,
+such as assigned phones, must be resolved before a family can be deleted.
+
 ## Safety Model
 
 FrontPorch should default to deny.

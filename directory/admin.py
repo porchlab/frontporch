@@ -80,6 +80,15 @@ class FamilyAdmin(admin.ModelAdmin):
     search_fields = ("name", "notes")
     ordering = ("name",)
 
+    def get_deleted_objects(self, objs, request):
+        deleted_objects, model_count, perms_needed, protected = (
+            super().get_deleted_objects(objs, request)
+        )
+        # Activity stays read-only on its own, but belongs to the family's
+        # deletion cascade. Keep every other permission and protection check.
+        perms_needed.discard(FamilyActivity._meta.verbose_name)
+        return deleted_objects, model_count, perms_needed, protected
+
 
 @admin.register(Parent)
 class ParentAdmin(admin.ModelAdmin):

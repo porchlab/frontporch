@@ -1,5 +1,6 @@
 from directory.tests.factories import create_user
-from django.contrib.auth.models import User
+from django.contrib.admin.models import DELETION, LogEntry
+from django.contrib.auth.models import Permission, User
 from django.test import TestCase
 from django.urls import reverse
 
@@ -15,6 +16,149 @@ from directory.models import (
     FamilyActivity,
     Parent,
 )
+
+
+class FamilyDeletionAdminTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin_user = User.objects.create_superuser(
+            username="admin", email="admin@example.com", password="secret-pass"
+        )
+        cls.family = Family.objects.create(name="River House")
+        cls.child = Child.objects.create(family=cls.family, name="Alex")
+        cls.activity = FamilyActivity.objects.create(
+            family=cls.family, description="Added Alex."
+        )
+        cls.other_family = Family.objects.create(name="Willow House")
+        cls.other_activity = FamilyActivity.objects.create(
+            family=cls.other_family, description="Created family."
+        )
+
+    def setUp(self):
+        self.client.force_login(self.admin_user)
+        self.delete_url = reverse("admin:directory_family_delete", args=[self.family.pk])
+        self.changelist_url = reverse("admin:directory_family_changelist")
+
+    def login_staff(self, *permissions):
+        staff = create_user(is_staff=True)
+        staff.user_permissions.set(
+            Permission.objects.filter(
+                content_type__app_label="directory", codename__in=permissions
+            )
+        )
+        self.client.force_login(staff)
+        return staff
+
+    def assert_family_deleted(self, family, actor):
+        self.assertFalse(Family.objects.filter(pk=family.pk).exists())
+        self.assertFalse(Child.objects.filter(family_id=family.pk).exists())
+        self.assertFalse(FamilyActivity.objects.filter(family_id=family.pk).exists())
+        self.assertTrue(
+            LogEntry.objects.filter(
+                user=actor,
+                content_type__app_label="directory",
+                content_type__model="family",
+                object_id=str(family.pk),
+                action_flag=DELETION,
+            ).exists()
+        )
+
+    def test_superuser_can_delete_family_with_activity(self):
+        response = self.client.get(self.delete_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["perms_lacking"])
+        self.assertFalse(response.context["protected"])
+        self.assertContains(response, "Family activity")
+        self.assertTrue(Family.objects.filter(pk=self.family.pk).exists())
+
+        response = self.client.post(self.delete_url, {"post": "yes"})
+
+        self.assertRedirects(response, self.changelist_url)
+        self.assert_family_deleted(self.family, self.admin_user)
+        self.assertTrue(Family.objects.filter(pk=self.other_family.pk).exists())
+        self.assertTrue(FamilyActivity.objects.filter(pk=self.other_activity.pk).exists())
+
+    def test_bulk_family_deletion_includes_activity(self):
+        data = {
+            "action": "delete_selected",
+            "_selected_action": [self.family.pk, self.other_family.pk],
+        }
+        response = self.client.post(self.changelist_url, data)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["perms_lacking"])
+        self.assertContains(response, "Family activity")
+        self.assertEqual(Family.objects.count(), 2)
+
+        response = self.client.post(self.changelist_url, {**data, "post": "yes"})
+
+        self.assertRedirects(response, self.changelist_url)
+        self.assert_family_deleted(self.family, self.admin_user)
+        self.assert_family_deleted(self.other_family, self.admin_user)
+
+    def test_staff_can_delete_family_without_activity_delete_permission(self):
+        staff = self.login_staff("view_family", "delete_family", "delete_child")
+        self.assertFalse(staff.has_perm("directory.delete_familyactivity"))
+
+        response = self.client.post(self.delete_url, {"post": "yes"})
+
+        self.assertRedirects(response, reverse("admin:index"))
+        self.assert_family_deleted(self.family, staff)
+
+    def test_family_delete_permission_is_still_required(self):
+        self.login_staff("view_family", "delete_child", "delete_familyactivity")
+
+        response = self.client.post(self.delete_url, {"post": "yes"})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Family.objects.filter(pk=self.family.pk).exists())
+        self.assertTrue(FamilyActivity.objects.filter(pk=self.activity.pk).exists())
+
+    def test_other_cascade_delete_permissions_are_still_required(self):
+        self.login_staff("view_family", "delete_family")
+
+        response = self.client.get(self.delete_url)
+        self.assertEqual(response.context["perms_lacking"], {"child"})
+        response = self.client.post(self.delete_url, {"post": "yes"})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Family.objects.filter(pk=self.family.pk).exists())
+        self.assertTrue(Child.objects.filter(pk=self.child.pk).exists())
+        self.assertTrue(FamilyActivity.objects.filter(pk=self.activity.pk).exists())
+
+    def test_protected_device_still_blocks_family_deletion(self):
+        device = Device.objects.create(
+            assigned_family=self.family,
+            friendly_name="Kitchen phone",
+            sip_extension="3552",
+            sip_username="river-kitchen",
+            sip_secret="test-secret",
+        )
+
+        response = self.client.post(self.delete_url, {"post": "yes"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["protected"])
+        self.assertTrue(Family.objects.filter(pk=self.family.pk).exists())
+        self.assertTrue(Device.objects.filter(pk=device.pk).exists())
+        self.assertTrue(FamilyActivity.objects.filter(pk=self.activity.pk).exists())
+
+    def test_superuser_cannot_delete_activity_directly_or_in_bulk(self):
+        url = reverse("admin:directory_familyactivity_delete", args=[self.activity.pk])
+        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.post(url, {"post": "yes"}).status_code, 403)
+
+        url = reverse("admin:directory_familyactivity_changelist")
+        response = self.client.get(url)
+        self.assertIsNone(response.context["action_form"])
+        self.client.post(
+            url,
+            {
+                "action": "delete_selected",
+                "_selected_action": [self.activity.pk],
+                "post": "yes",
+            },
+        )
+        self.assertTrue(FamilyActivity.objects.filter(pk=self.activity.pk).exists())
 
 
 class DirectoryAdminTests(TestCase):
