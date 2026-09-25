@@ -41,6 +41,8 @@ on the initial form. Select that user when creating a guardian.
 Guardians can use **Forgot your password?** on the login page to choose a password.
 SMTP must be configured; set `FRONTPORCH_PUBLIC_URL` to the public HTTPS origin so
 password-reset links sent from the private process still point to the portal.
+See the [Brevo email setup and verification guide](email.md) for SMTP credentials,
+sender configuration, and applying settings to both application processes.
 Migration alone sends no emails. Reversing migration 0020 restores the guardian
 email column while retaining provisioned accounts, credentials, and links.
 
