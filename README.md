@@ -47,6 +47,8 @@ Open the Django root URL to log in. New family registration is invite only: any
 active guardian of an existing family can email an invitation from Family settings
 or the Family directory. Links expire in seven days and can be used once to create
 a separate family account. Calling still needs approval from both families.
+Family settings appears with the other main navigation links. On narrow screens,
+the navigation wraps so every destination stays visible without swiping sideways.
 The portal provides children
 and phones, exact child-to-child invitations, private family discovery, contacts,
 quiet hours, dial shortcuts, guardian membership, and family settings. New phone
