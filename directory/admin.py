@@ -7,7 +7,6 @@ from django.contrib.auth.models import User
 from .accounts import sync_account_email, validate_account_email
 
 from .models import (
-    AllowedChildFamilyRelationship,
     Child,
     ChildConnection,
     ConnectionInvitation,
@@ -264,41 +263,6 @@ class FamilyContactAdmin(admin.ModelAdmin):
         if not extension:
             return ""
         return extension.dial_extension
-
-
-@admin.register(AllowedChildFamilyRelationship)
-class AllowedChildFamilyRelationshipAdmin(admin.ModelAdmin):
-    # Historical records only. Current calling permissions use ChildConnection.
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
-    list_display = (
-        "child",
-        "target_family",
-        "approved_by_child_family_guardian",
-        "approved_by_target_family_guardian",
-        "previously_approved",
-        "created_at",
-    )
-    list_filter = ("child__family", "target_family")
-    search_fields = (
-        "child__name",
-        "child__family__name",
-        "target_family__name",
-        "approved_by_child_family_guardian__display_name",
-        "approved_by_target_family_guardian__display_name",
-    )
-    ordering = ("child__family__name", "child__name", "target_family__name")
-
-    @admin.display(boolean=True, description="Historically approved (not a call grant)")
-    def previously_approved(self, obj):
-        return obj.is_active
 
 
 @admin.register(ExternalContactPermission)

@@ -3,7 +3,6 @@ from django.dispatch import receiver
 
 from directory.asterisk.autoreload import schedule_asterisk_configuration_apply
 from directory.models import (
-    AllowedChildFamilyRelationship,
     Child,
     ChildConnection,
     ChildBlackoutPeriod,
@@ -36,7 +35,6 @@ from directory.models import (
 @receiver(post_save, sender=ExternalNumberExtension)
 @receiver(post_save, sender=FamilyContact)
 @receiver(post_save, sender=PublicPhoneNumber)
-@receiver(post_save, sender=AllowedChildFamilyRelationship)
 @receiver(post_save, sender=ExternalContactPermission)
 @receiver(post_save, sender=DialShortcut)
 @receiver(post_delete, sender=Family)
@@ -51,7 +49,6 @@ from directory.models import (
 @receiver(post_delete, sender=ExternalNumberExtension)
 @receiver(post_delete, sender=FamilyContact)
 @receiver(post_delete, sender=PublicPhoneNumber)
-@receiver(post_delete, sender=AllowedChildFamilyRelationship)
 @receiver(post_delete, sender=ExternalContactPermission)
 @receiver(post_delete, sender=DialShortcut)
 def apply_asterisk_configuration_after_model_change(**kwargs):

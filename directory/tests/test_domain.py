@@ -5,7 +5,6 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from directory.models import (
-    AllowedChildFamilyRelationship,
     Child,
     ChildConnection,
     ChildBlackoutPeriod,
@@ -376,15 +375,6 @@ class DirectoryDomainTests(TestCase):
                 approved_by=self.river_parent,
             )
 
-        self._approve_child_for_family(self.alex, self.family_b)
-        with self.assertRaises(ValidationError):
-            ChildLandlineDialShortcut.objects.create(
-                source_landline=source,
-                digits="2",
-                target_child=self.emma,
-                approved_by=self.river_parent,
-            )
-
         self._connect_children(self.alex, self.emma)
         shortcut = ChildLandlineDialShortcut.objects.create(
             source_landline=source,
@@ -463,20 +453,6 @@ class DirectoryDomainTests(TestCase):
         a, b = sorted((first, second), key=lambda child: child.pk)
         return ChildConnection.objects.create(child_a=a, child_b=b,
             approved_by_a=a.family.parents.first(), approved_by_b=b.family.parents.first())
-
-    def _approve_child_for_family(self, child, target_family):
-        return AllowedChildFamilyRelationship.objects.create(
-            child=child,
-            target_family=target_family,
-            approved_by_child_family_guardian=(
-                self.river_parent if child.family_id == self.family_a.id else self.maple_parent
-            ),
-            approved_by_target_family_guardian=(
-                self.river_parent
-                if target_family.id == self.family_a.id
-                else self.maple_parent
-            ),
-        )
 
     def test_device_can_belong_to_child_parent_or_family(self):
         child_device = Device.objects.create(
@@ -948,67 +924,6 @@ class DirectoryDomainTests(TestCase):
                 parent_target=self.river_parent,
                 approved_by=self.river_parent,
             )
-
-    def test_child_family_relationship_requires_both_approvals_to_be_active(self):
-        relationship = AllowedChildFamilyRelationship.objects.create(
-            child=self.alex,
-            target_family=self.family_b,
-            approved_by_child_family_guardian=self.river_parent,
-        )
-
-        self.assertFalse(relationship.is_active)
-
-        relationship.approved_by_target_family_guardian = self.maple_parent
-        relationship.save()
-
-        self.assertTrue(relationship.is_active)
-
-    def test_child_family_relationship_rejects_same_family_target(self):
-        relationship = AllowedChildFamilyRelationship(
-            child=self.alex,
-            target_family=self.family_a,
-            approved_by_child_family_guardian=self.river_parent,
-            approved_by_target_family_guardian=self.river_parent,
-        )
-
-        with self.assertRaises(ValidationError):
-            relationship.full_clean()
-
-    def test_child_family_relationship_rejects_wrong_family_guardians(self):
-        wrong_child_family_approval = AllowedChildFamilyRelationship(
-            child=self.alex,
-            target_family=self.family_b,
-            approved_by_child_family_guardian=self.maple_parent,
-            approved_by_target_family_guardian=self.maple_parent,
-        )
-        wrong_target_family_approval = AllowedChildFamilyRelationship(
-            child=self.alex,
-            target_family=self.family_b,
-            approved_by_child_family_guardian=self.river_parent,
-            approved_by_target_family_guardian=self.river_parent,
-        )
-
-        with self.assertRaises(ValidationError):
-            wrong_child_family_approval.full_clean()
-        with self.assertRaises(ValidationError):
-            wrong_target_family_approval.full_clean()
-
-    def test_child_family_relationship_is_unique_per_child_and_target_family(self):
-        AllowedChildFamilyRelationship.objects.create(
-            child=self.alex,
-            target_family=self.family_b,
-            approved_by_child_family_guardian=self.river_parent,
-            approved_by_target_family_guardian=self.maple_parent,
-        )
-        duplicate = AllowedChildFamilyRelationship(
-            child=self.alex,
-            target_family=self.family_b,
-            approved_by_child_family_guardian=self.river_parent,
-            approved_by_target_family_guardian=self.maple_parent,
-        )
-
-        with self.assertRaises(ValidationError):
-            duplicate.full_clean()
 
     def test_conference_requires_explicit_active_group(self):
         group = ConferenceGroup.objects.create(name="Saturday cousins", is_active=False)

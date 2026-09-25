@@ -28,7 +28,11 @@ and separately approved conference groups remain available.
 
 The migration materializes existing effective child pairs from reciprocal legacy
 approvals. It also carries pending outgoing requests into the new invitation
-inbox. Old rows remain as historical records; they no longer authorize calls.
+inbox. Old rows were initially retained as read-only history and did not authorize
+calls. Migration 0022 removes the retired model and its table. Current child
+connections and invitations remain unchanged; the old approvals are not replayed,
+so revoked pairs stay revoked. Historical rows are recoverable only from a
+pre-upgrade database backup, including after reversing the schema migration.
 Cross-family parent/shared-phone access from the old model is retired. This
 supersedes the child-to-family scope in ADR-009; its landline transport and offline
 spoken-menu decisions remain unchanged. All SIP, landline, shortcut, and generated

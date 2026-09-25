@@ -15,7 +15,6 @@ from django.utils import timezone
 
 from directory.forms import ParentRegistrationForm
 from directory.models import (
-    AllowedChildFamilyRelationship,
     ChildConnection,
     ConnectionInvitation,
     Family,
@@ -108,7 +107,6 @@ class FamilyInvitationTests(TestCase):
         )
         self.assertFalse(ChildConnection.objects.exists())
         self.assertFalse(ConnectionInvitation.objects.exists())
-        self.assertFalse(AllowedChildFamilyRelationship.objects.exists())
         self.client.logout()
         self.assertEqual(
             self.client.post(

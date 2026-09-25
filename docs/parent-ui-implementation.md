@@ -76,9 +76,13 @@ for routing choices, migration behavior, and rollback requirements.
    Migration 0020 provisions missing guardian accounts with random passwords and
    makes account email authoritative. Review the account upgrade guide for email
    conflict handling and recovery before deploying.
-3. Review primary guardians in Admin. Existing legacy relationship rows are history;
-   use child connections for current authorization. The old portal approval URLs
-   return a migration notice rather than creating ineffective approvals.
+   Migration 0022 removes the retired child-to-family relationship table and its
+   read-only Admin entry. It preserves current child connections and invitations
+   without replaying old approvals. Keep the pre-upgrade backup if the historical
+   rows are needed; reversing this schema migration recreates an empty table.
+3. Review primary guardians in Admin. Use child connections for current
+   authorization. The old portal approval URLs return a migration notice rather
+   than creating ineffective approvals.
 4. Run the normal `render_asterisk_config` and reload workflow, or deploy with the
    existing automatic apply workflow. Old cross-family parent/shared-device grants
    are intentionally retired; current child pairs are preserved by migration.

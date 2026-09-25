@@ -5,7 +5,6 @@ from django.test import TestCase, override_settings
 
 from directory.asterisk.builder import build_asterisk_configuration
 from directory.models import (
-    AllowedChildFamilyRelationship,
     Child,
     ChildConnection,
     ChildBlackoutPeriod,
@@ -869,13 +868,13 @@ class AsteriskConfigurationBuilderTests(TestCase):
         )
         self.assertEqual(parent_endpoint.blackout_windows, ())
 
-    def test_legacy_family_approval_does_not_allow_parent_or_shared_phones(self):
+    def test_child_connection_does_not_allow_parent_or_shared_phones(self):
         configuration = build_asterisk_configuration()
 
         self.assertDialplanOmits(configuration, "101", "202")
         self.assertDialplanOmits(configuration, "202", "101")
 
-        self.approve_child_for_family(self.alex, self.maple)
+        self.connect_children(self.alex, self.emma)
         configuration = build_asterisk_configuration()
 
         self.assertDialplanOmits(configuration, "101", "202")
@@ -883,21 +882,7 @@ class AsteriskConfigurationBuilderTests(TestCase):
         self.assertDialplanOmits(configuration, "202", "101")
         self.assertDialplanOmits(configuration, "302", "101")
 
-    def test_one_sided_approval_does_not_allow_cross_family_child_call(self):
-        AllowedChildFamilyRelationship.objects.create(
-            child=self.alex,
-            target_family=self.maple,
-            approved_by_child_family_guardian=self.river_parent,
-        )
-
-        configuration = build_asterisk_configuration()
-
-        self.assertDialplanOmits(configuration, "101", "202")
-        self.assertDialplanOmits(configuration, "202", "101")
-
     def test_cross_family_child_to_child_requires_explicit_child_pair(self):
-        self.approve_child_for_family(self.alex, self.maple)
-
         configuration = build_asterisk_configuration()
 
         self.assertDialplanOmits(configuration, "101", "102")
@@ -909,7 +894,7 @@ class AsteriskConfigurationBuilderTests(TestCase):
         self.assertDialplanContains(configuration, "101", "102")
         self.assertDialplanContains(configuration, "102", "101")
 
-    def test_cross_family_child_landline_requires_existing_relationship_approvals(self):
+    def test_cross_family_child_landline_requires_explicit_child_connection(self):
         number, _ = ExternalPhoneNumber.objects.get_or_create_normalized("+1 212 555 0100")
         ChildLandline.objects.create(
             child=self.luca,
@@ -918,12 +903,6 @@ class AsteriskConfigurationBuilderTests(TestCase):
             approved_by=self.maple_parent,
         )
 
-        configuration = build_asterisk_configuration()
-
-        self.assertDialplanOmits(configuration, "101", "2222")
-        self.assertDialplanOmits(configuration, "201", "2222")
-
-        self.approve_child_for_family(self.luca, self.river)
         configuration = build_asterisk_configuration()
 
         self.assertDialplanOmits(configuration, "101", "2222")
@@ -1231,20 +1210,6 @@ class AsteriskConfigurationBuilderTests(TestCase):
         a, b = sorted((first, second), key=lambda child: child.pk)
         return ChildConnection.objects.create(child_a=a, child_b=b,
             approved_by_a=a.family.parents.first(), approved_by_b=b.family.parents.first())
-
-    def approve_child_for_family(self, child, target_family):
-        child_family_guardian = (
-            self.river_parent if child.family == self.river else self.maple_parent
-        )
-        target_family_guardian = (
-            self.river_parent if target_family == self.river else self.maple_parent
-        )
-        return AllowedChildFamilyRelationship.objects.create(
-            child=child,
-            target_family=target_family,
-            approved_by_child_family_guardian=child_family_guardian,
-            approved_by_target_family_guardian=target_family_guardian,
-        )
 
     def assertDialplanContains(self, configuration, source_extension, target_extension):
         self.assertIn(

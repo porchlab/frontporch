@@ -57,6 +57,22 @@ class DirectoryAdminTests(TestCase):
         )
         self.client.force_login(self.admin_user)
 
+    def test_admin_lists_child_connections_without_retired_family_relationships(self):
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertContains(response, "Child connections")
+        self.assertNotContains(response, "Allowed child family relationships")
+        self.assertEqual(
+            self.client.get("/admin/directory/allowedchildfamilyrelationship/").status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("admin:directory_childconnection_changelist")
+            ).status_code,
+            200,
+        )
+
     def test_admin_can_set_child_spoken_name_without_changing_display_name(self):
         response = self.client.post(
             reverse("admin:directory_child_change", args=[self.target_child.id]),
