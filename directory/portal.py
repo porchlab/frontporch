@@ -1,5 +1,6 @@
 """Server-rendered parent workspace. Mutations remain ordinary CSRF-protected forms."""
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
@@ -7,12 +8,14 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q, Prefetch
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST, require_safe
 
 from . import forms, models
 from . import phonebook as phonebook_service
+from .notifications import send_connection_request_alert
 from .services import (
     record_activity,
     shortcut_destination_allowed,
@@ -625,6 +628,17 @@ def connection_invite(request):
             )
             invitation.source_children.set(form.cleaned_data["children"])
             record_activity(parent, f"Invited the {target.name} family to connect.")
+            path = reverse("directory:connection_review", args=[invitation.pk])
+            review_url = (
+                settings.FRONTPORCH_PUBLIC_URL.rstrip("/") + path
+                if settings.FRONTPORCH_PUBLIC_URL
+                else request.build_absolute_uri(path)
+            )
+
+            def send_alert():
+                send_connection_request_alert(invitation.pk, review_url)
+
+            transaction.on_commit(send_alert, robust=True)
             messages.success(
                 request,
                 "Invitation sent. Calling stays off until the other family accepts.",
