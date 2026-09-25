@@ -805,87 +805,6 @@ class FamilyContact(TimeStampedModel):
         )
 
 
-class AllowedChildFamilyRelationship(TimeStampedModel):
-    child = models.ForeignKey(
-        Child,
-        on_delete=models.CASCADE,
-        related_name="allowed_family_relationships",
-    )
-    target_family = models.ForeignKey(
-        Family,
-        on_delete=models.CASCADE,
-        related_name="allowed_child_relationships",
-    )
-    approved_by_child_family_guardian = models.ForeignKey(
-        Parent,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="approved_child_family_relationships",
-    )
-    approved_by_target_family_guardian = models.ForeignKey(
-        Parent,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="approved_target_family_relationships",
-    )
-    notes = models.TextField(blank=True)
-
-    class Meta:
-        ordering = ["child__family__name", "child__name", "target_family__name"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["child", "target_family"],
-                name="unique_child_family_relationship",
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.child} may call devices in {self.target_family}"
-
-    @property
-    def is_active(self):
-        return bool(
-            self.approved_by_child_family_guardian_id
-            and self.approved_by_target_family_guardian_id
-        )
-
-    def clean(self):
-        errors = {}
-        if (
-            self.child_id
-            and self.target_family_id
-            and self.child.family_id == self.target_family_id
-        ):
-            errors["target_family"] = (
-                "Target family must be outside the child's family."
-            )
-        if (
-            self.approved_by_child_family_guardian_id
-            and self.child_id
-            and self.approved_by_child_family_guardian.family_id != self.child.family_id
-        ):
-            errors["approved_by_child_family_guardian"] = (
-                "Approval must come from the child's family."
-            )
-        if (
-            self.approved_by_target_family_guardian_id
-            and self.target_family_id
-            and self.approved_by_target_family_guardian.family_id
-            != self.target_family_id
-        ):
-            errors["approved_by_target_family_guardian"] = (
-                "Approval must come from the target family."
-            )
-        if errors:
-            raise ValidationError(errors)
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        super().save(*args, **kwargs)
-
-
 class ExternalContactPermission(TimeStampedModel):
     child = models.ForeignKey(
         Child,
@@ -1400,6 +1319,8 @@ class FamilyActivity(TimeStampedModel):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True
     )
     description = models.CharField(max_length=500)
+    # Structured audit snapshots are staff-only; parent pages show description.
+    details = models.JSONField(default=dict, blank=True, editable=False)
 
     class Meta:
         ordering = ["-created_at", "-pk"]

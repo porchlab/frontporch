@@ -8,14 +8,16 @@ from django.test import TestCase
 from django.urls import reverse
 
 from directory.models import (
-    AllowedChildFamilyRelationship,
     Child,
     ChildBlackoutPeriod,
+    ChildConnection,
+    ConnectionInvitation,
     ConferenceGroup,
     ExternalContactPermission,
     ExternalNumberExtension,
     ExternalPhoneNumber,
     Family,
+    FamilyActivity,
     FamilyContact,
     Parent,
 )
@@ -225,18 +227,37 @@ class ParentPortalTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertTrue(FamilyContact.objects.filter(id=contact.id).exists())
 
-    def test_old_family_scope_endpoints_cannot_create_or_approve_permissions(self):
+    def test_old_family_scope_endpoints_cannot_change_connections(self):
         self.login()
-        response = self.client.post(reverse("directory:child_family_relationship_request"),
-            {"child": self.child.pk, "target_family_name": self.other_family.name})
-        self.assertEqual(response.status_code, 410)
-        self.assertFalse(AllowedChildFamilyRelationship.objects.exists())
-        relationship = AllowedChildFamilyRelationship.objects.create(child=self.other_child,
-            target_family=self.family, approved_by_child_family_guardian=self.other_parent)
-        response = self.client.post(reverse("directory:child_family_relationship_approve", args=[relationship.pk]))
-        self.assertEqual(response.status_code, 410)
-        relationship.refresh_from_db()
-        self.assertIsNone(relationship.approved_by_target_family_guardian)
+        for name, args in (
+            ("child_family_relationship_request", []),
+            ("child_family_relationship_approve", [1]),
+            ("child_family_relationship_revoke", [1]),
+        ):
+            with self.subTest(endpoint=name):
+                response = self.client.post(
+                    reverse(f"directory:{name}", args=args),
+                    {"child": self.child.pk, "target_family_name": self.other_family.name},
+                )
+                self.assertEqual(response.status_code, 410)
+                self.assertFalse(ChildConnection.objects.exists())
+                self.assertFalse(ConnectionInvitation.objects.exists())
+
+    def test_parent_activity_feed_does_not_expose_staff_archive_details(self):
+        FamilyActivity.objects.create(
+            family=self.family,
+            description="Archived retired approval (history only).",
+            details={"notes": "Historical staff-only approval note."},
+        )
+        FamilyActivity.objects.create(
+            family=self.other_family,
+            description="Other family's private history.",
+        )
+        self.login()
+        response = self.client.get(reverse("directory:dashboard"))
+        self.assertContains(response, "Archived retired approval (history only).")
+        self.assertNotContains(response, "Historical staff-only approval note.")
+        self.assertNotContains(response, "Other family's private history.")
 
     def test_contact_permission_form_rejects_other_family_child(self):
         number, _ = ExternalPhoneNumber.objects.get_or_create_normalized("+1 212 555 0100")

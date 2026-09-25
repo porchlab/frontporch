@@ -80,6 +80,27 @@ class PortalUpgradeTests(TransactionTestCase):
             self.assertEqual(invitation.target_family_id, second.pk)
             self.assertTrue(Parent.objects.get(pk=first_parent.pk).is_primary)
             self.assertTrue(Parent.objects.get(pk=second_parent.pk).is_primary)
+
+            # A direct upgrade must still convert old permissions before removing
+            # their table, even when the intermediate portal release was skipped.
+            latest = ("directory", "0022_remove_legacy_family_relationships")
+            executor = MigrationExecutor(connection)
+            executor.migrate([latest])
+            apps = executor.loader.project_state([latest]).apps
+            Pair = apps.get_model("directory", "ChildConnection")
+            Invitation = apps.get_model("directory", "ConnectionInvitation")
+            self.assertEqual(
+                set(Pair.objects.values_list("child_a_id", "child_b_id")),
+                {(a.pk, b.pk)},
+            )
+            invitation = Invitation.objects.get(status="pending")
+            self.assertEqual(
+                list(invitation.source_children.values_list("pk", flat=True)),
+                [pending.pk],
+            )
+            self.assertEqual(invitation.target_family_id, second.pk)
+            with self.assertRaises(LookupError):
+                apps.get_model("directory", "AllowedChildFamilyRelationship")
         finally:
             executor = MigrationExecutor(connection)
             executor.migrate(executor.loader.graph.leaf_nodes())

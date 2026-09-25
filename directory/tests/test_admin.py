@@ -12,6 +12,7 @@ from directory.models import (
     DialShortcut,
     ExternalPhoneNumber,
     Family,
+    FamilyActivity,
     Parent,
 )
 
@@ -56,6 +57,35 @@ class DirectoryAdminTests(TestCase):
             approved_by=self.parent,
         )
         self.client.force_login(self.admin_user)
+
+    def test_admin_lists_child_connections_without_retired_family_relationships(self):
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertContains(response, "Child connections")
+        self.assertNotContains(response, "Allowed child family relationships")
+        self.assertEqual(
+            self.client.get("/admin/directory/allowedchildfamilyrelationship/").status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("admin:directory_childconnection_changelist")
+            ).status_code,
+            200,
+        )
+
+    def test_activity_archive_details_are_visible_but_read_only_for_staff(self):
+        activity = FamilyActivity.objects.create(
+            family=self.family,
+            description="Archived retired approval (history only).",
+            details={"notes": "Historical staff-only approval note."},
+        )
+        url = reverse("admin:directory_familyactivity_change", args=[activity.pk])
+        self.assertContains(self.client.get(url), "Historical staff-only approval note.")
+        response = self.client.post(url, {"details": "{}", "_save": "Save"})
+        self.assertEqual(response.status_code, 403)
+        activity.refresh_from_db()
+        self.assertEqual(activity.details["notes"], "Historical staff-only approval note.")
 
     def test_admin_can_set_child_spoken_name_without_changing_display_name(self):
         response = self.client.post(
