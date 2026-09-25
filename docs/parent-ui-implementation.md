@@ -76,10 +76,14 @@ for routing choices, migration behavior, and rollback requirements.
    Migration 0020 provisions missing guardian accounts with random passwords and
    makes account email authoritative. Review the account upgrade guide for email
    conflict handling and recovery before deploying.
-   Migration 0022 removes the retired child-to-family relationship table and its
-   read-only Admin entry. It preserves current child connections and invitations
-   without replaying old approvals. Keep the pre-upgrade backup if the historical
-   rows are needed; reversing this schema migration recreates an empty table.
+   Migration 0022 archives every retired child-to-family relationship in structured
+   family activity details, then removes its operational table and Admin entry.
+   Staff can inspect the original identities, timestamps, approval state, and notes
+   in the read-only activity admin. Parent feeds do not expose archive details.
+   Current child connections and invitations remain unchanged; old approvals are
+   not replayed. Reversing the migration restores archived rows and their timestamps.
+   If referenced people or families were subsequently removed, rollback fails
+   without discarding the archive; recovery then requires the pre-upgrade backup.
 3. Review primary guardians in Admin. Use child connections for current
    authorization. The old portal approval URLs return a migration notice rather
    than creating ineffective approvals.

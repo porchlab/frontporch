@@ -433,6 +433,9 @@ class ChildConnectionAdmin(admin.ModelAdmin):
     ConnectionInvitation, GuardianInvitation, FamilyInvitation, FamilyActivity
 )
 class PortalHistoryAdmin(admin.ModelAdmin):
+    def get_readonly_fields(self, request, obj=None):
+        return ("details",) if self.model is FamilyActivity else ()
+
     def has_add_permission(self, request):
         return False
 

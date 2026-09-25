@@ -17,6 +17,7 @@ from directory.models import (
     ExternalNumberExtension,
     ExternalPhoneNumber,
     Family,
+    FamilyActivity,
     FamilyContact,
     Parent,
 )
@@ -241,6 +242,22 @@ class ParentPortalTests(TestCase):
                 self.assertEqual(response.status_code, 410)
                 self.assertFalse(ChildConnection.objects.exists())
                 self.assertFalse(ConnectionInvitation.objects.exists())
+
+    def test_parent_activity_feed_does_not_expose_staff_archive_details(self):
+        FamilyActivity.objects.create(
+            family=self.family,
+            description="Archived retired approval (history only).",
+            details={"notes": "Historical staff-only approval note."},
+        )
+        FamilyActivity.objects.create(
+            family=self.other_family,
+            description="Other family's private history.",
+        )
+        self.login()
+        response = self.client.get(reverse("directory:dashboard"))
+        self.assertContains(response, "Archived retired approval (history only).")
+        self.assertNotContains(response, "Historical staff-only approval note.")
+        self.assertNotContains(response, "Other family's private history.")
 
     def test_contact_permission_form_rejects_other_family_child(self):
         number, _ = ExternalPhoneNumber.objects.get_or_create_normalized("+1 212 555 0100")

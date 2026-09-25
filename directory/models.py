@@ -1319,6 +1319,8 @@ class FamilyActivity(TimeStampedModel):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True
     )
     description = models.CharField(max_length=500)
+    # Structured audit snapshots are staff-only; parent pages show description.
+    details = models.JSONField(default=dict, blank=True, editable=False)
 
     class Meta:
         ordering = ["-created_at", "-pk"]
