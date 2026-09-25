@@ -52,6 +52,7 @@
                         {% include "directory/nav.html" with name="Family directory" route="directory:family_directory" key="directory" symbol="search" %}
                         {% include "directory/nav.html" with name="Invitations" route="directory:invitations" key="invites" symbol="mail" %}
                         {% include "directory/nav.html" with name="External contacts" route="directory:contacts" key="contacts" symbol="book" %}
+                        {% include "directory/nav.html" with name="Family settings" route="directory:settings" key="settings" symbol="settings" %}
                     </nav>
                     <div class="sidebar-bottom">
                         <div class="sidebar-note">
@@ -62,7 +63,6 @@
                                 A world of connection.
                             </p>
                         </div>
-                        {% include "directory/nav.html" with name="Family settings" route="directory:settings" key="settings" symbol="settings" %}
                         <div class="profile">
                             <span class="avatar yellow small-avatar">{{ portal_parent.display_name|first|upper }}</span>
                             <div>
