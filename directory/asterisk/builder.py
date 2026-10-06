@@ -1,5 +1,6 @@
 from django.conf import settings
 from directory.services import shortcut_destination_allowed
+from .menus import external_caller_menu_shortcuts
 
 from .domain import (
     AsteriskConfiguration,
@@ -24,6 +25,7 @@ from .tts import (
     text_to_speech_settings,
 )
 from directory.models import (
+    Child,
     ChildConnection,
     ChildBlackoutPeriod,
     ChildLandline,
@@ -40,6 +42,9 @@ from directory.models import (
 
 
 def build_asterisk_configuration():
+    spoken_names_by_child_id = {
+        child.pk: child.spoken_menu_name for child in Child.objects.all()
+    }
     blackout_windows_by_child_id = {}
     for period in ChildBlackoutPeriod.objects.filter(is_active=True).order_by(
         "child_id",
@@ -320,6 +325,7 @@ def build_asterisk_configuration():
                                 contact.external_phone_number.normalized_number
                             ),
                             target_endpoint=target,
+                            target_child_name=spoken_names_by_child_id[target.child_id],
                         )
                     )
 
@@ -353,6 +359,7 @@ def build_asterisk_configuration():
                             permission.external_phone_number.normalized_number
                         ),
                         target_endpoint=target,
+                        target_child_name=spoken_names_by_child_id[target.child_id],
                     )
                 )
 
@@ -382,6 +389,7 @@ def build_asterisk_configuration():
                         public_phone_number_id=public_number.public_phone_number_id,
                         caller_normalized_number=parent.phone,
                         target_endpoint=target,
+                        target_child_name=spoken_names_by_child_id[target.child_id],
                     )
                 )
 
@@ -529,6 +537,17 @@ def build_asterisk_configuration():
         in menu_keys
     }
     prompt_texts.update(shortcut_prompt_texts)
+    external_caller_groups = {}
+    for rule in inbound_external_caller_rules:
+        external_caller_groups.setdefault(
+            (rule.public_phone_number_id, rule.caller_normalized_number), []
+        ).append(rule)
+    for caller_rules in external_caller_groups.values():
+        if len({rule.target_endpoint.extension for rule in caller_rules}) <= 1:
+            continue
+        prompt_texts.add(MENU_EXTENSION_TEXT)
+        for digits, menu_rules in external_caller_menu_shortcuts(caller_rules).items():
+            prompt_texts.add(menu_shortcut_text(digits, menu_rules[0].target_child_name))
     spoken_prompts = tuple(
         sorted(
             (spoken_prompt(text, tts_settings) for text in prompt_texts),

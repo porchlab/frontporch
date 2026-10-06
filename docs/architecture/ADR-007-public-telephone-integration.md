@@ -51,6 +51,7 @@ Routing rules:
 
 - If the caller is approved for exactly one child, route directly to that child.
 - If a recognized child landline is approved for multiple children, answer with a spoken menu that enumerates only active, currently authorized Admin-configured shortcuts from `1` through `9`, then offers an approved four-digit extension as an alternative.
+- If an ordinary external caller has multiple approved destination extensions, answer with the same spoken menu and retry behavior. Automatically assign choices `1` through `9` to approved children in child record ID order, with one choice per child. Retain all approved extensions for direct entry, including children beyond the first nine. Scope both choices and spoken names to the caller's current approvals for the dialed public number.
 - Replay the menu once after invalid input or timeout. After the second invalid input or timeout, play goodbye and disconnect.
 - Unknown callers may be routed to parents, routed to voicemail, or rejected, depending on future policy.
 

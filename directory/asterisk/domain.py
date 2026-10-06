@@ -167,6 +167,7 @@ class InboundExternalCallerRule:
     public_phone_number_id: int
     caller_normalized_number: str
     target_endpoint: SipEndpoint | LandlineChildEndpoint
+    target_child_name: str = ""
 
     @property
     def caller_id_variants(self):

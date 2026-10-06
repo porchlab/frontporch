@@ -4,6 +4,8 @@ from datetime import time
 from django.test import TestCase, override_settings
 
 from directory.asterisk.builder import build_asterisk_configuration
+from directory.asterisk.renderer import AsteriskConfigRenderer
+from directory.asterisk.tts import MENU_EXTENSION_TEXT
 from directory.models import (
     Child,
     ChildConnection,
@@ -442,6 +444,65 @@ class AsteriskConfigurationBuilderTests(TestCase):
                 for rule in configuration.inbound_external_caller_rules
             },
         )
+
+    def test_shared_external_contact_menu_uses_current_permissions_and_spoken_names(self):
+        public_number = PublicPhoneNumber.objects.get(normalized_number="+12025550199")
+        public_number.is_active = True
+        public_number.save()
+        number, _ = ExternalPhoneNumber.objects.get_or_create_normalized("+12125550100")
+        FamilyContact.objects.create(
+            family=self.river, external_phone_number=number, label="Grandma"
+        )
+        maple_contact = FamilyContact.objects.create(
+            family=self.maple, external_phone_number=number, label="Mary"
+        )
+        self.emma.spoken_name = "EM-uh"
+        self.emma.save()
+        configuration = build_asterisk_configuration()
+        self.assertEqual(configuration, build_asterisk_configuration())
+        self.assertEqual(
+            {prompt.text for prompt in configuration.spoken_prompts},
+            {"Dial 1 for Alex.", "Dial 2 for EM-uh.", MENU_EXTENSION_TEXT},
+        )
+        content = AsteriskConfigRenderer().render_extensions(configuration)
+        for prompt in configuration.spoken_prompts:
+            self.assertIn(f"Background({prompt.sound_name})", content)
+
+        maple_contact.delete()
+        revoked = build_asterisk_configuration()
+        self.assertEqual(revoked.spoken_prompts, ())
+        self.assertEqual(
+            {rule.target_endpoint.child_id for rule in revoked.inbound_external_caller_rules},
+            {self.alex.pk},
+        )
+        self.assertNotIn("[frontporch-inbound-", AsteriskConfigRenderer().render_extensions(revoked))
+
+    def test_external_menu_is_scoped_to_public_number_and_supports_landline_targets(self):
+        public_number = PublicPhoneNumber.objects.create(
+            normalized_number="202-555-0198", assigned_family=self.maple
+        )
+        number, _ = ExternalPhoneNumber.objects.get_or_create_normalized("+12125550100")
+        for family in (self.river, self.maple):
+            FamilyContact.objects.create(
+                family=family, external_phone_number=number, label="Grandma"
+            )
+        landline_number, _ = ExternalPhoneNumber.objects.get_or_create_normalized("+16465550100")
+        ChildLandline.objects.create(
+            child=self.luca,
+            external_phone_number=landline_number,
+            dial_extension="4663",
+            approved_by=self.maple_parent,
+        )
+        configuration = build_asterisk_configuration()
+        self.assertEqual(
+            {prompt.text for prompt in configuration.spoken_prompts},
+            {"Dial 1 for Emma.", "Dial 2 for Luca.", MENU_EXTENSION_TEXT},
+        )
+        content = AsteriskConfigRenderer().render_extensions(configuration)
+        context = content.split(f"[frontporch-inbound-{public_number.pk}-1]", 1)[1].split("\n[", 1)[0]
+        self.assertIn("exten => 2,1,Dial(PJSIP/16465550100@voipms-endpoint,30,r(ring))", context)
+        self.assertNotIn("exten => 101,", context)
+        self.assertNotIn("exten => 103,", context)
 
     def test_shared_public_number_creates_inbound_rule_for_approved_caller(self):
         public_number = PublicPhoneNumber.objects.get(normalized_number="+12025550199")
