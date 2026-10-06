@@ -1,5 +1,6 @@
 import tempfile
 import stat
+from dataclasses import replace
 from pathlib import Path
 
 from django.test import SimpleTestCase
@@ -558,7 +559,7 @@ class AsteriskConfigRendererTests(SimpleTestCase):
             content,
         )
 
-    def test_ambiguous_inbound_caller_gets_restricted_extension_context(self):
+    def test_ambiguous_external_caller_gets_spoken_choices_and_restricted_extensions(self):
         configuration = AsteriskConfiguration(
             endpoints=(self.alex_endpoint, self.emma_endpoint),
             dialplan_rules=(),
@@ -592,9 +593,64 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         self.assertIn("[frontporch-inbound-1-1]", content)
         self.assertIn("exten => s,1,NoOp(FrontPorch restricted inbound caller +12125550100)", content)
         self.assertIn(" same => n,WaitExten(10)", content)
-        self.assertIn("exten => 101,1,Dial(PJSIP/alex,30)", content)
-        self.assertIn("exten => 102,1,Dial(PJSIP/emma,30)", content)
-        self.assertIn("exten => _X!,1,Hangup(21)", content)
+        context = self.context_content(content, "frontporch-inbound-1-1")
+        for digits, name in (("1", "Alex"), ("2", "Emma")):
+            prompt = spoken_prompt(menu_shortcut_text(digits, name), text_to_speech_settings())
+            self.assertIn(f"Background({prompt.sound_name})", context)
+        self.assertIn("exten => 1,1,Dial(PJSIP/alex,30,r(ring))", context)
+        self.assertIn("exten => 2,1,Dial(PJSIP/emma,30,r(ring))", context)
+        self.assertIn("exten => 101,1,Dial(PJSIP/alex,30,r(ring))", context)
+        self.assertIn("exten => 102,1,Dial(PJSIP/emma,30,r(ring))", context)
+        self.assertIn("Set(FRONTPORCH_MENU_ATTEMPT=1)", context)
+        for invalid in ("i", "t"):
+            self.assertIn(
+                f'exten => {invalid},1,GotoIf($["${{FRONTPORCH_MENU_ATTEMPT}}" = "1"]?retry,1:goodbye,1)',
+                context,
+            )
+        self.assertIn("exten => retry,1,Set(FRONTPORCH_MENU_ATTEMPT=2)", context)
+        self.assertIn("Playback(please-try-again)", context)
+        self.assertIn("Goto(s,menu)", context)
+        self.assertIn("exten => goodbye,1,Playback(goodbye)", context)
+        self.assertNotIn("exten => 2222,", context)
+        self.assertNotIn("include =>", context)
+        self.assertNotIn("exten => _X", context)
+
+    def test_external_menu_limits_shortcuts_to_nine_children_and_keeps_all_extensions(self):
+        endpoints = tuple(
+            replace(
+                self.alex_endpoint,
+                device_id=index,
+                child_id=index,
+                owner_id=index,
+                owner_display_name=f"Child {index}",
+                extension=str(4000 + index),
+                username=f"child-{index}",
+            )
+            for index in range(1, 11)
+        )
+        second_phone = replace(endpoints[0], device_id=11, username="child-1-extra")
+        endpoints += (second_phone,)
+        configuration = AsteriskConfiguration(
+            endpoints=endpoints,
+            dialplan_rules=(),
+            inbound_external_caller_rules=tuple(
+                InboundExternalCallerRule(1, "+12125550100", endpoint)
+                for endpoint in reversed(endpoints)
+            ),
+            public_inbound_numbers=(PublicInboundNumber(1, "+12025550199", "Shared"),),
+        )
+        context = self.context_content(
+            self.renderer.render_extensions(configuration), "frontporch-inbound-1-1"
+        )
+        self.assertIn("exten => 1,1,Dial(PJSIP/child-1&PJSIP/child-1-extra,30,r(ring))", context)
+        self.assertIn("exten => 9,1,Dial(PJSIP/child-9,30,r(ring))", context)
+        self.assertNotIn("exten => 10,", context)
+        self.assertIn("exten => 4010,1,Dial(PJSIP/child-10,30,r(ring))", context)
+        for index in range(1, 10):
+            prompt = spoken_prompt(
+                menu_shortcut_text(str(index), f"Child {index}"), text_to_speech_settings()
+            )
+            self.assertEqual(context.count(f"Background({prompt.sound_name})"), 1)
 
     def test_landline_caller_gets_restricted_extension_context(self):
         configuration = AsteriskConfiguration(

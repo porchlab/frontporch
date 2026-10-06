@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
+from directory.asterisk.menus import external_caller_menu_shortcuts
 from directory.asterisk.tts import (
     MENU_EXTENSION_TEXT,
     menu_shortcut_text,
@@ -702,7 +703,7 @@ class AsteriskConfigRenderer:
             caller_number,
             caller_rules,
             shortcut_rules,
-            is_spoken_landline_menu,
+            is_landline_menu,
             caller_endpoint,
         ) in restricted_contexts:
             target_groups = _group_rules_by_value(
@@ -713,6 +714,8 @@ class AsteriskConfigRenderer:
                 shortcut_rules,
                 lambda rule: rule.digits,
             )
+            if not is_landline_menu:
+                shortcut_groups = external_caller_menu_shortcuts(caller_rules)
             lines.extend(
                 [
                     f"[{context_name}]",
@@ -721,29 +724,13 @@ class AsteriskConfigRenderer:
                         f"{caller_number})"
                     ),
                     " same => n,Answer()",
+                    " same => n,Set(FRONTPORCH_MENU_ATTEMPT=1)",
                 ]
             )
-            if is_spoken_landline_menu:
-                lines.extend(
-                    [
-                        " same => n,Set(FRONTPORCH_MENU_ATTEMPT=1)",
-                    ]
-                )
-                lines.extend(
-                    self._landline_menu_background_lines(
-                        configuration,
-                        shortcut_groups,
-                    )
-                )
-                lines.extend([" same => n,WaitExten(10)", ""])
-            else:
-                lines.extend(
-                    [
-                        " same => n,WaitExten(10)",
-                        " same => n,Hangup(21)",
-                        "",
-                    ]
+            lines.extend(
+                self._menu_background_lines(configuration, shortcut_groups)
             )
+            lines.extend([" same => n,WaitExten(10)", ""])
             for digits, digit_rules in shortcut_groups.items():
                 targets = _unique_targets(digit_rules)
                 lines.extend(
@@ -754,7 +741,7 @@ class AsteriskConfigRenderer:
                             targets[0],
                             configuration.outbound_caller_id,
                         ),
-                        generate_ringback=is_spoken_landline_menu,
+                        generate_ringback=True,
                     )
                 )
             for extension, target_rules in target_groups.items():
@@ -767,7 +754,7 @@ class AsteriskConfigRenderer:
                             targets[0],
                             configuration.outbound_caller_id,
                         ),
-                        generate_ringback=is_spoken_landline_menu,
+                        generate_ringback=True,
                     )
                 )
             if caller_endpoint is not None:
@@ -778,21 +765,11 @@ class AsteriskConfigRenderer:
                     lines.extend(
                         self._render_conference_entry(conference, caller_endpoint)
                     )
-            if is_spoken_landline_menu:
-                lines.extend(self._render_spoken_menu_retry_rules())
-            else:
-                lines.extend(
-                    [
-                        "exten => i,1,Hangup(21)",
-                        "exten => t,1,Hangup(21)",
-                        "exten => _X!,1,Hangup(21)",
-                        "",
-                    ]
-                )
+            lines.extend(self._render_spoken_menu_retry_rules())
 
         return lines
 
-    def _landline_menu_background_lines(self, configuration, shortcut_groups):
+    def _menu_background_lines(self, configuration, shortcut_groups):
         prompt_settings = (
             configuration.text_to_speech_settings or text_to_speech_settings()
         )
