@@ -9,6 +9,7 @@ from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 
 from directory import models as m
+from directory.forms import _lock_group_children
 from directory.admin import ConferenceGroupAdmin
 from directory.groups import invitation_available, _require_parent
 from directory.asterisk.builder import build_asterisk_configuration
@@ -665,6 +666,44 @@ class GroupMembershipTests(TestCase):
         self.assertEqual(client.post(url, {"family": self.other.pk}).status_code, 403)
         self.assertFalse(m.GroupInvitation.objects.exists())
 
+    def test_group_forms_recheck_child_ownership_after_initial_selection(self):
+        invitation = self.invite()
+        for name, args, actor, child in (
+            ("conference_group_create", (), self.parent, self.sibling),
+            ("conference_group_update", (self.group.pk,), self.parent, self.sibling),
+            ("group_review", (invitation.pk,), self.recipient, self.peer),
+        ):
+            with self.subTest(action=name):
+                child.family = actor.family
+                child.save()
+                self.client.force_login(actor.user)
+
+                def transfer_after_selection(members, family):
+                    # The field has already validated and cached its selection.
+                    child.family = self.stranger
+                    child.save()
+                    return _lock_group_children(members, family)
+
+                with patch(
+                    "directory.forms._lock_group_children",
+                    side_effect=transfer_after_selection,
+                ):
+                    response = self.client.post(
+                        self.url(name, *args),
+                        {
+                            "name": "Friends",
+                            "members": [child.pk],
+                            "is_active": True,
+                        },
+                    )
+                self.assertContains(
+                    response, "A selected child no longer belongs to your family."
+                )
+                self.assertEqual(list(self.group.members.all()), [self.child])
+                self.assertEqual(m.ConferenceGroup.objects.count(), 1)
+                invitation.refresh_from_db()
+                self.assertEqual(invitation.status, "pending")
+
 
 class ConcurrentGroupMembershipTests(TransactionTestCase):
     def setUp(self):
@@ -715,6 +754,70 @@ class ConcurrentGroupMembershipTests(TransactionTestCase):
         )
         self.assertEqual(responses, [302, 302])
         self.assertEqual(set(self.group.members.all()), {c[1] for c in self.children})
+
+    def test_selected_children_are_locked_before_group_membership_writes(self):
+        self.group.members.remove(self.children[1][0])
+        invitation = m.GroupInvitation.objects.create(
+            group=self.group,
+            source_family=self.parents[0].family,
+            target_family=self.parents[1].family,
+            sent_by=self.parents[0],
+        )
+        for name, args, actor, child in (
+            ("conference_group_create", [], self.parents[0], self.children[0][1]),
+            (
+                "conference_group_update",
+                [self.group.pk],
+                self.parents[0],
+                self.children[0][1],
+            ),
+            ("group_review", [invitation.pk], self.parents[1], self.children[1][1]),
+        ):
+            ready, release = Event(), Event()
+
+            def hold_selection(members, family):
+                result = _lock_group_children(members, family)
+                ready.set()
+                if not release.wait(timeout=10):
+                    raise TimeoutError("Test did not release the selected children.")
+                return result
+
+            def submit():
+                close_old_connections()
+                try:
+                    client = Client()
+                    client.force_login(actor.user)
+                    return client.post(
+                        reverse("directory:" + name, args=args),
+                        {
+                            "name": "Friends",
+                            "members": [child.pk],
+                            "is_active": True,
+                        },
+                    ).status_code
+                finally:
+                    connections.close_all()
+
+            with (
+                self.subTest(action=name),
+                patch(
+                    "directory.forms._lock_group_children", side_effect=hold_selection
+                ),
+            ):
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(submit)
+                    try:
+                        self.assertTrue(ready.wait(timeout=10))
+                        with self.assertRaises(OperationalError):
+                            with transaction.atomic():
+                                # A household UPDATE takes NO KEY UPDATE; an
+                                # insertion's FK key-share lock is insufficient.
+                                m.Child.objects.select_for_update(
+                                    nowait=True, no_key=True
+                                ).get(pk=child.pk)
+                    finally:
+                        release.set()
+                        self.assertEqual(future.result(timeout=10), 302)
 
     def test_staff_mutations_hold_the_same_group_lock_as_acceptance(self):
         def mutate(action):

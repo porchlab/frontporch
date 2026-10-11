@@ -262,6 +262,21 @@ class ExternalContactPermissionForm(forms.ModelForm):
         self.fields["external_phone_number"].label = "Family contact number"
 
 
+def _lock_group_children(members, family):
+    # ModelMultipleChoiceField initially validates ownership without row locks.
+    # Recheck the selected identities under locks held through the membership write.
+    selected = {child.pk for child in members}
+    locked = Child.objects.select_for_update().filter(pk__in=selected).order_by("pk")
+    children = list(locked)
+    if len(children) != len(selected) or any(
+        child.family_id != family.pk for child in children
+    ):
+        raise forms.ValidationError(
+            "A selected child no longer belongs to your family. Reload the form and try again."
+        )
+    return locked
+
+
 class ConferenceGroupForm(forms.ModelForm):
     class Meta:
         model = ConferenceGroup
@@ -296,7 +311,7 @@ class ConferenceGroupForm(forms.ModelForm):
         members = self.cleaned_data["members"]
         if not self.instance.pk and not members:
             raise forms.ValidationError("Choose at least one child.")
-        return members
+        return _lock_group_children(members, self.family)
 
     def _save_m2m(self):
         # Replace only this household's approvals; other households control theirs.
@@ -346,7 +361,11 @@ class GroupAcceptForm(forms.Form):
 
     def __init__(self, *args, family, **kwargs):
         super().__init__(*args, **kwargs)
+        self.family = family
         self.fields["members"].queryset = Child.objects.filter(family=family)
+
+    def clean_members(self):
+        return _lock_group_children(self.cleaned_data["members"], self.family)
 
 
 class FamilySettingsForm(forms.ModelForm):
