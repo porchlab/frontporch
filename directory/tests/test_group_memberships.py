@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
+from unittest.mock import patch
 
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth.models import User
@@ -8,6 +9,7 @@ from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 
 from directory import models as m
+from directory.groups import invitation_available
 from directory.asterisk.builder import build_asterisk_configuration
 from directory.services import shortcut_destination_allowed
 
@@ -381,6 +383,29 @@ class GroupMembershipTests(TestCase):
         )
         self.assertFalse(self.group.members.filter(pk=self.peer.pk).exists())
 
+    def test_staff_join_supersedes_invitation_and_departure_requires_new_invite(self):
+        invitation = self.invite()
+        self.group.members.add(self.peer)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "cancelled")
+        self.group.members.remove(self.peer)
+        self.client.force_login(self.recipient.user)
+        response = self.client.post(
+            self.url("group_review", invitation.pk), {"members": [self.peer.pk]}
+        )
+        self.assertRedirects(response, self.url("invitations"))
+        self.assertFalse(self.group.members.filter(pk=self.peer.pk).exists())
+        self.client.force_login(self.parent.user)
+        self.client.post(
+            self.url("group_invite", self.group.pk), {"family": self.other.pk}
+        )
+        fresh = m.GroupInvitation.objects.get(group=self.group, status="pending")
+        self.client.force_login(self.recipient.user)
+        self.client.post(
+            self.url("group_review", fresh.pk), {"members": [self.peer.pk]}
+        )
+        self.assertTrue(self.group.members.filter(pk=self.peer.pk).exists())
+
     def test_changing_child_household_cancels_former_family_invitations(self):
         invitation = self.invite()
         self.child.family = self.stranger
@@ -596,6 +621,56 @@ class ConcurrentGroupMembershipTests(TransactionTestCase):
                     finally:
                         release.set()
                         future.result(timeout=10)
+
+    def test_acceptance_locks_sending_guardian_and_account_until_commit(self):
+        self.group.members.remove(self.children[1][0])
+        invitation = m.GroupInvitation.objects.create(
+            group=self.group,
+            source_family=self.parents[0].family,
+            target_family=self.parents[1].family,
+            sent_by=self.parents[0],
+        )
+        ready, release = Event(), Event()
+
+        def check_and_hold(invitation):
+            result = invitation_available(invitation)
+            ready.set()
+            if not release.wait(timeout=10):
+                raise TimeoutError("Test did not release acceptance.")
+            return result
+
+        def accept():
+            close_old_connections()
+            try:
+                client = Client()
+                client.force_login(self.parents[1].user)
+                return client.post(
+                    reverse("directory:group_review", args=[invitation.pk]),
+                    {"members": [self.children[1][0].pk]},
+                ).status_code
+            finally:
+                connections.close_all()
+
+        with patch("directory.groups.invitation_available", side_effect=check_and_hold):
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(accept)
+                try:
+                    self.assertTrue(ready.wait(timeout=10))
+                    for model, pk in (
+                        (m.Parent, self.parents[0].pk),
+                        (User, self.parents[0].user_id),
+                    ):
+                        with self.subTest(model=model.__name__):
+                            with self.assertRaises(OperationalError):
+                                with transaction.atomic():
+                                    model.objects.select_for_update(nowait=True).get(
+                                        pk=pk
+                                    )
+                finally:
+                    release.set()
+                    self.assertEqual(future.result(timeout=10), 302)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "accepted")
 
     def test_simultaneous_acceptance_consumes_invitation_once(self):
         self.group.members.remove(self.children[1][0])

@@ -11,20 +11,26 @@ def lock_conference_groups(group_ids):
     )
 
 
-def cancel_departed_group_invitations():
-    """Make a household's departure permanently invalidate its pending invitations."""
-    from django.db.models import Exists, OuterRef
+def cancel_invalid_group_invitations():
+    """Cancel invitations from departed sources or superseded by a target joining."""
+    from django.db.models import Exists, OuterRef, Q
     from django.utils import timezone
     from .models import GroupInvitation
 
     memberships = ConferenceGroup.members.through.objects.filter(
         conferencegroup_id=OuterRef("group_id"),
-        child__family_id=OuterRef("source_family_id"),
     )
     return (
         GroupInvitation.objects.filter(status="pending")
-        .alias(source_is_member=Exists(memberships))
-        .filter(source_is_member=False)
+        .alias(
+            source_is_member=Exists(
+                memberships.filter(child__family_id=OuterRef("source_family_id"))
+            ),
+            target_is_member=Exists(
+                memberships.filter(child__family_id=OuterRef("target_family_id"))
+            ),
+        )
+        .filter(Q(source_is_member=False) | Q(target_is_member=True))
         .update(status="cancelled", updated_at=timezone.now())
     )
 

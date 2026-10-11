@@ -3,6 +3,7 @@
 from django.contrib import messages
 from django.contrib.admin.models import CHANGE
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -25,14 +26,19 @@ def member_group(parent, group_id):
 
 
 def invitation_available(invitation):
-    sender = invitation.sent_by
+    # Hold both permission records until acceptance commits, so staff revocation
+    # cannot race the membership grant after these checks.
+    sender = models.Parent.objects.select_for_update().get(pk=invitation.sent_by_id)
+    account = (
+        get_user_model().objects.select_for_update().filter(pk=sender.user_id).first()
+    )
     return (
         invitation.status == "pending"
         and invitation.group.is_active
         and sender.is_guardian
         and sender.family_id == invitation.source_family_id
-        and sender.user_id is not None
-        and sender.user.is_active
+        and account is not None
+        and account.is_active
         and invitation.group.members.filter(
             family_id=invitation.source_family_id
         ).exists()
