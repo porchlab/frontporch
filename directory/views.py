@@ -346,10 +346,6 @@ def conference_group_update(request, group_id):
                 updated.approved_by = parent
                 updated.save()
             form.save_m2m()
-            if not updated.members.filter(family=parent.family).exists():
-                updated.invitations.filter(
-                    source_family=parent.family, status="pending"
-                ).update(status="cancelled", responded_by=parent)
             if not updated.is_active:
                 updated.invitations.filter(status="pending").update(
                     status="cancelled", responded_by=parent

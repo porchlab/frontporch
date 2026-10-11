@@ -304,8 +304,10 @@ class ConferenceGroupForm(forms.ModelForm):
         current = set(
             self.instance.members.filter(family=self.family).values_list("pk", flat=True)
         )
-        self.instance.members.remove(*(current - selected))
+        # A replacement within the household is not a departure: add first so
+        # membership-removal handlers see the retained household approval.
         self.instance.members.add(*(selected - current))
+        self.instance.members.remove(*(current - selected))
 
 
 class GroupInvitationForm(forms.Form):

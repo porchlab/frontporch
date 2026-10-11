@@ -93,7 +93,9 @@ the recipient family, cancellable by the sender household, and declineable by th
 recipient household. Acceptance requires an active group, an active guardian account
 in the sending household, and current sending-household membership. Leaving entirely
 cancels that household's pending outgoing invitations and removes its portal access
-to the group; returning requires a new invitation. Portal membership changes log the
+to the group; returning requires a new invitation. Cancellation also applies to
+staff membership edits, child deletion, and moving a child to another household.
+Portal membership changes log the
 actor and resulting roster in Admin history and create family-scoped activity.
 Group invitations appear in the portal inbox and dashboard; they do not send email.
 

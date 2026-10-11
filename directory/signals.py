@@ -2,6 +2,7 @@ from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
 
 from directory.asterisk.autoreload import schedule_asterisk_configuration_apply
+from directory.services import cancel_departed_group_invitations
 from directory.models import (
     Child,
     ChildConnection,
@@ -57,5 +58,19 @@ def apply_asterisk_configuration_after_model_change(**kwargs):
 
 @receiver(m2m_changed, sender=ConferenceGroup.members.through)
 def apply_asterisk_configuration_after_conference_members_change(action, **kwargs):
+    if action in {"post_remove", "post_clear"}:
+        cancel_departed_group_invitations()
     if action in {"post_add", "post_remove", "post_clear"}:
         schedule_asterisk_configuration_apply()
+
+
+@receiver(post_delete, sender=Child)
+def cancel_group_invitations_after_child_deletion(**kwargs):
+    # Cascading removal of a child's memberships does not emit m2m_changed.
+    cancel_departed_group_invitations()
+
+
+@receiver(post_save, sender=Child)
+def cancel_group_invitations_after_child_household_change(created, raw, **kwargs):
+    if not created and not raw:
+        cancel_departed_group_invitations()

@@ -342,6 +342,74 @@ class GroupMembershipTests(TestCase):
         )
         self.assertFalse(self.group.members.exists())
 
+    def test_membership_removal_cancels_invitations_even_after_rejoining(self):
+        removals = {
+            "forward_remove": lambda: self.group.members.remove(self.child),
+            "forward_clear": lambda: self.group.members.clear(),
+            "forward_set": lambda: self.group.members.set([]),
+            "reverse_remove": lambda: self.child.conference_groups.remove(self.group),
+            "reverse_clear": lambda: self.child.conference_groups.clear(),
+        }
+        for name, remove in removals.items():
+            with self.subTest(name=name):
+                self.group.members.set([self.child])
+                invitation = m.GroupInvitation.objects.create(
+                    group=self.group,
+                    source_family=self.family,
+                    target_family=self.other,
+                    sent_by=self.parent,
+                )
+                remove()
+                self.group.members.add(self.sibling)
+                invitation.refresh_from_db()
+                self.assertEqual(invitation.status, "cancelled")
+                self.client.force_login(self.recipient.user)
+                self.client.post(
+                    self.url("group_review", invitation.pk), {"members": [self.peer.pk]}
+                )
+                self.assertFalse(self.group.members.filter(pk=self.peer.pk).exists())
+
+    def test_child_deletion_permanently_cancels_outgoing_group_invitations(self):
+        invitation = self.invite()
+        self.child.delete()
+        self.group.members.add(self.sibling)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "cancelled")
+        self.client.force_login(self.recipient.user)
+        self.client.post(
+            self.url("group_review", invitation.pk), {"members": [self.peer.pk]}
+        )
+        self.assertFalse(self.group.members.filter(pk=self.peer.pk).exists())
+
+    def test_changing_child_household_cancels_former_family_invitations(self):
+        invitation = self.invite()
+        self.child.family = self.stranger
+        self.child.save()
+        self.group.members.add(self.sibling)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "cancelled")
+
+    def test_replacing_own_child_preserves_pending_invitation(self):
+        invitation = self.invite()
+        self.client.post(
+            self.url("conference_group_update", self.group.pk),
+            {
+                "name": "Friends",
+                "is_active": "on",
+                "members": [self.sibling.pk],
+            },
+        )
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "pending")
+        self.assertEqual(list(self.group.members.all()), [self.sibling])
+
+    def test_removing_one_child_preserves_invitations_while_family_remains(self):
+        invitation = self.invite()
+        self.group.members.add(self.sibling)
+        self.child.delete()
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "pending")
+
     def test_revoked_sender_and_paused_group_cannot_authorize_join(self):
         invitation = self.invite()
         self.client.force_login(self.recipient.user)
@@ -364,7 +432,7 @@ class GroupMembershipTests(TestCase):
                 self.assertRedirects(response, self.url("invitations"))
                 self.assertFalse(self.group.members.filter(pk=self.peer.pk).exists())
         invitation.refresh_from_db()
-        self.assertEqual(invitation.status, "pending")
+        self.assertEqual(invitation.status, "cancelled")
 
     def test_guardian_login_and_csrf_required(self):
         url = self.url("group_invite", self.group.pk)

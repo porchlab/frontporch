@@ -1,6 +1,24 @@
 from .models import ConferenceGroup
 
 
+def cancel_departed_group_invitations():
+    """Make a household's departure permanently invalidate its pending invitations."""
+    from django.db.models import Exists, OuterRef
+    from django.utils import timezone
+    from .models import GroupInvitation
+
+    memberships = ConferenceGroup.members.through.objects.filter(
+        conferencegroup_id=OuterRef("group_id"),
+        child__family_id=OuterRef("source_family_id"),
+    )
+    return (
+        GroupInvitation.objects.filter(status="pending")
+        .alias(source_is_member=Exists(memberships))
+        .filter(source_is_member=False)
+        .update(status="cancelled", updated_at=timezone.now())
+    )
+
+
 def explicit_conference_group_exists(children):
     child_ids = set(child.id for child in children)
     if len(child_ids) < 2:
