@@ -3,7 +3,7 @@ from threading import Barrier
 
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth.models import User
-from django.db import close_old_connections
+from django.db import close_old_connections, connections
 from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 
@@ -109,7 +109,7 @@ class GroupMembershipTests(TestCase):
         )
         self.assertTrue(
             m.FamilyActivity.objects.filter(
-                family=self.other, description__contains="Emma"
+                family=self.other, description="Joined Friends with 1 child."
             ).exists()
         )
         # An already consumed invitation cannot add a later child or restore a departure.
@@ -118,6 +118,37 @@ class GroupMembershipTests(TestCase):
             self.url("group_review", invitation.pk), {"members": [self.excluded.pk]}
         )
         self.assertEqual(list(self.group.members.all()), [self.child])
+
+    def test_acceptance_with_maximum_length_names_keeps_activity_bounded(self):
+        self.group.name = "G" * 200
+        self.group.save()
+        for child, initial in ((self.peer, "E"), (self.excluded, "R")):
+            child.name = initial * 200
+            child.save()
+        invitation = self.invite()
+        self.client.force_login(self.recipient.user)
+
+        response = self.client.post(
+            self.url("group_review", invitation.pk),
+            {"members": [self.peer.pk, self.excluded.pk]},
+        )
+
+        self.assertRedirects(response, self.url("connections"))
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "accepted")
+        self.assertEqual(
+            set(self.group.members.all()), {self.child, self.peer, self.excluded}
+        )
+        activity = m.FamilyActivity.objects.filter(family=self.other).latest("pk")
+        self.assertEqual(
+            activity.description, f"Joined {self.group.name} with 2 children."
+        )
+        self.assertLessEqual(len(activity.description), 500)
+        audit = LogEntry.objects.get(
+            user=self.recipient.user, object_id=str(self.group.pk)
+        )
+        self.assertIn(self.peer.name, audit.change_message)
+        self.assertIn(self.excluded.name, audit.change_message)
 
     def test_shared_group_edit_preserves_other_family_and_shared_settings(self):
         self.group.members.add(self.peer)
@@ -382,7 +413,7 @@ class ConcurrentGroupMembershipTests(TransactionTestCase):
                 barrier.wait(timeout=10)
                 return client.post(url, data).status_code
             finally:
-                close_old_connections()
+                connections.close_all()
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             return list(pool.map(post, requests))

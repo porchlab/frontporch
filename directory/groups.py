@@ -136,11 +136,17 @@ def review(request, invitation_id):
         invitation.accepted_children.set(children)
         invitation.status, invitation.responded_by = "accepted", parent
         invitation.save()
-        description = (
+        audit_description = (
             f"Joined {group.name} with {', '.join(child.name for child in children)}."
         )
-        _log_parent_conference_group_action(request, group, CHANGE, description)
-        record_group_change(parent, group, description)
+        _log_parent_conference_group_action(request, group, CHANGE, audit_description)
+        # Family activity is limited to 500 characters; keep the full roster in
+        # the staff audit's text field and summarize the approval here.
+        child_count = len(children)
+        child_label = "child" if child_count == 1 else "children"
+        record_group_change(
+            parent, group, f"Joined {group.name} with {child_count} {child_label}."
+        )
         messages.success(request, "Your selected children joined the group.")
         return redirect("directory:connections")
     families = models.Family.objects.filter(
