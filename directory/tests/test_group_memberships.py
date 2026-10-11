@@ -1,9 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
-from threading import Barrier
+from threading import Barrier, Event
 
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth.models import User
-from django.db import close_old_connections, connections
+from django.db import OperationalError, close_old_connections, connections, transaction
 from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 
@@ -550,6 +550,52 @@ class ConcurrentGroupMembershipTests(TransactionTestCase):
         )
         self.assertEqual(responses, [302, 302])
         self.assertEqual(set(self.group.members.all()), {c[1] for c in self.children})
+
+    def test_staff_mutations_hold_the_same_group_lock_as_acceptance(self):
+        def mutate(action):
+            child = m.Child.objects.get(pk=self.children[0][0].pk)
+            if action == "transfer":
+                child.family = self.parents[1].family
+                child.save()
+            elif action == "delete":
+                child.delete()
+            elif action == "forward_remove":
+                self.group.members.remove(child)
+            else:
+                child.conference_groups.clear()
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            for action in ("transfer", "delete", "forward_remove", "reverse_clear"):
+                ready, release = Event(), Event()
+
+                def hold_mutation():
+                    close_old_connections()
+                    try:
+                        with transaction.atomic():
+                            mutate(action)
+                            ready.set()
+                            if not release.wait(timeout=10):
+                                raise TimeoutError(
+                                    "Test did not release the membership change."
+                                )
+                            transaction.set_rollback(True)
+                    finally:
+                        connections.close_all()
+
+                with self.subTest(action=action):
+                    future = pool.submit(hold_mutation)
+                    try:
+                        self.assertTrue(ready.wait(timeout=10))
+                        # A second transaction must not be able to acquire the
+                        # group lock while the staff mutation is uncommitted.
+                        with self.assertRaises(OperationalError):
+                            with transaction.atomic():
+                                m.ConferenceGroup.objects.select_for_update(
+                                    nowait=True
+                                ).get(pk=self.group.pk)
+                    finally:
+                        release.set()
+                        future.result(timeout=10)
 
     def test_simultaneous_acceptance_consumes_invitation_once(self):
         self.group.members.remove(self.children[1][0])

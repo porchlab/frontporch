@@ -1,8 +1,8 @@
-from django.db.models.signals import m2m_changed, post_delete, post_save
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_delete
 from django.dispatch import receiver
 
 from directory.asterisk.autoreload import schedule_asterisk_configuration_apply
-from directory.services import cancel_departed_group_invitations
+from directory.services import cancel_departed_group_invitations, lock_conference_groups
 from directory.models import (
     Child,
     ChildConnection,
@@ -57,7 +57,16 @@ def apply_asterisk_configuration_after_model_change(**kwargs):
 
 
 @receiver(m2m_changed, sender=ConferenceGroup.members.through)
-def apply_asterisk_configuration_after_conference_members_change(action, **kwargs):
+def apply_asterisk_configuration_after_conference_members_change(
+    action, instance, reverse, pk_set, **kwargs
+):
+    if action in {"pre_add", "pre_remove", "pre_clear"}:
+        group_ids = (
+            instance.conference_groups.values_list("pk", flat=True)
+            if reverse and action == "pre_clear"
+            else pk_set if reverse else [instance.pk]
+        )
+        lock_conference_groups(group_ids)
     if action in {"post_remove", "post_clear"}:
         cancel_departed_group_invitations()
     if action in {"post_add", "post_remove", "post_clear"}:
@@ -68,3 +77,8 @@ def apply_asterisk_configuration_after_conference_members_change(action, **kwarg
 def cancel_group_invitations_after_child_deletion(**kwargs):
     # Cascading removal of a child's memberships does not emit m2m_changed.
     cancel_departed_group_invitations()
+
+
+@receiver(pre_delete, sender=Child)
+def lock_groups_before_child_deletion(instance, **kwargs):
+    lock_conference_groups(instance.conference_groups.values_list("pk", flat=True))

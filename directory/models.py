@@ -204,6 +204,10 @@ class Child(TimeStampedModel):
             if self.pk
             else None
         )
+        if previous_family_id is not None and previous_family_id != self.family_id:
+            from .services import lock_conference_groups
+
+            lock_conference_groups(self.conference_groups.values_list("pk", flat=True))
         super().save(*args, **kwargs)
         if previous_family_id is not None and previous_family_id != self.family_id:
             # Check the saved value so a partial update that excludes family

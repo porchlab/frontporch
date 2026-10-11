@@ -1,6 +1,16 @@
 from .models import ConferenceGroup
 
 
+def lock_conference_groups(group_ids):
+    """Serialize membership changes using the same row locks as portal acceptance."""
+    return list(
+        ConferenceGroup.objects.select_for_update()
+        .filter(pk__in=group_ids)
+        .order_by("pk")
+        .values_list("pk", flat=True)
+    )
+
+
 def cancel_departed_group_invitations():
     """Make a household's departure permanently invalidate its pending invitations."""
     from django.db.models import Exists, OuterRef
