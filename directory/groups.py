@@ -3,8 +3,6 @@
 from django.contrib import messages
 from django.contrib.admin.models import CHANGE
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth import get_user_model
-from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -12,7 +10,7 @@ from django.views.decorators.http import require_POST
 from django.urls import reverse
 
 from . import forms, models
-from .services import record_activity
+from .services import record_activity, lock_group_actor, group_audit_roster
 from .views import _log_parent_conference_group_action, _require_parent
 
 
@@ -62,6 +60,7 @@ def record_group_change(parent, group, description):
 def invite(request, group_id):
     parent = _require_parent(request)
     group = member_group(parent, group_id)
+    parent, _ = lock_group_actor(request, parent)
     if not group.is_active:
         raise Http404
     form = forms.GroupInvitationForm(
@@ -126,34 +125,7 @@ def review(request, invitation_id):
     invitation = models.GroupInvitation.objects.select_for_update().get(
         pk=invitation.pk
     )
-    # Lock both sides in a stable order; reciprocal invitations in different
-    # groups must not acquire the same guardian records in opposite orders.
-    guardians = {
-        guardian.pk: guardian
-        for guardian in models.Parent.objects.select_for_update()
-        .filter(pk__in=[parent.pk, invitation.sent_by_id])
-        .order_by("pk")
-    }
-    accounts = {
-        account.pk: account
-        for account in get_user_model()
-        .objects.select_for_update()
-        .filter(pk__in=[guardian.user_id for guardian in guardians.values()])
-        .order_by("pk")
-    }
-    for guardian in guardians.values():
-        guardian.user = accounts.get(guardian.user_id)
-    parent = guardians.get(parent.pk)
-    if (
-        parent is None
-        or not parent.is_guardian
-        or parent.family_id != invitation.target_family_id
-        or parent.user_id != request.user.pk
-        or not parent.user.is_active
-    ):
-        raise PermissionDenied(
-            "This account no longer has guardian access to this invitation."
-        )
+    parent, guardians = lock_group_actor(request, parent, [invitation.sent_by_id])
     invitation.sent_by = guardians[invitation.sent_by_id]
     if not invitation_available(invitation):
         messages.info(request, "This group invitation is no longer available.")
@@ -167,11 +139,7 @@ def review(request, invitation_id):
         invitation.accepted_children.set(children)
         invitation.status, invitation.responded_by = "accepted", parent
         invitation.save()
-        member_names = ", ".join(
-            group.members.order_by("family__name", "name", "pk").values_list(
-                "name", flat=True
-            )
-        )
+        member_names = group_audit_roster(group)
         audit_description = f"Joined {group.name}; members: {member_names}"
         _log_parent_conference_group_action(request, group, CHANGE, audit_description)
         # Family activity is limited to 500 characters; keep the full roster in
@@ -213,6 +181,7 @@ def invitation_action(request, invitation_id, action):
     invitation = models.GroupInvitation.objects.select_for_update().get(
         pk=invitation.pk
     )
+    parent, _ = lock_group_actor(request, parent)
     if invitation.status == "pending":
         invitation.status = "cancelled" if action == "cancel" else "declined"
         invitation.responded_by = parent

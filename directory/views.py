@@ -299,7 +299,10 @@ def legacy_relationship(request, **kwargs):
 @login_required
 @transaction.atomic
 def conference_group_create(request):
+    from .services import lock_group_actor, group_audit_roster
+
     parent = _require_parent(request)
+    parent, _ = lock_group_actor(request, parent)
     if request.method == "POST":
         form = ConferenceGroupForm(request.POST, family=parent.family)
         if form.is_valid():
@@ -307,11 +310,7 @@ def conference_group_create(request):
             group.approved_by = parent
             group.save()
             form.save_m2m()
-            member_names = ", ".join(
-                group.members.order_by("family__name", "name").values_list(
-                    "name", flat=True
-                )
-            )
+            member_names = group_audit_roster(group)
             _log_parent_conference_group_action(
                 request,
                 group,
@@ -335,9 +334,11 @@ def conference_group_create(request):
 @transaction.atomic
 def conference_group_update(request, group_id):
     from .groups import member_group, record_group_change
+    from .services import lock_group_actor, group_audit_roster
 
     parent = _require_parent(request)
     group = member_group(parent, group_id)
+    parent, _ = lock_group_actor(request, parent)
     if request.method == "POST":
         form = ConferenceGroupForm(request.POST, instance=group, family=parent.family)
         if form.is_valid():
@@ -350,11 +351,7 @@ def conference_group_update(request, group_id):
                 updated.invitations.filter(status="pending").update(
                     status="cancelled", responded_by=parent
                 )
-            member_names = ", ".join(
-                updated.members.order_by("family__name", "name").values_list(
-                    "name", flat=True
-                )
-            )
+            member_names = group_audit_roster(updated)
             _log_parent_conference_group_action(
                 request,
                 updated,

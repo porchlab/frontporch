@@ -153,8 +153,29 @@ class GroupMembershipTests(TestCase):
         self.assertEqual(
             audit.change_message,
             f"Joined {self.group.name}; members: "
-            f"{self.peer.name}, {self.excluded.name}, {self.child.name}",
+            f"{self.peer.name} (Maple; child #{self.peer.pk}), "
+            f"{self.excluded.name} (Maple; child #{self.excluded.pk}), "
+            f"{self.child.name} (River; child #{self.child.pk})",
         )
+
+    def test_audit_distinguishes_same_named_children_after_acceptance_and_edit(self):
+        self.peer.name = self.child.name
+        self.peer.save()
+        invitation = self.invite()
+        self.client.force_login(self.recipient.user)
+        self.client.post(
+            self.url("group_review", invitation.pk), {"members": [self.peer.pk]}
+        )
+        self.client.force_login(self.parent.user)
+        self.client.post(
+            self.url("conference_group_update", self.group.pk),
+            {"members": [self.child.pk]},
+        )
+        audits = LogEntry.objects.filter(object_id=str(self.group.pk))
+        self.assertEqual(audits.count(), 2)
+        for audit in audits:
+            self.assertIn(f"Alex (Maple; child #{self.peer.pk})", audit.change_message)
+            self.assertIn(f"Alex (River; child #{self.child.pk})", audit.change_message)
 
     def test_shared_group_edit_preserves_other_family_and_shared_settings(self):
         self.group.members.add(self.peer)
@@ -566,6 +587,68 @@ class GroupMembershipTests(TestCase):
                 self.assertFalse(self.group.members.filter(pk=self.peer.pk).exists())
                 invitation.refresh_from_db()
                 self.assertEqual(invitation.status, "pending")
+
+    def test_group_mutations_recheck_actor_after_initial_authentication(self):
+        invitation = self.invite()
+        cases = [
+            ("conference_group_create", (), "views", self.parent),
+            ("conference_group_update", (self.group.pk,), "views", self.parent),
+            ("group_invite", (self.group.pk,), "groups", self.parent),
+            (
+                "group_invitation_action",
+                (invitation.pk, "cancel"),
+                "groups",
+                self.parent,
+            ),
+            (
+                "group_invitation_action",
+                (invitation.pk, "decline"),
+                "groups",
+                self.recipient,
+            ),
+        ]
+        for name, args, module, actor in cases:
+            for kind in ("guardian", "family", "account"):
+                with self.subTest(name=name, action=args, kind=kind):
+                    m.Parent.objects.filter(pk=actor.pk).update(
+                        family=actor.family, is_guardian=True
+                    )
+                    User.objects.filter(pk=actor.user_id).update(is_active=True)
+                    self.client.force_login(actor.user)
+
+                    def revoke(request):
+                        parent = _require_parent(request)
+                        if kind == "account":
+                            User.objects.filter(pk=parent.user_id).update(
+                                is_active=False
+                            )
+                        elif kind == "family":
+                            m.Parent.objects.filter(pk=parent.pk).update(
+                                family=self.stranger
+                            )
+                        else:
+                            m.Parent.objects.filter(pk=parent.pk).update(
+                                is_guardian=False
+                            )
+                        return parent
+
+                    with patch(
+                        f"directory.{module}._require_parent", side_effect=revoke
+                    ):
+                        response = self.client.post(
+                            self.url(name, *args),
+                            {
+                                "name": "Changed",
+                                "members": [self.sibling.pk],
+                                "is_active": True,
+                                "family": self.other.pk,
+                            },
+                        )
+                    self.assertEqual(response.status_code, 403)
+                    self.assertEqual(list(self.group.members.all()), [self.child])
+                    self.assertEqual(m.ConferenceGroup.objects.count(), 1)
+                    invitation.refresh_from_db()
+                    self.assertEqual(invitation.status, "pending")
 
     def test_guardian_login_and_csrf_required(self):
         url = self.url("group_invite", self.group.pk)
