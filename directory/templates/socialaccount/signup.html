@@ -1,0 +1,7 @@
+{% extends "directory/register.html" %}
+{% block content %}
+    {% with invitation=form.invitation %}{{ block.super }}{% endwith %}
+{% endblock %}
+{% block signup_options %}
+    <p class="dialog-intro">Your email is verified with Google. Add your family details to finish creating your account.</p>
+{% endblock %}
