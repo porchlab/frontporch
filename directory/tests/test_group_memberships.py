@@ -147,8 +147,11 @@ class GroupMembershipTests(TestCase):
         audit = LogEntry.objects.get(
             user=self.recipient.user, object_id=str(self.group.pk)
         )
-        self.assertIn(self.peer.name, audit.change_message)
-        self.assertIn(self.excluded.name, audit.change_message)
+        self.assertEqual(
+            audit.change_message,
+            f"Joined {self.group.name}; members: "
+            f"{self.peer.name}, {self.excluded.name}, {self.child.name}",
+        )
 
     def test_shared_group_edit_preserves_other_family_and_shared_settings(self):
         self.group.members.add(self.peer)

@@ -136,9 +136,12 @@ def review(request, invitation_id):
         invitation.accepted_children.set(children)
         invitation.status, invitation.responded_by = "accepted", parent
         invitation.save()
-        audit_description = (
-            f"Joined {group.name} with {', '.join(child.name for child in children)}."
+        member_names = ", ".join(
+            group.members.order_by("family__name", "name", "pk").values_list(
+                "name", flat=True
+            )
         )
+        audit_description = f"Joined {group.name}; members: {member_names}"
         _log_parent_conference_group_action(request, group, CHANGE, audit_description)
         # Family activity is limited to 500 characters; keep the full roster in
         # the staff audit's text field and summarize the approval here.
