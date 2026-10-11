@@ -389,6 +389,57 @@ class GroupMembershipTests(TestCase):
         invitation.refresh_from_db()
         self.assertEqual(invitation.status, "cancelled")
 
+    def test_child_transfer_revokes_memberships_and_new_household_group_access(self):
+        self.group.members.add(self.peer, self.excluded)
+        self.group.calling_enabled = True
+        self.group.save()
+        for index, child in enumerate((self.child, self.peer, self.excluded)):
+            m.Device.objects.create(
+                assigned_child=child,
+                friendly_name=f"Test phone {index}",
+                sip_extension=str(4501 + index),
+                sip_username=f"test-transfer-{index}",
+                sip_secret="fictional-transfer-test-only",
+            )
+        self.assertIn(
+            self.child.pk,
+            {
+                member.child_id
+                for route in build_asterisk_configuration().conference_routes
+                for member in route.members
+            },
+        )
+
+        self.child.family = self.stranger
+        self.child.save()
+
+        self.assertEqual(set(self.group.members.all()), {self.peer, self.excluded})
+        self.client.force_login(self.outsider.user)
+        self.assertNotContains(self.client.get(self.url("connections")), "Friends")
+        for name in ("conference_group_update", "group_invite"):
+            self.assertEqual(
+                self.client.get(self.url(name, self.group.pk)).status_code, 404
+            )
+        self.assertEqual(
+            {
+                member.child_id
+                for route in build_asterisk_configuration().conference_routes
+                for member in route.members
+            },
+            {self.peer.pk, self.excluded.pk},
+        )
+
+    def test_unsaved_household_change_does_not_remove_group_membership(self):
+        invitation = self.invite()
+        self.child.family = self.stranger
+        self.child.notes = "Updated notes only"
+        self.child.save(update_fields=["notes"])
+        self.child.refresh_from_db()
+        invitation.refresh_from_db()
+        self.assertEqual(self.child.family, self.family)
+        self.assertEqual(list(self.group.members.all()), [self.child])
+        self.assertEqual(invitation.status, "pending")
+
     def test_replacing_own_child_preserves_pending_invitation(self):
         invitation = self.invite()
         self.client.post(

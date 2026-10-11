@@ -196,6 +196,25 @@ class Child(TimeStampedModel):
     def __str__(self):
         return f"{self.name} ({self.family})"
 
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        previous_family_id = (
+            type(self).objects.filter(pk=self.pk)
+            .values_list("family_id", flat=True).first()
+            if self.pk
+            else None
+        )
+        super().save(*args, **kwargs)
+        if previous_family_id is not None and previous_family_id != self.family_id:
+            # Check the saved value so a partial update that excludes family
+            # cannot revoke memberships for an unsaved in-memory change.
+            saved_family_id = (
+                type(self).objects.values_list("family_id", flat=True).get(pk=self.pk)
+            )
+            if previous_family_id != saved_family_id:
+                # Membership is household approval; it cannot transfer with a child.
+                self.conference_groups.clear()
+
     @property
     def spoken_menu_name(self):
         return self.spoken_name.strip() or self.name

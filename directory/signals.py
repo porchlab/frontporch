@@ -68,9 +68,3 @@ def apply_asterisk_configuration_after_conference_members_change(action, **kwarg
 def cancel_group_invitations_after_child_deletion(**kwargs):
     # Cascading removal of a child's memberships does not emit m2m_changed.
     cancel_departed_group_invitations()
-
-
-@receiver(post_save, sender=Child)
-def cancel_group_invitations_after_child_household_change(created, raw, **kwargs):
-    if not created and not raw:
-        cancel_departed_group_invitations()

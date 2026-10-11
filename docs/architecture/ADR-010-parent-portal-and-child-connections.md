@@ -95,6 +95,8 @@ in the sending household, and current sending-household membership. Leaving enti
 cancels that household's pending outgoing invitations and removes its portal access
 to the group; returning requires a new invitation. Cancellation also applies to
 staff membership edits, child deletion, and moving a child to another household.
+Moving a child atomically removes that child's group memberships; the receiving
+household must receive and accept an invitation to approve membership again.
 Portal membership changes log the
 actor and resulting roster in Admin history and create family-scoped activity.
 Group invitations appear in the portal inbox and dashboard; they do not send email.
