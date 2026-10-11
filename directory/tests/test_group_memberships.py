@@ -762,6 +762,54 @@ class ConcurrentGroupMembershipTests(TransactionTestCase):
                         release.set()
                         future.result(timeout=10)
 
+    def test_portal_saves_wait_for_extension_lock_before_locking_group_or_actor(self):
+        self.group.members.remove(self.children[1][0])
+        lock_extensions = m.lock_extension_namespace
+        for name, args in (
+            ("conference_group_create", []),
+            ("conference_group_update", [self.group.pk]),
+        ):
+            ready = Event()
+
+            def wait_for_extensions():
+                ready.set()
+                lock_extensions()
+
+            def edit():
+                close_old_connections()
+                try:
+                    client = Client()
+                    client.force_login(self.parents[0].user)
+                    return client.post(
+                        reverse("directory:" + name, args=args),
+                        {
+                            "name": "Friends",
+                            "members": [self.children[0][0].pk],
+                            "is_active": True,
+                        },
+                    ).status_code
+                finally:
+                    connections.close_all()
+
+            with self.subTest(action=name), ThreadPoolExecutor(max_workers=1) as pool:
+                with patch(
+                    "directory.models.lock_extension_namespace",
+                    side_effect=wait_for_extensions,
+                ):
+                    with transaction.atomic():
+                        # Simulate a staff save holding the namespace lock before
+                        # taking its row locks. The portal must not invert this.
+                        lock_extensions()
+                        future = pool.submit(edit)
+                        self.assertTrue(ready.wait(timeout=10))
+                        m.ConferenceGroup.objects.select_for_update(nowait=True).get(
+                            pk=self.group.pk
+                        )
+                        m.Parent.objects.select_for_update(nowait=True).get(
+                            pk=self.parents[0].pk
+                        )
+                    self.assertEqual(future.result(timeout=10), 302)
+
     def test_acceptance_locks_both_guardians_and_accounts_until_commit(self):
         self.group.members.remove(self.children[1][0])
         invitation = m.GroupInvitation.objects.create(

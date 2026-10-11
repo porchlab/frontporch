@@ -300,8 +300,10 @@ def legacy_relationship(request, **kwargs):
 @transaction.atomic
 def conference_group_create(request):
     from .services import lock_group_actor, group_audit_roster
+    from .models import lock_extension_namespace
 
     parent = _require_parent(request)
+    lock_extension_namespace()
     parent, _ = lock_group_actor(request, parent)
     if request.method == "POST":
         form = ConferenceGroupForm(request.POST, family=parent.family)
@@ -335,8 +337,11 @@ def conference_group_create(request):
 def conference_group_update(request, group_id):
     from .groups import member_group, record_group_change
     from .services import lock_group_actor, group_audit_roster
+    from .models import lock_extension_namespace
 
     parent = _require_parent(request)
+    # Model/Admin saves take the extension lock before row locks as well.
+    lock_extension_namespace()
     group = member_group(parent, group_id)
     parent, _ = lock_group_actor(request, parent)
     if request.method == "POST":
