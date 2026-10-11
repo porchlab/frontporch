@@ -72,6 +72,31 @@ back the replacement. Existing users must authenticate with the invited email an
 possess the emailed link. Joining never moves an account from another household.
 Removing a guardian revokes portal access without deleting past approvals.
 
+### Conference group membership
+
+Parents can start a group with at least one of their own children and invite a
+listed family or one found by its current private family code. Only a current
+guardian of the recipient household can accept, selecting that household's children.
+Invitations reveal current family names at review, not other households' children.
+Accepting grants membership in the evolving group: member families can invite
+additional families, and each family may change only its own children's membership.
+The creation, invitation, and acceptance screens explain this scope explicitly.
+It does not grant direct child-to-child calling permissions.
+
+Shared group metadata is staff-managed. Parents may edit name, notes, and active
+state only when all members are in their own household. Membership edits preserve
+other families and may leave zero or one member; PBX generation continues to omit
+groups with fewer than two members. Calling activation remains staff-only.
+
+Group mutations serialize on the group row. Invitations are single-use, scoped to
+the recipient family, cancellable by the sender household, and declineable by the
+recipient household. Acceptance requires an active group, an active guardian account
+in the sending household, and current sending-household membership. Leaving entirely
+cancels that household's pending outgoing invitations and removes its portal access
+to the group; returning requires a new invitation. Portal membership changes log the
+actor and resulting roster in Admin history and create family-scoped activity.
+Group invitations appear in the portal inbox and dashboard; they do not send email.
+
 ## Consequences
 
 Parents approve the exact relationship described on screen. The portal records

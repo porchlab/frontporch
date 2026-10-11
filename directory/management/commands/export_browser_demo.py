@@ -32,6 +32,7 @@ FORM_CLASSES = {
     "guardian": forms.GuardianInvitationForm,
     "code": forms.InviteCodeForm,
     "group": forms.ConferenceGroupForm,
+    "group_accept": forms.GroupAcceptForm,
 }
 
 

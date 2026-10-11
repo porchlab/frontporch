@@ -294,7 +294,7 @@ class ParentPortalTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("directory:dashboard"))
+        self.assertRedirects(response, reverse("directory:connections"))
         group = ConferenceGroup.objects.get(name="Siblings")
         self.assertEqual(group.approved_by, self.parent)
         self.assertEqual(set(group.members.values_list("id", flat=True)), {self.child.id, sibling.id})
@@ -329,7 +329,7 @@ class ParentPortalTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("directory:dashboard"))
+        self.assertRedirects(response, reverse("directory:connections"))
         group.refresh_from_db()
         self.assertTrue(group.calling_enabled)
         self.assertEqual(group.dial_extension, "4444")

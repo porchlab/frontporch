@@ -1309,6 +1309,46 @@ class ConferenceGroup(TimeStampedModel):
         raise ValidationError("Could not assign an unused conference group extension.")
 
 
+class GroupInvitation(TimeStampedModel):
+    group = models.ForeignKey(
+        ConferenceGroup, on_delete=models.CASCADE, related_name="invitations"
+    )
+    source_family = models.ForeignKey(
+        Family, on_delete=models.CASCADE, related_name="sent_group_invitations"
+    )
+    target_family = models.ForeignKey(
+        Family, on_delete=models.CASCADE, related_name="received_group_invitations"
+    )
+    sent_by = models.ForeignKey(
+        Parent, on_delete=models.PROTECT, related_name="sent_group_invitations"
+    )
+    responded_by = models.ForeignKey(
+        Parent, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="answered_group_invitations",
+    )
+    accepted_children = models.ManyToManyField(
+        Child, blank=True, related_name="accepted_group_invitations"
+    )
+    status = models.CharField(
+        max_length=12, default="pending",
+        choices=[("pending", "Pending"), ("accepted", "Accepted"),
+                 ("declined", "Declined"), ("cancelled", "Cancelled")],
+    )
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["group", "target_family"], condition=models.Q(status="pending"),
+                name="one_pending_group_invitation_per_family",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(source_family=models.F("target_family")),
+                name="group_invitation_different_families",
+            ),
+        ]
+
+
 class FamilyActivity(TimeStampedModel):
     """Family-scoped history; keep text free of credentials and invitation tokens."""
 

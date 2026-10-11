@@ -1,11 +1,14 @@
 from django.urls import path
 
-from . import views, portal, guardians, family_invitations
+from . import views, portal, guardians, family_invitations, groups
 
 
 app_name = "directory"
 
 urlpatterns = [
+    path("conference-groups/<int:group_id>/invite/", groups.invite, name="group_invite"),
+    path("group-invitations/<int:invitation_id>/", groups.review, name="group_review"),
+    path("group-invitations/<int:invitation_id>/<str:action>/", groups.invitation_action, name="group_invitation_action"),
     path("families/invite/", family_invitations.invite, name="family_invite"),
     path(
         "families/invitations/<int:invitation_id>/<str:action>/",

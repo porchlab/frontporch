@@ -9,6 +9,7 @@ from .accounts import sync_account_email, validate_account_email
 from .models import (
     Child,
     ChildConnection,
+    GroupInvitation,
     ConnectionInvitation,
     GuardianInvitation,
     FamilyActivity,
@@ -439,7 +440,7 @@ class ChildConnectionAdmin(admin.ModelAdmin):
 
 
 @admin.register(
-    ConnectionInvitation, GuardianInvitation, FamilyInvitation, FamilyActivity
+    ConnectionInvitation, GroupInvitation, GuardianInvitation, FamilyInvitation, FamilyActivity
 )
 class PortalHistoryAdmin(admin.ModelAdmin):
     def get_readonly_fields(self, request, obj=None):

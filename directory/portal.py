@@ -78,6 +78,9 @@ def overview(request):
         .select_related("source_family")
         .prefetch_related("source_children")
     )
+    context["incoming_group_invitations"] = models.GroupInvitation.objects.filter(
+        target_family=parent.family, status="pending"
+    ).select_related("group", "source_family")
     context["circle_done"] = context["connections"].exists()
     context["setup_count"] = (
         1 + int(context["phone_done"]) + int(context["circle_done"])
@@ -490,10 +493,21 @@ def invitations(request):
     qs = qs.select_related(
         "source_family", "target_family", "sent_by"
     ).prefetch_related("source_children", "accepted_children")
+    group_invitations = models.GroupInvitation.objects.filter(
+        Q(source_family=parent.family) | Q(target_family=parent.family)
+    )
+    if tab == "history":
+        group_invitations = group_invitations.exclude(status="pending")
+    else:
+        group_invitations = group_invitations.filter(
+            status="pending",
+            **{"target_family" if tab == "received" else "source_family": parent.family},
+        )
     return render(
         request,
         "directory/invitations.html",
-        {"section": "invites", "invitations": qs, "tab": tab},
+        {"section": "invites", "invitations": qs, "tab": tab,
+         "group_invitations": group_invitations.select_related("group", "source_family", "target_family")},
     )
 
 

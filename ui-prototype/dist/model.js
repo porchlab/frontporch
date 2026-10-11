@@ -265,12 +265,50 @@ const Demo = (() => {
     Object.assign(parent, {name:values.display_name, phone, callDestination, directoryVisible:values.directory_visible});
   }
   function saveGroup(data, groupId, values, members) {
-    members = selectedChildren(data, members);
-    assert(members.length >= 2, "Choose at least two children.");
+    assert(actor(data), "Guardian access required.");
+    members = [...new Set(members)];
+    assert(members.every(key => findChild(data, key)), "Choose only your own children.");
     let group = data.groups.find(g => g.id === groupId);
-    if (!group) { group = {id:id(), enabled:false, extension:""}; data.groups.push(group); }
-    Object.assign(group, values, {members});
+    assert(!groupId || group?.members.some(key => findChild(data, key)), "Your family does not belong to this group.");
+    if (!group) {
+      assert(members.length, "Choose at least one child.");
+      group = {id:id(), enabled:false, extension:"", members:[]}; data.groups.push(group);
+    }
+    const peers = group.members.filter(key => !findChild(data, key));
+    if (!peers.length) Object.assign(group, {name:values.name, is_active:values.is_active, notes:values.notes || ""});
+    group.members = [...peers, ...members];
+    if (!members.length || !group.is_active) {
+      for (const invite of data.groupInvitations || [])
+        if (invite.groupId === group.id && invite.status === "pending") invite.status = "cancelled";
+    }
     return group;
+  }
+  function sendGroupInvitation(data, groupId, familyId, code = "") {
+    const group = data.groups.find(g => g.id === groupId);
+    assert(actor(data) && group?.is_active && group.members.some(key => findChild(data, key)), "Choose an active group your family belongs to.");
+    assert(Boolean(familyId) !== Boolean(code), "Choose a listed family or enter a family code.");
+    const target = code ? data.network.find(f => f.code === code.trim()) : family(data, familyId);
+    assert(target && (target.listed || code), "This family is not available. Ask for their current family code.");
+    assert(!group.members.some(key => target.children.some(c => c.id === key)), "This family already belongs to the group.");
+    data.groupInvitations ||= [];
+    assert(!data.groupInvitations.some(i => i.groupId === groupId && i.familyId === target.id && i.status === "pending"), "This family already has a pending group invitation.");
+    const invitation = {id:id(), groupId, familyId:target.id, sentBy:actor(data).id, status:"pending", peerIds:[]};
+    data.groupInvitations.push(invitation);
+    return invitation;
+  }
+  function acceptGroupInvitation(data, invitationId, chosen) {
+    const invitation = (data.groupInvitations || []).find(i => i.id === invitationId);
+    const group = data.groups.find(g => g.id === invitation?.groupId);
+    assert(invitation?.status === "pending" && group?.is_active && group.members.some(key => findChild(data, key)) && data.guardians.some(g => g.id === invitation.sentBy && g.active), "This group invitation is no longer available.");
+    const target = family(data, invitation.familyId), selected = [...new Set(chosen)];
+    assert(selected.length && selected.every(key => target.children.some(c => c.id === key)), "Choose at least one child from the receiving family.");
+    group.members = [...new Set([...group.members, ...selected])];
+    invitation.status = "accepted"; invitation.peerIds = selected;
+  }
+  function groupInvitationAction(data, invitationId, action) {
+    const invitation = (data.groupInvitations || []).find(i => i.id === invitationId);
+    assert(actor(data) && invitation?.status === "pending" && ["cancelled", "declined"].includes(action), "This group invitation is no longer available.");
+    invitation.status = action;
   }
 
   // Upgrade versions 1–6 without losing household edits or shortcut identity.
@@ -370,5 +408,5 @@ const Demo = (() => {
   return {VERSION, STORAGE_KEY, TIME_ZONE, id, same, assert, seed, actor, primaryOnly, findChild, findDevice, family, nextExtension,
     reservePhone, saveChild, saveQuiet, listedFamilies, sendInvitation, acceptInvitation, destinations, phonebook, saveShortcut,
     normalizePhone, saveContact, inviteStatus, inviteGuardian, resendGuardian, joinGuardian, removeGuardian, saveProfile,
-    saveGroup, migrateLegacy, load, save};
+    saveGroup, sendGroupInvitation, acceptGroupInvitation, groupInvitationAction, migrateLegacy, load, save};
 })();

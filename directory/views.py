@@ -319,30 +319,41 @@ def conference_group_create(request):
                 f"Created in parent portal with members: {member_names}",
             )
             _success(request, f"{group.name} was created.")
-            return redirect("directory:dashboard")
+            return redirect("directory:connections")
     else:
         form = ConferenceGroupForm(family=parent.family)
     return render(
-        request, "directory/form.html", {"form": form, "title": "Add Conference Group"}
+        request, "directory/form.html", {
+            "form": form, "title": "Add Conference Group", "section": "circle",
+            "cancel_url_name": "directory:connections",
+            "intro": "Choose your children, then invite other families from Family connections. Each family chooses its own children. Members can call everyone in the group and invite more families. Calling needs at least two members and installer activation.",
+        }
     )
 
 
 @login_required
 @transaction.atomic
 def conference_group_update(request, group_id):
+    from .groups import member_group, record_group_change
+
     parent = _require_parent(request)
-    group = get_object_or_404(
-        ConferenceGroup.objects.filter(
-            id=group_id, members__family=parent.family
-        ).distinct()
-    )
+    group = member_group(parent, group_id)
     if request.method == "POST":
         form = ConferenceGroupForm(request.POST, instance=group, family=parent.family)
         if form.is_valid():
             updated = form.save(commit=False)
-            updated.approved_by = parent
-            updated.save()
+            if not form.shared:
+                updated.approved_by = parent
+                updated.save()
             form.save_m2m()
+            if not updated.members.filter(family=parent.family).exists():
+                updated.invitations.filter(
+                    source_family=parent.family, status="pending"
+                ).update(status="cancelled", responded_by=parent)
+            if not updated.is_active:
+                updated.invitations.filter(status="pending").update(
+                    status="cancelled", responded_by=parent
+                )
             member_names = ", ".join(
                 updated.members.order_by("family__name", "name").values_list(
                     "name", flat=True
@@ -354,10 +365,15 @@ def conference_group_update(request, group_id):
                 CHANGE,
                 f"Updated in parent portal; members: {member_names}",
             )
-            _success(request, f"{updated.name} was updated.")
-            return redirect("directory:dashboard")
+            record_group_change(parent, updated, f"Updated your children’s membership in {updated.name}.")
+            messages.success(request, f"{updated.name} was updated.")
+            return redirect("directory:connections")
     else:
         form = ConferenceGroupForm(instance=group, family=parent.family)
     return render(
-        request, "directory/form.html", {"form": form, "title": "Edit Conference Group"}
+        request, "directory/form.html", {
+            "form": form, "title": f"Manage {group.name}", "section": "circle",
+            "cancel_url_name": "directory:connections",
+            "intro": "Choose which of your children belong to this group. Other families manage their own children. Members can call everyone in the group and invite more families. Leaving does not remove separate child-to-child connections.",
+        }
     )
