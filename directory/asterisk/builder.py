@@ -53,11 +53,12 @@ def build_asterisk_configuration():
         "end_time",
         "id",
     ):
-        blackout_windows_by_child_id.setdefault(period.child_id, []).append(
+        blackout_windows_by_child_id.setdefault(period.child_id, []).extend(
             BlackoutWindow(
-                time_range=period.asterisk_time_range,
-                days=period.asterisk_days,
+                time_range=time_range,
+                days=days,
             )
+            for time_range, days in period.asterisk_time_windows
         )
 
     endpoints = tuple(

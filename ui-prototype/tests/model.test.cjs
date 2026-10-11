@@ -154,11 +154,13 @@ test('code discovery does not grant calling and must be revalidated when sending
   Demo.sendInvitation(data, 'pine', ['casey'], '', target.code);
   assert(!data.connections.some(c => c.familyId === 'pine'));
 });
-test('quiet hours support several schedules and same-day validation while paused', () => {
+test('quiet hours support several schedules and overnight schedules and reject equal times while paused', () => {
   const data = Demo.seed();
   Demo.saveQuiet(data, 'casey', '', {label:'Bedtime', start_time:'20:00', end_time:'23:59', day_group:'every_day', is_active:true});
   assert.equal(Demo.findChild(data, 'casey').quietHours.length, 2);
-  assert.throws(() => Demo.saveQuiet(data, 'casey', '', {start_time:'20:00', end_time:'07:00', is_active:false}), /same day/);
+  Demo.saveQuiet(data, 'casey', '', {start_time:'20:00', end_time:'07:00', is_active:false});
+  assert.equal(Demo.findChild(data, 'casey').quietHours.length, 3);
+  assert.throws(() => Demo.saveQuiet(data, 'casey', '', {start_time:'20:00', end_time:'20:00', is_active:false}), /different/);
 });
 test('guardian membership is primary-only, email-bound, expiring and single-use', () => {
   const data = Demo.seed(), invitation = Demo.inviteGuardian(data, 'Drew', 'drew@example.com');

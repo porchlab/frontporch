@@ -588,18 +588,35 @@ class DirectoryDomainTests(TestCase):
         with self.assertRaises(ValidationError):
             blackout.full_clean()
 
-    def test_child_blackout_period_requires_end_after_start(self):
+    def test_child_blackout_period_rejects_equal_times(self):
         blackout = ChildBlackoutPeriod(
             child=self.alex,
-            label="Invalid overnight period",
+            label="Invalid equal times",
             day_group=ChildBlackoutPeriod.WEEKENDS,
             start_time=time(21, 0),
-            end_time=time(8, 0),
+            end_time=time(21, 0),
             approved_by=self.river_parent,
         )
 
         with self.assertRaises(ValidationError):
             blackout.full_clean()
+
+    def test_overnight_blackout_windows_shift_morning_to_next_day(self):
+        for day_group, evening_days, morning_days in (
+            (ChildBlackoutPeriod.WEEKDAYS, "mon-fri", "tue-sat"),
+            (ChildBlackoutPeriod.WEEKENDS, "sat-sun", "sun-mon"),
+            (ChildBlackoutPeriod.EVERY_DAY, "mon-sun", "mon-sun"),
+        ):
+            with self.subTest(day_group=day_group):
+                blackout = ChildBlackoutPeriod.objects.create(
+                    child=self.alex, label="Bedtime", day_group=day_group,
+                    start_time=time(20), end_time=time(7, 30),
+                    approved_by=self.river_parent,
+                )
+                self.assertEqual(blackout.asterisk_time_windows, (
+                    ("20:00-23:59", evening_days),
+                    ("00:00-07:30", morning_days),
+                ))
 
     def test_child_blackout_period_exposes_asterisk_time_window(self):
         blackout = ChildBlackoutPeriod.objects.create(
