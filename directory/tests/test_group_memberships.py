@@ -9,7 +9,7 @@ from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 
 from directory import models as m
-from directory.forms import _lock_group_children
+from directory.forms import _lock_group_children, GroupInvitationForm
 from directory.admin import ConferenceGroupAdmin
 from directory.groups import invitation_available, _require_parent
 from directory.asterisk.builder import build_asterisk_configuration
@@ -71,6 +71,10 @@ class GroupMembershipTests(TestCase):
         self.assertRedirects(response, self.url("connections"))
         new_group = m.ConferenceGroup.objects.get(name="New friends")
         self.assertFalse(new_group.calling_enabled)
+        activity = m.FamilyActivity.objects.get(family=self.family)
+        self.assertEqual(activity.actor, self.parent.user)
+        self.assertEqual(activity.description, "New friends was created.")
+        self.assertFalse(m.FamilyActivity.objects.exclude(family=self.family).exists())
         invitation = self.invite()
         self.assertEqual(invitation.sent_by, self.parent)
         self.assertEqual(list(self.group.members.all()), [self.child])
@@ -704,6 +708,39 @@ class GroupMembershipTests(TestCase):
                 invitation.refresh_from_db()
                 self.assertEqual(invitation.status, "pending")
 
+    def test_invitation_rechecks_discoverability_after_target_resolution(self):
+        lock_targets = m.Family.objects.select_for_update
+        for kind in ("directory", "code"):
+            with self.subTest(kind=kind):
+                m.Family.objects.filter(pk=self.other.pk).update(
+                    directory_listed=True, invite_code="original-code"
+                )
+
+                def revoke_discovery(**kwargs):
+                    changes = (
+                        {"directory_listed": False}
+                        if kind == "directory"
+                        else {"invite_code": "rotated-code"}
+                    )
+                    m.Family.objects.filter(pk=self.other.pk).update(**changes)
+                    return lock_targets(**kwargs)
+
+                data = (
+                    {"family": self.other.pk}
+                    if kind == "directory"
+                    else {"code": "original-code"}
+                )
+                with patch.object(
+                    m.Family.objects, "select_for_update", side_effect=revoke_discovery
+                ):
+                    response = self.client.post(
+                        self.url("group_invite", self.group.pk), data
+                    )
+                self.assertContains(
+                    response, "This invitation option is no longer available."
+                )
+                self.assertFalse(m.GroupInvitation.objects.exists())
+
 
 class ConcurrentGroupMembershipTests(TransactionTestCase):
     def setUp(self):
@@ -754,6 +791,52 @@ class ConcurrentGroupMembershipTests(TransactionTestCase):
         )
         self.assertEqual(responses, [302, 302])
         self.assertEqual(set(self.group.members.all()), {c[1] for c in self.children})
+
+    def test_invitation_locks_discoverability_through_creation(self):
+        target = self.parents[1].family
+        target.directory_listed = True
+        target.save()
+        self.group.members.remove(self.children[1][0])
+        validate = GroupInvitationForm.clean
+        for data in ({"family": target.pk}, {"code": target.invite_code}):
+            ready, release = Event(), Event()
+
+            def hold_validation(form):
+                result = validate(form)
+                ready.set()
+                if not release.wait(timeout=10):
+                    raise TimeoutError("Test did not release target validation.")
+                return result
+
+            def invite():
+                close_old_connections()
+                try:
+                    client = Client()
+                    client.force_login(self.parents[0].user)
+                    return client.post(
+                        reverse("directory:group_invite", args=[self.group.pk]), data
+                    ).status_code
+                finally:
+                    connections.close_all()
+
+            with (
+                self.subTest(selection=data),
+                patch.object(GroupInvitationForm, "clean", hold_validation),
+            ):
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(invite)
+                    try:
+                        self.assertTrue(ready.wait(timeout=10))
+                        with self.assertRaises(OperationalError):
+                            with transaction.atomic():
+                                m.Family.objects.select_for_update(
+                                    nowait=True, no_key=True
+                                ).get(pk=target.pk)
+                    finally:
+                        release.set()
+                        self.assertEqual(future.result(timeout=10), 302)
+            self.assertEqual(self.group.invitations.filter(status="pending").count(), 1)
+            self.group.invitations.update(status="cancelled")
 
     def test_selected_children_are_locked_before_group_membership_writes(self):
         self.group.members.remove(self.children[1][0])

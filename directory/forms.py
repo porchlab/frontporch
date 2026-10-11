@@ -349,6 +349,15 @@ class GroupInvitationForm(forms.Form):
             target = Family.objects.filter(invite_code=code).exclude(pk=self.family.pk).first()
             if target is None:
                 raise forms.ValidationError("This code is not available. Ask the parent for their current family code.")
+        # Directory visibility and private codes can be revoked during initial
+        # field validation. Hold a lock through invitation creation and recheck.
+        target = Family.objects.select_for_update(no_key=True).filter(pk=target.pk).first()
+        if target is None or (
+            target.invite_code != code if code else not target.directory_listed
+        ):
+            raise forms.ValidationError(
+                "This invitation option is no longer available. Ask the parent for their current family code."
+            )
         data["target_family"] = target
         return data
 
