@@ -1,12 +1,19 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from allauth.account.forms import LoginForm
+from allauth.socialaccount.forms import SignupForm as SocialSignupForm
 from allauth.account.models import EmailAddress
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.shortcuts import render
 
-from .accounts import sync_account_email, validate_account_email
+from .accounts import validate_account_email
+from .registration import (
+    create_invited_family,
+    lock_registration_invitation,
+    social_signup_invitation,
+)
 from .models import (
     Child,
     ChildBlackoutPeriod,
@@ -14,13 +21,43 @@ from .models import (
     ExternalContactPermission,
     ExternalPhoneNumber,
     Family,
-    FamilyInvitation,
     FamilyContact,
     Parent,
 )
 
 
-class ParentRegistrationForm(UserCreationForm):
+class FamilyRegistrationFields(forms.Form):
+    family_name = forms.CharField(max_length=200)
+    display_name = forms.CharField(
+        max_length=200,
+        label="Guardian name",
+        help_text="Your name as the parent or guardian managing this account.",
+    )
+    email = forms.EmailField()
+    directory_listed = forms.BooleanField(
+        required=False,
+        label="List my family in the private parent directory",
+        help_text="Only your family name and your guardian name are shown. You can hide your listing at any time.",
+    )
+    phone = forms.CharField(max_length=32, required=False)
+
+    def clean_family_name(self):
+        family_name = self.cleaned_data["family_name"]
+        if Family.objects.filter(name__iexact=family_name).exists():
+            raise forms.ValidationError("A family with this name already exists.")
+        return family_name
+
+    def clean_phone(self):
+        phone = self.cleaned_data["phone"]
+        if not phone:
+            return phone
+        try:
+            return ExternalPhoneNumber.normalize(phone)
+        except ValidationError as exc:
+            raise forms.ValidationError("Enter a valid phone number.") from exc
+
+
+class ParentRegistrationForm(FamilyRegistrationFields, UserCreationForm):
     username = forms.CharField(required=False, widget=forms.HiddenInput, max_length=150)
 
     def __init__(self, *args, invitation, **kwargs):
@@ -40,20 +77,6 @@ class ParentRegistrationForm(UserCreationForm):
             raise forms.ValidationError("This username is already in use.")
         return username
 
-    family_name = forms.CharField(max_length=200)
-    display_name = forms.CharField(
-        max_length=200,
-        label="Guardian name",
-        help_text="Your name as the parent or guardian managing this account.",
-    )
-    email = forms.EmailField()
-    directory_listed = forms.BooleanField(
-        required=False,
-        label="List my family in the private parent directory",
-        help_text="Only your family name and your guardian name are shown. You can hide your listing at any time.",
-    )
-    phone = forms.CharField(max_length=32, required=False)
-
     class Meta(UserCreationForm.Meta):
         model = User
         fields = ("username", "email", "password1", "password2")
@@ -66,63 +89,40 @@ class ParentRegistrationForm(UserCreationForm):
             )
         return validate_account_email(email)
 
-    def clean_family_name(self):
-        family_name = self.cleaned_data["family_name"]
-        if Family.objects.filter(name__iexact=family_name).exists():
-            raise forms.ValidationError("A family with this name already exists.")
-        return family_name
-
-    def clean_phone(self):
-        phone = self.cleaned_data["phone"]
-        if not phone:
-            return phone
-        try:
-            return ExternalPhoneNumber.normalize(phone)
-        except ValidationError as exc:
-            raise forms.ValidationError("Enter a valid phone number.") from exc
-
     @transaction.atomic
     def save(self, commit=True):
         user = super().save(commit=False)
         user.email = self.cleaned_data["email"]
         if commit:
-            from .services import lock_email_identity, record_activity
-
-            # Recheck under locks: two submissions must never reuse one invitation.
-            Family.objects.select_for_update().get(pk=self.invitation.family_id)
-            invitation = FamilyInvitation.objects.select_for_update().get(
-                pk=self.invitation.pk
-            )
-            if not invitation.available or invitation.email != user.email:
-                raise ValidationError(
-                    "This invitation is no longer available. Ask an existing family for a new invitation."
-                )
-            lock_email_identity(user.email)
-            validate_account_email(user.email)
+            invitation = lock_registration_invitation(self.invitation, user.email)
             user.save()
-            family = Family.objects.create(
-                name=self.cleaned_data["family_name"],
-                directory_listed=self.cleaned_data["directory_listed"],
-            )
-            parent = Parent.objects.create(
-                user=user,
-                family=family,
-                display_name=self.cleaned_data["display_name"],
-                phone=self.cleaned_data["phone"],
-                is_guardian=True,
-                is_primary=True,
-                directory_visible=self.cleaned_data["directory_listed"],
-            )
-            sync_account_email(user, verified=True)
-            invitation.status = "accepted"
-            invitation.accepted_family = family
-            invitation.save(update_fields=["status", "accepted_family", "updated_at"])
-            record_activity(parent, "Your family account is ready.")
-            record_activity(
-                invitation.invited_by,
-                f"The {family.name} family accepted your invitation to FrontPorch.",
-            )
+            create_invited_family(user, invitation, self.cleaned_data)
         return user
+
+
+class InvitedSocialSignupForm(FamilyRegistrationFields, SocialSignupForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.invitation = social_signup_invitation(self.sociallogin)
+        self.fields.pop("username", None)
+        self.fields["email"].disabled = True
+        if self.invitation:
+            self.initial["email"] = self.invitation.email
+        self.fields["email"].help_text = "Verified with Google. No password is needed."
+
+    def clean_email(self):
+        return validate_account_email(self.cleaned_data["email"])
+
+    def try_save(self, request):
+        # allauth clears its pending signup before saving. Restore it if a
+        # concurrent invitation/email change prevents this submission.
+        pending = self.sociallogin.serialize()
+        try:
+            return super().try_save(request)
+        except ValidationError as error:
+            request.session["socialaccount_sociallogin"] = pending
+            self.add_error(None, error)
+            return None, render(request, "socialaccount/signup.html", {"form": self})
 
 
 class FamilyInvitationForm(forms.Form):

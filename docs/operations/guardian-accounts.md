@@ -48,15 +48,25 @@ email column while retaining provisioned accounts, credentials, and links.
 
 ## Google and Apple
 
-Social sign-in is available to existing accounts. New households and new guardians
-first accept their FrontPorch email invitation and choose a password. Neither
-allauth's ordinary signup route nor a provider callback can create an uninvited
-account or grant family access.
+Social sign-in is available to existing accounts. New households can open their
+family invitation and choose **Continue with Google**, using the Google account
+whose verified email matches the invitation. They then enter their family and
+guardian details and choose whether to appear in the private directory. No
+password is required. The account, Google connection, and separate family are
+created together only after that form is submitted successfully. Invitations are
+rechecked at submission, including expiry, cancellation, and the inviter's access.
+
+Password signup remains available on family invitations. Invitations to join an
+existing family as an additional guardian still use password signup. Neither
+allauth's ordinary signup route nor a Google login without a valid family
+invitation can create an uninvited account or grant family access. Apple signup
+is not enabled.
 
 A provider's verified email can identify an existing account only when it uniquely
 matches that account's current email. A successful match connects the provider for
-future sign-ins. Only Google and Apple are trusted for this matching. An unverified,
-unknown, or ambiguous email does not create or select an account.
+future sign-ins. Only Google and Apple are trusted for this matching. Unverified
+or ambiguous emails cannot create or select an account. A new Google email can
+create an account only through its matching family invitation.
 
 For accounts whose email has never been verified, allauth clears the old password
 on the first sign-in by provider-verified email as an account-takeover defense. The
@@ -124,8 +134,9 @@ official [allauth Apple setup](https://docs.allauth.org/en/latest/socialaccount/
 
 Run `uv run python manage.py test`. Account tests cover migration backfill and
 rollback, email conflicts, the required/protected user relationship, password reset
-and token reuse, invite-only signup, verified provider matching, unverified and
-ambiguous email rejection, Apple relay connections, and revoked guardian access.
+and token reuse, invite-only Google signup without passwords, verified provider
+matching, mismatched/unverified email rejection, cancellation during signup,
+transaction rollback, Apple relay connections, and revoked guardian access.
 Provider tests simulate authenticated provider responses; a real OAuth round trip
 must be smoke-tested after configuring deployment credentials. The public-ingress
 test also checks rate limits on password recovery and provider-entry endpoints.

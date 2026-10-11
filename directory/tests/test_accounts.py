@@ -242,6 +242,7 @@ class SocialLoginTests(AccountFixture):
         user=None,
         uid="provider-user",
         process="login",
+        next_url=None,
     ):
         request = RequestFactory().get(f"/accounts/{provider_id}/login/callback/")
         SessionMiddleware(lambda request: None).process_request(request)
@@ -259,6 +260,8 @@ class SocialLoginTests(AccountFixture):
                 provider=provider,
             )
             login.state = {"process": process}
+            if next_url:
+                login.state["next"] = next_url
             response = complete_social_login(request, login)
         return request, response
 

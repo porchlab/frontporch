@@ -3,6 +3,7 @@
 {% if social_providers %}
     <div class="provider-buttons" role="group" aria-label="{% if process == 'connect' %}Connect a sign-in account{% else %}Sign in options{% endif %}">
         {% for provider in social_providers %}
+            {% if not only_provider or provider.id == only_provider %}
             <form method="post" action="{% provider_login_url provider.id process=process|default:'login' %}">
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ next }}">
@@ -15,6 +16,7 @@
                     <span>{% if process == "connect" %}Connect{% else %}Continue with{% endif %} {{ provider.name }}</span>
                 </button>
             </form>
+            {% endif %}
         {% endfor %}
     </div>
     {% if show_email_divider %}<p class="auth-divider">or continue with email</p>{% endif %}

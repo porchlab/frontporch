@@ -57,6 +57,8 @@ guide](docs/parent-ui-implementation.md) before deploying this version.
 Every guardian has a user account. Password recovery, email management, and optional
 Google/Apple sign-in use django-allauth; see the [guardian account upgrade and
 provider setup guide](docs/operations/guardian-accounts.md).
+Invited new families can sign up with Google using their invited email address,
+without creating a password, or use the existing password signup form.
 
 The optional public setup uses Cloudflare Tunnel at `front.porchlab.app` and
 FrontPorch login, with no Tailscale installation required for parents. Family

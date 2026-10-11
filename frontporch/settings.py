@@ -178,6 +178,7 @@ LOGOUT_REDIRECT_URL = "/welcome/"
 AUTHENTICATION_BACKENDS = ["allauth.account.auth_backends.AuthenticationBackend"]
 ACCOUNT_ADAPTER = "directory.accounts.AccountAdapter"
 SOCIALACCOUNT_ADAPTER = "directory.accounts.SocialAccountAdapter"
+SOCIALACCOUNT_FORMS = {"signup": "directory.forms.InvitedSocialSignupForm"}
 ACCOUNT_LOGIN_METHODS = {"email", "username"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 ACCOUNT_FORMS = {"login": "directory.forms.ParentAuthenticationForm"}

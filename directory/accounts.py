@@ -10,6 +10,7 @@ from allauth.socialaccount.models import SocialApp
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.http import Http404
 from django.urls import reverse
 
@@ -34,7 +35,33 @@ class SocialAccountAdapter(DefaultSocialAccountAdapter):
             raise Http404("This sign-in provider is not configured.") from error
 
     def is_open_for_signup(self, request, sociallogin):
+        from .registration import social_signup_invitation
+
+        return social_signup_invitation(sociallogin) is not None
+
+    def is_auto_signup_allowed(self, request, sociallogin):
+        # Invited Google users must choose their family details and directory
+        # visibility before any account or family is created.
         return False
+
+    @transaction.atomic
+    def save_user(self, request, sociallogin, form=None):
+        from .registration import (
+            create_invited_family,
+            lock_registration_invitation,
+            social_signup_invitation,
+        )
+
+        invitation = social_signup_invitation(sociallogin)
+        if invitation is None or form is None:
+            raise ValidationError(
+                "Open a valid invitation and use the Google account with the invited email."
+            )
+        invitation = lock_registration_invitation(invitation, form.cleaned_data["email"])
+        user = super().save_user(request, sociallogin, form=form)
+        create_invited_family(user, invitation, form.cleaned_data)
+        sociallogin.state["next"] = reverse("directory:dashboard")
+        return user
 
     def can_authenticate_by_email(self, login, email):
         # Never choose between ambiguous legacy/admin-created identities.
