@@ -9,7 +9,8 @@ from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 
 from directory import models as m
-from directory.groups import invitation_available
+from directory.admin import ConferenceGroupAdmin
+from directory.groups import invitation_available, _require_parent
 from directory.asterisk.builder import build_asterisk_configuration
 from directory.services import shortcut_destination_allowed
 
@@ -479,6 +480,27 @@ class GroupMembershipTests(TestCase):
         self.assertEqual(invitation.status, "pending")
         self.assertEqual(list(self.group.members.all()), [self.sibling])
 
+    def test_admin_sibling_replacement_preserves_invitation_but_departure_cancels(self):
+        invitation = self.invite()
+        for members, expected in (
+            ([self.sibling], "pending"),
+            ([self.peer], "cancelled"),
+        ):
+            form = ConferenceGroupAdmin.ConferenceGroupAdminForm(
+                data={
+                    "name": self.group.name,
+                    "members": [child.pk for child in members],
+                    "is_active": True,
+                    "ring_timeout_seconds": 20,
+                },
+                instance=self.group,
+            )
+            self.assertTrue(form.is_valid(), form.errors)
+            form.save()
+            invitation.refresh_from_db()
+            self.assertEqual(invitation.status, expected)
+            self.assertEqual(set(self.group.members.all()), set(members))
+
     def test_removing_one_child_preserves_invitations_while_family_remains(self):
         invitation = self.invite()
         self.group.members.add(self.sibling)
@@ -509,6 +531,41 @@ class GroupMembershipTests(TestCase):
                 self.assertFalse(self.group.members.filter(pk=self.peer.pk).exists())
         invitation.refresh_from_db()
         self.assertEqual(invitation.status, "cancelled")
+
+    def test_acceptance_rechecks_recipient_after_initial_authentication(self):
+        invitation = self.invite()
+        for kind in ("guardian", "family", "account"):
+            with self.subTest(kind=kind):
+                m.Parent.objects.filter(pk=self.recipient.pk).update(
+                    family=self.other, is_guardian=True
+                )
+                User.objects.filter(pk=self.recipient.user_id).update(is_active=True)
+                self.client.force_login(self.recipient.user)
+
+                def revoke_after_authentication(request):
+                    parent = _require_parent(request)
+                    if kind == "account":
+                        User.objects.filter(pk=parent.user_id).update(is_active=False)
+                    elif kind == "family":
+                        m.Parent.objects.filter(pk=parent.pk).update(
+                            family=self.stranger
+                        )
+                    else:
+                        m.Parent.objects.filter(pk=parent.pk).update(is_guardian=False)
+                    return parent
+
+                with patch(
+                    "directory.groups._require_parent",
+                    side_effect=revoke_after_authentication,
+                ):
+                    response = self.client.post(
+                        self.url("group_review", invitation.pk),
+                        {"members": [self.peer.pk]},
+                    )
+                self.assertEqual(response.status_code, 403)
+                self.assertFalse(self.group.members.filter(pk=self.peer.pk).exists())
+                invitation.refresh_from_db()
+                self.assertEqual(invitation.status, "pending")
 
     def test_guardian_login_and_csrf_required(self):
         url = self.url("group_invite", self.group.pk)
@@ -622,7 +679,7 @@ class ConcurrentGroupMembershipTests(TransactionTestCase):
                         release.set()
                         future.result(timeout=10)
 
-    def test_acceptance_locks_sending_guardian_and_account_until_commit(self):
+    def test_acceptance_locks_both_guardians_and_accounts_until_commit(self):
         self.group.members.remove(self.children[1][0])
         invitation = m.GroupInvitation.objects.create(
             group=self.group,
@@ -659,6 +716,8 @@ class ConcurrentGroupMembershipTests(TransactionTestCase):
                     for model, pk in (
                         (m.Parent, self.parents[0].pk),
                         (User, self.parents[0].user_id),
+                        (m.Parent, self.parents[1].pk),
+                        (User, self.parents[1].user_id),
                     ):
                         with self.subTest(model=model.__name__):
                             with self.assertRaises(OperationalError):

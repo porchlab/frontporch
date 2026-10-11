@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.contrib.admin.models import CHANGE
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -26,19 +27,14 @@ def member_group(parent, group_id):
 
 
 def invitation_available(invitation):
-    # Hold both permission records until acceptance commits, so staff revocation
-    # cannot race the membership grant after these checks.
-    sender = models.Parent.objects.select_for_update().get(pk=invitation.sent_by_id)
-    account = (
-        get_user_model().objects.select_for_update().filter(pk=sender.user_id).first()
-    )
+    sender = invitation.sent_by
     return (
         invitation.status == "pending"
         and invitation.group.is_active
         and sender.is_guardian
         and sender.family_id == invitation.source_family_id
-        and account is not None
-        and account.is_active
+        and sender.user_id is not None
+        and sender.user.is_active
         and invitation.group.members.filter(
             family_id=invitation.source_family_id
         ).exists()
@@ -130,6 +126,35 @@ def review(request, invitation_id):
     invitation = models.GroupInvitation.objects.select_for_update().get(
         pk=invitation.pk
     )
+    # Lock both sides in a stable order; reciprocal invitations in different
+    # groups must not acquire the same guardian records in opposite orders.
+    guardians = {
+        guardian.pk: guardian
+        for guardian in models.Parent.objects.select_for_update()
+        .filter(pk__in=[parent.pk, invitation.sent_by_id])
+        .order_by("pk")
+    }
+    accounts = {
+        account.pk: account
+        for account in get_user_model()
+        .objects.select_for_update()
+        .filter(pk__in=[guardian.user_id for guardian in guardians.values()])
+        .order_by("pk")
+    }
+    for guardian in guardians.values():
+        guardian.user = accounts.get(guardian.user_id)
+    parent = guardians.get(parent.pk)
+    if (
+        parent is None
+        or not parent.is_guardian
+        or parent.family_id != invitation.target_family_id
+        or parent.user_id != request.user.pk
+        or not parent.user.is_active
+    ):
+        raise PermissionDenied(
+            "This account no longer has guardian access to this invitation."
+        )
+    invitation.sent_by = guardians[invitation.sent_by_id]
     if not invitation_available(invitation):
         messages.info(request, "This group invitation is no longer available.")
         return redirect("directory:invitations")
