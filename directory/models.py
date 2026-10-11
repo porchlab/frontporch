@@ -269,10 +269,25 @@ class ChildBlackoutPeriod(TimeStampedModel):
     def asterisk_time_range(self):
         return f"{self.start_time:%H:%M}-{self.end_time:%H:%M}"
 
+    @property
+    def asterisk_time_windows(self):
+        """Day groups describe the days on which quiet hours start."""
+        if self.end_time > self.start_time:
+            return ((self.asterisk_time_range, self.asterisk_days),)
+        next_days = {
+            self.WEEKDAYS: "tue-sat",
+            self.WEEKENDS: "sun-mon",
+            self.EVERY_DAY: "mon-sun",
+        }[self.day_group]
+        return (
+            (f"{self.start_time:%H:%M}-23:59", self.asterisk_days),
+            (f"00:00-{self.end_time:%H:%M}", next_days),
+        )
+
     def clean(self):
         errors = {}
-        if self.start_time and self.end_time and self.start_time >= self.end_time:
-            errors["end_time"] = "End time must be after start time."
+        if self.start_time and self.end_time and self.start_time == self.end_time:
+            errors["end_time"] = "End time must be different from start time."
         if (
             self.approved_by_id
             and self.child_id

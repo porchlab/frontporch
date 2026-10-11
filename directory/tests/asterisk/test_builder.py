@@ -888,12 +888,13 @@ class AsteriskConfigurationBuilderTests(TestCase):
         self.assertDialplanContains(configuration, "301", "2222")
 
     def test_child_blackout_periods_are_attached_to_child_endpoints(self):
+        self.connect_children(self.alex, self.emma)
         ChildBlackoutPeriod.objects.create(
             child=self.alex,
             label="School night bedtime",
             day_group=ChildBlackoutPeriod.WEEKDAYS,
             start_time=time(20, 30),
-            end_time=time(23, 59),
+            end_time=time(7, 30),
             approved_by=self.river_parent,
         )
         ChildBlackoutPeriod.objects.create(
@@ -924,10 +925,20 @@ class AsteriskConfigurationBuilderTests(TestCase):
             ],
             [
                 ("20:30-23:59", "mon-fri"),
+                ("00:00-07:30", "tue-sat"),
                 ("22:00-23:59", "sat-sun"),
             ],
         )
         self.assertEqual(parent_endpoint.blackout_windows, ())
+        content = AsteriskConfigRenderer().render_extensions(configuration)
+        for time_range, days in (
+            ("20:30-23:59", "mon-fri"),
+            ("00:00-07:30", "tue-sat"),
+        ):
+            self.assertIn(
+                f"GotoIfTime({time_range},{days},*,*?frontporch-blackout,s,1)",
+                content,
+            )
 
     def test_child_connection_does_not_allow_parent_or_shared_phones(self):
         configuration = build_asterisk_configuration()

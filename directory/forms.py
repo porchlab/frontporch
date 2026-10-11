@@ -179,7 +179,7 @@ class ChildBlackoutPeriodForm(forms.ModelForm):
 
         self.fields[
             "start_time"
-        ].help_text = f"Times use {settings.TIME_ZONE}, the phone system’s time zone. End time must be later on the same day."
+        ].help_text = f"Times use {settings.TIME_ZONE}, the phone system’s time zone. An end time before the start time means the next morning. The day group selects the days quiet hours start."
 
     class Meta:
         model = ChildBlackoutPeriod

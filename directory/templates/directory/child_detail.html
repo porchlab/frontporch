@@ -49,7 +49,7 @@
                 <a class="text-button blue-text"
                    href="{% url 'directory:blackout_create' child.id %}">Add quiet hours</a>
             </div>
-            <p class="form-note">All times use {{ portal_timezone }}, the phone system’s time zone. Each interval must end on the same day.</p>
+            <p class="form-note">All times use {{ portal_timezone }}, the phone system’s time zone. An end time before the start time means the next morning. The day group selects the days quiet hours start.</p>
             {% for period in child.blackout_periods.all %}
                 <div class="device-row">
                     <h3>{{ period.label }} {% if not period.is_active %}

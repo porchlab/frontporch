@@ -98,7 +98,7 @@ const Demo = (() => {
     const owner = findChild(data, childId);
     assert(owner, "Choose a child first.");
     assert(/^\d{2}:\d{2}$/.test(values.start_time) && /^\d{2}:\d{2}$/.test(values.end_time)
-      && values.end_time > values.start_time, "End time must be later on the same day.");
+      && values.end_time !== values.start_time, "End time must be different from start time.");
     let period = owner.quietHours.find(p => p.id === periodId);
     if (!period) { period = {id:id()}; owner.quietHours.push(period); }
     Object.assign(period, values);
