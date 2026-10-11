@@ -221,10 +221,19 @@ migrate the existing database to preserve registrations; see
 
 ### Group Calls
 
-Conference groups remain child-only and default-deny. Parents may continue to manage
-the group membership exposed in the parent portal, but a staff member must enable
-calling in Django Admin. Enabling calling assigns an unused four-digit extension when
-one is not supplied and exposes a configurable 5-to-120-second ring timeout.
+Conference groups remain child-only and default-deny. In **Family connections**,
+parents can create a group with one or more of their children, invite a listed
+family or use its shared family code, and manage only their own children's
+membership. The receiving guardian reviews the group invitation in **Invitations**
+and chooses which children join; sending an invitation grants no calling access.
+Members can call everyone in the group, and member families can invite more
+families. A shared group's name, notes, and active state remain staff-managed.
+Leaving removes only that family's selected children; leaving entirely requires
+a new invitation to return. Direct child-to-child connections remain separate.
+Groups with fewer than two children are not dialable. Staff must enable calling
+in Django Admin and assign or accept the group's four-digit extension. Enabling
+calling assigns an unused extension when one is not supplied and exposes a
+configurable 5-to-120-second ring timeout.
 
 The first member to dial the group extension enters an Asterisk `ConfBridge` while
 every other member's active devices and configured child landline ring concurrently.

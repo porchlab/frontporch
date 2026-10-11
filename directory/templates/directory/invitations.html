@@ -64,11 +64,34 @@
                     {% endif %}
                 </div>
             </article>
-        {% empty %}
+        {% endfor %}
+        {% for invitation in group_invitations %}
+            <article class="invite-card">
+                <div class="invite-card-top">
+                    <div>
+                        <h2>{{ invitation.group.name }}</h2>
+                        <p>Group invitation · {% if invitation.source_family_id == portal_parent.family_id %}To {{ invitation.target_family.name }}{% else %}From {{ invitation.source_family.name }}{% endif %}</p>
+                    </div>
+                    <span class="pill {% if invitation.status == 'accepted' %}green{% elif invitation.status == 'pending' %}amber{% else %}neutral{% endif %}">{{ invitation.get_status_display }}</span>
+                </div>
+                <p>The receiving guardian chooses which of their children join. Each family manages its own memberships.</p>
+                {% if invitation.status == 'pending' %}
+                    <div class="inline-actions">
+                        {% if invitation.target_family_id == portal_parent.family_id %}
+                            <a class="button" href="{% url 'directory:group_review' invitation.id %}">Review group invitation</a>
+                            <form method="post" action="{% url 'directory:group_invitation_action' invitation.id 'decline' %}">{% csrf_token %}<button class="button secondary">Decline</button></form>
+                        {% else %}
+                            <form method="post" action="{% url 'directory:group_invitation_action' invitation.id 'cancel' %}">{% csrf_token %}<button class="button secondary">Cancel invitation</button></form>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </article>
+        {% endfor %}
+        {% if not invitations and not group_invitations %}
             <div class="empty-state">
                 <h3>You’re all caught up.</h3>
                 <p>Your invitations will appear here.</p>
             </div>
-        {% endfor %}
+        {% endif %}
     </div>
 {% endblock %}

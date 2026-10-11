@@ -196,6 +196,29 @@ class Child(TimeStampedModel):
     def __str__(self):
         return f"{self.name} ({self.family})"
 
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        previous_family_id = (
+            type(self).objects.filter(pk=self.pk)
+            .values_list("family_id", flat=True).first()
+            if self.pk
+            else None
+        )
+        if previous_family_id is not None and previous_family_id != self.family_id:
+            from .services import lock_conference_groups
+
+            lock_conference_groups(self.conference_groups.values_list("pk", flat=True))
+        super().save(*args, **kwargs)
+        if previous_family_id is not None and previous_family_id != self.family_id:
+            # Check the saved value so a partial update that excludes family
+            # cannot revoke memberships for an unsaved in-memory change.
+            saved_family_id = (
+                type(self).objects.values_list("family_id", flat=True).get(pk=self.pk)
+            )
+            if previous_family_id != saved_family_id:
+                # Membership is household approval; it cannot transfer with a child.
+                self.conference_groups.clear()
+
     @property
     def spoken_menu_name(self):
         return self.spoken_name.strip() or self.name
@@ -1307,6 +1330,46 @@ class ConferenceGroup(TimeStampedModel):
                 continue
             return candidate
         raise ValidationError("Could not assign an unused conference group extension.")
+
+
+class GroupInvitation(TimeStampedModel):
+    group = models.ForeignKey(
+        ConferenceGroup, on_delete=models.CASCADE, related_name="invitations"
+    )
+    source_family = models.ForeignKey(
+        Family, on_delete=models.CASCADE, related_name="sent_group_invitations"
+    )
+    target_family = models.ForeignKey(
+        Family, on_delete=models.CASCADE, related_name="received_group_invitations"
+    )
+    sent_by = models.ForeignKey(
+        Parent, on_delete=models.PROTECT, related_name="sent_group_invitations"
+    )
+    responded_by = models.ForeignKey(
+        Parent, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="answered_group_invitations",
+    )
+    accepted_children = models.ManyToManyField(
+        Child, blank=True, related_name="accepted_group_invitations"
+    )
+    status = models.CharField(
+        max_length=12, default="pending",
+        choices=[("pending", "Pending"), ("accepted", "Accepted"),
+                 ("declined", "Declined"), ("cancelled", "Cancelled")],
+    )
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["group", "target_family"], condition=models.Q(status="pending"),
+                name="one_pending_group_invitation_per_family",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(source_family=models.F("target_family")),
+                name="group_invitation_different_families",
+            ),
+        ]
 
 
 class FamilyActivity(TimeStampedModel):

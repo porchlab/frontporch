@@ -71,3 +71,22 @@ test('signup creates an empty independent family and discards both passwords', (
   assert(!saved.includes('do-not-store-this-password'));
   assert(!saved.includes('password'));
 });
+
+test('group invitation dialogs show scoped choices and shared group edits preserve metadata', () => {
+  const {run, nodes} = ui();
+  run(`globalThis.testGroup = Demo.saveGroup(state, '', {name:'Friends <club>', is_active:true}, ['casey']); groupInviteDialog(testGroup.id);`);
+  assert.match(nodes.get('#dialog').innerHTML, /Invite a family to Friends &lt;club&gt;/);
+  assert.match(nodes.get('#dialog').innerHTML, /River/);
+  assert.doesNotMatch(nodes.get('#dialog').innerHTML, /Arden|Reese|Pine/);
+  run(`globalThis.testInvite = Demo.sendGroupInvitation(state, testGroup.id, 'river'); inviteTab = 'outgoing';`);
+  assert.match(run('invitationsPage()'), /Demo: preview receiving parent/);
+  run('groupReceiverDialog(testInvite.id)');
+  assert.match(nodes.get('#dialog').innerHTML, /Alex/);
+  assert.doesNotMatch(nodes.get('#dialog').innerHTML, /Casey/);
+  run(`Demo.acceptGroupInvitation(state, testInvite.id, ['river-0']); groupDialog(testGroup.id);`);
+  assert.match(nodes.get('#dialog').innerHTML, /Casey/);
+  assert.doesNotMatch(nodes.get('#dialog').innerHTML, /name="name"|name="is_active"|name="notes"|Alex/);
+  assert.match(run('connectionsPage()'), /Casey, Alex/);
+  run('Demo.saveGroup(state, testGroup.id, {}, []);');
+  assert.doesNotMatch(run('connectionsPage()'), /Friends &lt;club&gt;/);
+});
