@@ -37,7 +37,12 @@ class LegacyRelationshipRemovalTests(TransactionTestCase):
             )
             MigrationExecutor(connection).migrate([after])
             archive_before = FamilyActivity.objects.get().details
-            second.delete()
+            # Use the historical model: later migrations may add family relations
+            # whose tables do not exist at the revision under test.
+            historical_family = executor.loader.project_state([after]).apps.get_model(
+                "directory", "Family"
+            )
+            historical_family.objects.get(pk=second.pk).delete()
 
             with self.assertRaisesMessage(RuntimeError, "referenced people or families were removed"):
                 MigrationExecutor(connection).migrate([before])

@@ -198,7 +198,7 @@ test('existing-account preview never moves another household into this one', () 
 });
 test('group shortcuts require installer activation and explicit membership', () => {
   const data = Demo.seed();
-  assert.throws(() => Demo.saveGroup(data, '', {name:'Home'}, ['casey']), /at least two/);
+  assert.throws(() => Demo.saveGroup(data, '', {name:'Home'}, []), /at least one/);
   const group = Demo.saveGroup(data, '', {name:'Home', is_active:true}, ['casey', 'jordan']);
   assert(!Demo.destinations(data, 'casey-phone').some(t => t.key === `group:${group.id}`));
   group.extension = Demo.nextExtension(data); group.enabled = true;
@@ -260,4 +260,40 @@ test('version 7 parent shortcuts gain a stable extension without enabling unconf
   assert.equal(upgraded.children[0].devices[0].extension, '4754');
   Demo.save(storage, upgraded);
   assert.equal(Demo.load(storage).guardians[0].extension, upgradedParent.extension);
+});
+
+test('group invitation acceptance and membership changes preserve family boundaries', () => {
+  const data = Demo.seed();
+  const group = Demo.saveGroup(data, '', {name:'Friends', is_active:true}, ['casey']);
+  const invitation = Demo.sendGroupInvitation(data, group.id, 'river');
+  assert.deepEqual(Array.from(group.members), ['casey']);
+  assert.throws(() => Demo.sendGroupInvitation(data, group.id, 'river'), /pending/);
+  assert.throws(() => Demo.acceptGroupInvitation(data, invitation.id, ['casey']), /receiving family/);
+  const connectionCount = data.connections.length;
+  Demo.acceptGroupInvitation(data, invitation.id, ['river-0']);
+  assert.equal(data.connections.length, connectionCount);
+  assert.deepEqual(Array.from(group.members).sort(), ['casey', 'river-0']);
+  assert.throws(() => Demo.acceptGroupInvitation(data, invitation.id, ['river-1']), /no longer/);
+  Demo.saveGroup(data, group.id, {name:'Changed', is_active:false}, ['jordan']);
+  assert.equal(group.name, 'Friends'); assert.equal(group.is_active, true);
+  assert.deepEqual(Array.from(group.members).sort(), ['jordan', 'river-0']);
+  assert.throws(() => Demo.saveGroup(data, group.id, {}, ['river-0']), /own children/);
+  const pending = Demo.sendGroupInvitation(data, group.id, 'cedar');
+  Demo.saveGroup(data, group.id, {}, []);
+  assert.deepEqual(Array.from(group.members), ['river-0']);
+  assert.equal(pending.status, 'cancelled');
+  assert.throws(() => Demo.acceptGroupInvitation(data, pending.id, ['cedar-0']), /no longer/);
+  assert.throws(() => Demo.saveGroup(data, group.id, {}, ['casey']), /does not belong/);
+  assert.throws(() => Demo.sendGroupInvitation(data, group.id, 'ash'), /active group/);
+});
+test('group invitations require discovery and can be declined or cancelled', () => {
+  const data = Demo.seed();
+  const group = Demo.saveGroup(data, '', {name:'Friends', is_active:true}, ['casey']);
+  assert.throws(() => Demo.sendGroupInvitation(data, group.id, 'pine'), /not available/);
+  const invite = Demo.sendGroupInvitation(data, group.id, '', 'PINE-7K2M');
+  Demo.groupInvitationAction(data, invite.id, 'declined');
+  assert.throws(() => Demo.acceptGroupInvitation(data, invite.id, ['pine-0']), /no longer/);
+  const second = Demo.sendGroupInvitation(data, group.id, 'river');
+  Demo.groupInvitationAction(data, second.id, 'cancelled');
+  assert.deepEqual(Array.from(group.members), ['casey']);
 });

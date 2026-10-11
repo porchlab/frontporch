@@ -122,13 +122,17 @@
             <a class="button full-width"
                href="{% url 'directory:connection_review' invitation.id %}">Review invitation</a>
         </div>
-{% empty %}
-    <p class="small-empty">
-        You’re all caught up.
-        <br>
-        New invitations will appear here.
-    </p>
 {% endfor %}
+{% for invitation in incoming_group_invitations|slice:':2' %}
+    <div class="invite-peek">
+        <h3>{{ invitation.group.name }}</h3>
+        <p>The {{ invitation.source_family.name }} family invited your children to a group.</p>
+        <a class="button full-width" href="{% url 'directory:group_review' invitation.id %}">Review group invitation</a>
+    </div>
+{% endfor %}
+{% if not incoming_invitations and not incoming_group_invitations %}
+    <p class="small-empty">You’re all caught up.<br>New invitations will appear here.</p>
+{% endif %}
 <a class="button full-width" href="{% url 'directory:invitations' %}">All invitations {% icon 'arrow' %}</a>
 </section>
 <section class="trust-note">

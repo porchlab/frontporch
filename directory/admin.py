@@ -9,6 +9,7 @@ from .accounts import sync_account_email, validate_account_email
 from .models import (
     Child,
     ChildConnection,
+    GroupInvitation,
     ConnectionInvitation,
     GuardianInvitation,
     FamilyActivity,
@@ -385,6 +386,13 @@ class ConferenceGroupAdmin(admin.ModelAdmin):
             model = ConferenceGroup
             fields = "__all__"
 
+        def _save_m2m(self):
+            # Keep household approval continuous when staff swaps siblings.
+            selected = set(self.cleaned_data["members"].values_list("pk", flat=True))
+            current = set(self.instance.members.values_list("pk", flat=True))
+            self.instance.members.add(*(selected - current))
+            self.instance.members.remove(*(current - selected))
+
         def clean_members(self):
             members = self.cleaned_data["members"]
             if self.cleaned_data.get("calling_enabled") and members.count() < 2:
@@ -439,7 +447,7 @@ class ChildConnectionAdmin(admin.ModelAdmin):
 
 
 @admin.register(
-    ConnectionInvitation, GuardianInvitation, FamilyInvitation, FamilyActivity
+    ConnectionInvitation, GroupInvitation, GuardianInvitation, FamilyInvitation, FamilyActivity
 )
 class PortalHistoryAdmin(admin.ModelAdmin):
     def get_readonly_fields(self, request, obj=None):

@@ -54,8 +54,11 @@ copy of the original tab's session, but subsequent changes are independent.
   explore as that guardian. Only the primary guardian manages membership. Each
   guardian controls their own directory visibility. Invitations expire after
   seven days; resend replaces the old invitation, and cancellation invalidates it.
-- Create a group with at least two children. Group calling requires simulated
-  installer activation and only becomes a shortcut destination for its members.
+- Create a group with at least one child, then invite a listed family or use its
+  family code. In Sent invitations, **Demo: preview receiving parent** selects the
+  receiving family's children. Manage your own children without changing theirs;
+  uncheck all to leave. Group calling requires two members and simulated installer
+  activation and only becomes a shortcut destination for its members.
 
 Old saved prototype sessions (versions 1–6) migrate to the new per-device model,
 retaining household details, contacts, connections, shortcuts, and quiet hours.

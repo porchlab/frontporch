@@ -1,6 +1,84 @@
 from .models import ConferenceGroup
 
 
+def lock_group_actor(request, parent, additional_parent_ids=()):
+    """Recheck group authority under locks held through the current transaction."""
+    from django.contrib.auth import get_user_model
+    from django.core.exceptions import PermissionDenied
+    from .models import Parent
+
+    guardians = {
+        guardian.pk: guardian
+        for guardian in Parent.objects.select_for_update()
+        .filter(pk__in=[parent.pk, *additional_parent_ids])
+        .order_by("pk")
+    }
+    accounts = {
+        account.pk: account
+        for account in get_user_model()
+        .objects.select_for_update()
+        .filter(pk__in=[guardian.user_id for guardian in guardians.values()])
+        .order_by("pk")
+    }
+    for guardian in guardians.values():
+        guardian.user = accounts.get(guardian.user_id)
+    current = guardians.get(parent.pk)
+    if (
+        current is None
+        or not current.is_guardian
+        or current.family_id != parent.family_id
+        or current.user_id != request.user.pk
+        or not current.user.is_active
+    ):
+        raise PermissionDenied(
+            "This account no longer has guardian access to this family."
+        )
+    return current, guardians
+
+
+def group_audit_roster(group):
+    return ", ".join(
+        f"{name} ({family}; child #{pk})"
+        for pk, name, family in group.members.order_by(
+            "family__name", "name", "pk"
+        ).values_list("pk", "name", "family__name")
+    )
+
+
+def lock_conference_groups(group_ids):
+    """Serialize membership changes using the same row locks as portal acceptance."""
+    return list(
+        ConferenceGroup.objects.select_for_update()
+        .filter(pk__in=group_ids)
+        .order_by("pk")
+        .values_list("pk", flat=True)
+    )
+
+
+def cancel_invalid_group_invitations():
+    """Cancel invitations from departed sources or superseded by a target joining."""
+    from django.db.models import Exists, OuterRef, Q
+    from django.utils import timezone
+    from .models import GroupInvitation
+
+    memberships = ConferenceGroup.members.through.objects.filter(
+        conferencegroup_id=OuterRef("group_id"),
+    )
+    return (
+        GroupInvitation.objects.filter(status="pending")
+        .alias(
+            source_is_member=Exists(
+                memberships.filter(child__family_id=OuterRef("source_family_id"))
+            ),
+            target_is_member=Exists(
+                memberships.filter(child__family_id=OuterRef("target_family_id"))
+            ),
+        )
+        .filter(Q(source_is_member=False) | Q(target_is_member=True))
+        .update(status="cancelled", updated_at=timezone.now())
+    )
+
+
 def explicit_conference_group_exists(children):
     child_ids = set(child.id for child in children)
     if len(child_ids) < 2:
