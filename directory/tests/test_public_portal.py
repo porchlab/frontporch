@@ -79,6 +79,7 @@ class PublicPortalTests(TestCase):
             url,
             {
                 "family_name": "Willow",
+                "timezone": "America/New_York",
                 "display_name": "Morgan",
                 "password1": "different-test-pass-123",
                 "password2": "different-test-pass-123",

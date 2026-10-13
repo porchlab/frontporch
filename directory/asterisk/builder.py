@@ -46,7 +46,9 @@ def build_asterisk_configuration():
         child.pk: child.spoken_menu_name for child in Child.objects.all()
     }
     blackout_windows_by_child_id = {}
-    for period in ChildBlackoutPeriod.objects.filter(is_active=True).order_by(
+    for period in ChildBlackoutPeriod.objects.filter(is_active=True).select_related(
+        "child__family"
+    ).order_by(
         "child_id",
         "day_group",
         "start_time",
@@ -57,6 +59,7 @@ def build_asterisk_configuration():
             BlackoutWindow(
                 time_range=time_range,
                 days=days,
+                timezone=period.child.family.timezone,
             )
             for time_range, days in period.asterisk_time_windows
         )

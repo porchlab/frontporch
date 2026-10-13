@@ -4,11 +4,17 @@ import json
 
 import phonenumbers
 
+from directory.timezones import validate_timezone
+
 
 @dataclass(frozen=True)
 class BlackoutWindow:
     time_range: str
     days: str
+    timezone: str
+
+    def __post_init__(self):
+        validate_timezone(self.timezone)
 
 
 @dataclass(frozen=True)

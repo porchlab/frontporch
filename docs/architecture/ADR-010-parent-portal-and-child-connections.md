@@ -53,8 +53,18 @@ preserves the prohibition on public or child-facing discovery.
 Parents reserve phones with an automatically allocated four-digit extension and
 random credentials. New devices are inactive. Staff configure hardware, verify it,
 and activate it through Admin. Parent pages never expose SIP credentials or claim
-live registration. Quiet hours use the explicitly displayed deployment/PBX time
-zone, not the browser time zone.
+live registration. Quiet hours use the family's explicitly selected IANA time
+zone, displayed in the portal. Signup and family settings expose this selection;
+the browser and PBX default time zones do not determine quiet hours. Existing
+families inherit the deployment's configured Django `TIME_ZONE` on upgrade to
+preserve their intended local schedules. New signup forms initially select
+`America/New_York`; parents confirm or change that selection.
+Times remain local recurring wall times. Generated `GotoIfTime` checks carry the
+family's named zone, so daylight saving changes require no schedule conversion or
+reload. Overnight intervals keep the zone on both halves and shift the morning
+day group. Cross-family calls check each child's quiet hours in their own family's
+zone. Changing the family zone retains saved local times, records family activity,
+and regenerates phone configuration through the existing save workflow.
 
 Saved external contacts approve calling for all present and future children in
 the saving household, matching the current backend. Labels stay family-private.
@@ -109,11 +119,14 @@ changes. Existing Admin history remains available.
 
 Upgrades must run migrations and regenerate/reload Asterisk configuration so the
 PBX enforces the new policy. Guardian email delivery needs private SMTP settings
-and an externally correct HTTPS request origin. Operators must keep the web and
-PBX time zones aligned and restrict both to the private network.
+and an externally correct HTTPS request origin. The PBX may run in UTC; its time
+zone database must support the named family zones. Keep both services restricted
+to the private network. DST gaps and repeated hours follow local wall time: a
+skipped minute never occurs, and a repeated blocked minute is blocked on both
+occurrences.
 
 ## Future Considerations
 
 Primary-role transfer, multiple households per account, phone self-activation,
-per-household time zones, and live phone-registration monitoring remain separate
+and live phone-registration monitoring remain separate
 product decisions. None is simulated by this UI.

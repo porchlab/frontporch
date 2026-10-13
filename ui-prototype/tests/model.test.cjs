@@ -4,6 +4,31 @@ const {runtime} = require('./harness.cjs');
 const {Demo} = runtime();
 const memory = () => ({value:null, getItem() { return this.value; }, setItem(key, value) { this.value = value; }});
 
+test('family timezone changes retain local quiet hours and reject invalid zones and removed guardians', () => {
+  const data = Demo.seed(), schedules = JSON.stringify(data.children[0].quietHours);
+  Demo.saveFamilyTimezone(data, 'America/Los_Angeles');
+  assert.equal(data.timezone, 'America/Los_Angeles');
+  assert.equal(JSON.stringify(data.children[0].quietHours), schedules);
+  for (const zone of ['Mars/Olympus', 'UTC?bad,s,1', 'localtime', '']) {
+    assert.throws(() => Demo.saveFamilyTimezone(data, zone), /valid named time zone/);
+    assert.equal(data.timezone, 'America/Los_Angeles');
+  }
+  data.guardians[0].active = false;
+  assert.throws(() => Demo.saveFamilyTimezone(data, 'UTC'), /guardian/);
+});
+
+test('version 8 households gain Eastern timezone without losing edits', () => {
+  const data = Demo.seed(), store = memory();
+  delete data.timezone;
+  data.family = 'Juniper';
+  store.value = JSON.stringify({version:8, data});
+  const restored = Demo.load(store);
+  assert.equal(restored.timezone, 'America/New_York');
+  assert.equal(restored.family, 'Juniper');
+  assert.equal(JSON.stringify(restored.children), JSON.stringify(data.children));
+  assert.equal(JSON.stringify(restored.connections), JSON.stringify(data.connections));
+});
+
 test('phonebooks list every permitted extension, with shortcuts scoped to the selected phone', () => {
   const data = Demo.seed();
   const second = Demo.reservePhone(data, 'casey', 'Desk'); second.active = true;

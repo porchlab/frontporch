@@ -22,7 +22,8 @@ public-only exports from the Django source:
 
 The SPA renders forms from those definitions instead of repeating their labels
 or limits. Dynamic choices (children and permitted shortcut destinations) come
-from its own fictional data. The export command never accesses model records.
+from its own fictional data. Named timezones come from the browser’s Intl
+database so exports stay independent of the build machine’s timezone database. The export command never accesses model records.
 Do not hand-edit generated files or import private `.env` values into the demo.
 
 Product CSS changes happen in Django. `demo.css` is limited to demo controls and
@@ -65,7 +66,7 @@ from another family.
 
 Changes live in `sessionStorage`, not in a shared backend. A new visitor receives
 fictional fixtures. Refreshing preserves the tab's progress; Reset restores the
-sample family. Versions 1–7 migrate to version 8 without dropping approved pairs,
+sample family. Versions 1–8 migrate to version 9 without dropping approved pairs,
 contacts, phone extensions, shortcut keys, or quiet schedules. One-way legacy
 states require review before they become reciprocal permissions.
 
@@ -82,8 +83,9 @@ states require review before they become reciprocal permissions.
   password validator.
 - Phone normalization in the demo handles basic international syntax and US
   defaults. Django's `phonenumbers` validation remains authoritative for real data.
-- The example phone-system time zone is fixed to America/New_York. Real deployments
-  choose their own explicit phone-system time zone.
+- Families select a named time zone during signup or in family settings. Quiet
+  hours keep local times when the zone changes; existing demo state defaults to
+  America/New_York. Calls remain simulated.
 - The demo uses dialogs for many edits, client-side search, and fictional dates;
   Django uses server-rendered forms and paginated search. Both show the same
   parent-facing choices and outcomes for the covered workflows.

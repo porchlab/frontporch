@@ -251,7 +251,7 @@ class AsteriskConfigRenderer:
             windows.extend(endpoint.blackout_windows)
         return [
             (
-                f"GotoIfTime({window.time_range},{window.days},*,*?"
+                f"GotoIfTime({window.time_range},{window.days},*,*,{window.timezone}?"
                 "frontporch-blackout,s,1)"
             )
             for window in windows

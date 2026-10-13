@@ -61,7 +61,11 @@ def field_definition(name, field):
             definition[attribute] = value
     if isinstance(field.initial, (str, bool, int)):
         definition["initial"] = field.initial
-    if isinstance(field, django_forms.ChoiceField) and not dynamic:
+    if isinstance(field, forms.FamilyTimezoneField):
+        # Timezone databases vary by OS. The demo uses the browser's named zones
+        # instead of embedding environment-dependent choices in public exports.
+        definition["dynamic_choices"] = "timezones"
+    elif isinstance(field, django_forms.ChoiceField) and not dynamic:
         definition["choices"] = [[str(k), str(v)] for k, v in field.choices]
     return definition
 

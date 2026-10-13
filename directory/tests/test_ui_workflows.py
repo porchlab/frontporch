@@ -316,7 +316,7 @@ class ParentUIWorkflowTests(TestCase):
     def test_preferences_do_not_change_permissions_and_are_family_scoped(self):
         self.client.post(
             reverse("directory:settings"),
-            {"form": "family", "name": "Maple renamed", "directory_listed": "on"},
+            {"form": "family", "name": "Maple renamed", "directory_listed": "on", "timezone": "America/New_York"},
         )
         self.family.refresh_from_db()
         self.assertTrue(self.family.directory_listed)

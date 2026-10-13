@@ -77,7 +77,7 @@ class FrontPorchUserAdmin(UserAdmin):
 
 @admin.register(Family)
 class FamilyAdmin(admin.ModelAdmin):
-    list_display = ("name", "created_at", "updated_at")
+    list_display = ("name", "timezone", "created_at", "updated_at")
     search_fields = ("name", "notes")
     ordering = ("name",)
 

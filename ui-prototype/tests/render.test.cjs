@@ -53,17 +53,31 @@ test('phone setup never renders an editable extension or activation checkbox', (
   assert(!html.includes('name="is_active"'));
   assert(html.includes('Reserve phone'));
 });
+
+test('family settings and quiet hours use the selected family timezone', () => {
+  const {run, listeners, nodes} = ui();
+  const form = {dataset:{form:'family'}, closest() {return this;}, values:{
+    name:'Maple', timezone:'Pacific/Auckland', directory_listed:'on',
+  }};
+  listeners.submit({target:form, preventDefault() {}});
+  assert.equal(run('state.timezone'), 'Pacific/Auckland');
+  assert.match(run('settingsPage()'), /value="Pacific\/Auckland" selected/);
+  assert.match(run(`detailId = 'casey'; childPage()`), /Pacific\/Auckland, your family’s time zone/);
+  run(`quietDialog('casey')`);
+  assert.match(nodes.get('#dialog').innerHTML, /Pacific\/Auckland, your family’s time zone/);
+});
 test('signup creates an empty independent family and discards both passwords', () => {
   const {run, listeners, context} = ui();
   let saved;
   context.window.sessionStorage.setItem = (key, value) => { saved = value; };
   const form = {dataset:{form:'signup'}, closest() {return this;}, reset() {}, values:{
-    family_name:'Juniper', display_name:'Rowan', email:'rowan@example.com',
+    family_name:'Juniper', timezone:'Europe/London', display_name:'Rowan', email:'rowan@example.com',
     password1:'do-not-store-this-password', password2:'do-not-store-this-password',
     phone:'', directory_listed:'on',
   }};
   listeners.submit({target:form, preventDefault() {}});
   assert.equal(run('state.family'), 'Juniper');
+  assert.equal(run('state.timezone'), 'Europe/London');
   assert.equal(run('state.children.length'), 0);
   assert.equal(run('state.connections.length'), 0);
   assert.equal(run('state.guardians[0].directoryVisible'), true);

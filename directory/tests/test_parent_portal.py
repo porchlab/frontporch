@@ -63,6 +63,7 @@ class ParentPortalTests(TestCase):
                 "password1": "strong-test-pass-123",
                 "password2": "strong-test-pass-123",
                 "family_name": "Oak House",
+                "timezone": "Europe/Dublin",
                 "display_name": "Taylor",
                 "phone": "212-555-0100",
             },
@@ -72,6 +73,7 @@ class ParentPortalTests(TestCase):
         user = User.objects.get(username="new-parent")
         parent = user.frontporch_parent
         self.assertEqual(parent.family.name, "Oak House")
+        self.assertEqual(parent.family.timezone, "Europe/Dublin")
         self.assertEqual(parent.display_name, "Taylor")
         self.assertEqual(parent.phone, "+12125550100")
 
@@ -84,6 +86,7 @@ class ParentPortalTests(TestCase):
                 "password1": "strong-test-pass-123",
                 "password2": "strong-test-pass-123",
                 "family_name": "Oak House",
+                "timezone": "America/New_York",
                 "display_name": "Taylor",
                 "phone": "not a number",
             },

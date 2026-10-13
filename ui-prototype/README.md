@@ -60,8 +60,10 @@ copy of the original tab's session, but subsequent changes are independent.
   uncheck all to leave. Group calling requires two members and simulated installer
   activation and only becomes a shortcut destination for its members.
 
-Old saved prototype sessions (versions 1–6) migrate to the new per-device model,
-retaining household details, contacts, connections, shortcuts, and quiet hours.
+Families choose a named time zone during signup or in family settings. Quiet-hour
+times remain local when changing zones. Old saved prototype sessions (versions
+1–8) migrate without losing household details, contacts, connections, shortcuts,
+or quiet hours; missing timezones default to `America/New_York`.
 
 ## Keeping Django and the demo aligned
 

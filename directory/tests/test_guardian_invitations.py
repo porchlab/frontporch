@@ -242,6 +242,7 @@ class GuardianInvitationTests(TestCase):
             {
                 "email": "new@example.com",
                 "family_name": "Oak",
+                "timezone": "America/New_York",
                 "display_name": "Rowan",
                 "password1": "different-test-pass-123",
                 "password2": "different-test-pass-123",
