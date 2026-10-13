@@ -179,7 +179,7 @@ class ChildBlackoutPeriodForm(forms.ModelForm):
 
         self.fields[
             "start_time"
-        ].help_text = f"Times use {settings.TIME_ZONE}, the phone system’s time zone. End time must be later on the same day."
+        ].help_text = f"Times use {settings.TIME_ZONE}, the phone system’s time zone. An end time before the start time means the next morning. The day group selects the days quiet hours start."
 
     class Meta:
         model = ChildBlackoutPeriod
@@ -262,6 +262,21 @@ class ExternalContactPermissionForm(forms.ModelForm):
         self.fields["external_phone_number"].label = "Family contact number"
 
 
+def _lock_group_children(members, family):
+    # ModelMultipleChoiceField initially validates ownership without row locks.
+    # Recheck the selected identities under locks held through the membership write.
+    selected = {child.pk for child in members}
+    locked = Child.objects.select_for_update().filter(pk__in=selected).order_by("pk")
+    children = list(locked)
+    if len(children) != len(selected) or any(
+        child.family_id != family.pk for child in children
+    ):
+        raise forms.ValidationError(
+            "A selected child no longer belongs to your family. Reload the form and try again."
+        )
+    return locked
+
+
 class ConferenceGroupForm(forms.ModelForm):
     class Meta:
         model = ConferenceGroup
@@ -273,13 +288,93 @@ class ConferenceGroupForm(forms.ModelForm):
 
     def __init__(self, *args, family, **kwargs):
         super().__init__(*args, **kwargs)
+        self.family = family
         self.fields["members"].queryset = Child.objects.filter(family=family)
+        self.fields["members"].label = "Your children in this group"
+        self.shared = bool(
+            self.instance.pk
+            and self.instance.members.exclude(family=family).exists()
+        )
+        if self.instance.pk:
+            self.fields["members"].required = False
+            self.initial["members"] = list(
+                self.instance.members.filter(family=family).values_list("pk", flat=True)
+            )
+            self.fields["members"].help_text = (
+                "Uncheck a child to leave the group. Uncheck all to leave as a family."
+            )
+        if self.shared:
+            for field in ("name", "is_active", "notes"):
+                del self.fields[field]
 
     def clean_members(self):
         members = self.cleaned_data["members"]
-        if members.count() < 2:
-            raise forms.ValidationError("Choose at least two children.")
-        return members
+        if not self.instance.pk and not members:
+            raise forms.ValidationError("Choose at least one child.")
+        return _lock_group_children(members, self.family)
+
+    def _save_m2m(self):
+        # Replace only this household's approvals; other households control theirs.
+        selected = set(self.cleaned_data["members"].values_list("pk", flat=True))
+        current = set(
+            self.instance.members.filter(family=self.family).values_list("pk", flat=True)
+        )
+        # A replacement within the household is not a departure: add first so
+        # membership-removal handlers see the retained household approval.
+        self.instance.members.add(*(selected - current))
+        self.instance.members.remove(*(current - selected))
+
+
+class GroupInvitationForm(forms.Form):
+    family = forms.ModelChoiceField(
+        queryset=Family.objects.none(), required=False, label="Listed family"
+    )
+    code = forms.CharField(
+        max_length=32, required=False, label="Or enter a family invite code"
+    )
+
+    def __init__(self, *args, family, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.family = family
+        self.fields["family"].queryset = Family.objects.filter(
+            directory_listed=True
+        ).exclude(pk=family.pk)
+
+    def clean(self):
+        data = super().clean()
+        target, code = data.get("family"), data.get("code")
+        if bool(target) == bool(code):
+            raise forms.ValidationError("Choose a listed family or enter a family code.")
+        if code:
+            target = Family.objects.filter(invite_code=code).exclude(pk=self.family.pk).first()
+            if target is None:
+                raise forms.ValidationError("This code is not available. Ask the parent for their current family code.")
+        # Directory visibility and private codes can be revoked during initial
+        # field validation. Hold a lock through invitation creation and recheck.
+        target = Family.objects.select_for_update(no_key=True).filter(pk=target.pk).first()
+        if target is None or (
+            target.invite_code != code if code else not target.directory_listed
+        ):
+            raise forms.ValidationError(
+                "This invitation option is no longer available. Ask the parent for their current family code."
+            )
+        data["target_family"] = target
+        return data
+
+
+class GroupAcceptForm(forms.Form):
+    members = forms.ModelMultipleChoiceField(
+        queryset=Child.objects.none(), widget=forms.CheckboxSelectMultiple,
+        label="Your children to join the group",
+    )
+
+    def __init__(self, *args, family, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.family = family
+        self.fields["members"].queryset = Child.objects.filter(family=family)
+
+    def clean_members(self):
+        return _lock_group_children(self.cleaned_data["members"], self.family)
 
 
 class FamilySettingsForm(forms.ModelForm):

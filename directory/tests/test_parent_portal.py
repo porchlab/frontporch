@@ -132,7 +132,7 @@ class ParentPortalTests(TestCase):
                 "label": "School night bedtime",
                 "day_group": ChildBlackoutPeriod.WEEKDAYS,
                 "start_time": "20:30",
-                "end_time": "23:00",
+                "end_time": "07:30",
                 "is_active": "on",
                 "notes": "",
             },
@@ -142,6 +142,7 @@ class ParentPortalTests(TestCase):
         blackout = ChildBlackoutPeriod.objects.get(child=self.child)
         self.assertEqual(blackout.approved_by, self.parent)
         self.assertEqual(blackout.start_time, time(20, 30))
+        self.assertEqual(blackout.end_time, time(7, 30))
 
         self.client.post(reverse("directory:blackout_deactivate", args=[blackout.id]))
         blackout.refresh_from_db()
@@ -294,7 +295,7 @@ class ParentPortalTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("directory:dashboard"))
+        self.assertRedirects(response, reverse("directory:connections"))
         group = ConferenceGroup.objects.get(name="Siblings")
         self.assertEqual(group.approved_by, self.parent)
         self.assertEqual(set(group.members.values_list("id", flat=True)), {self.child.id, sibling.id})
@@ -329,7 +330,7 @@ class ParentPortalTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("directory:dashboard"))
+        self.assertRedirects(response, reverse("directory:connections"))
         group.refresh_from_db()
         self.assertTrue(group.calling_enabled)
         self.assertEqual(group.dial_extension, "4444")

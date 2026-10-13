@@ -42,24 +42,25 @@
             <a class="button secondary"
                href="{% url 'directory:conference_group_create' %}">Add a group</a>
         </div>
-        <p class="form-note">Groups need explicit membership approval. Your installer enables a group’s dial extension.</p>
+        <p class="form-note">Each family chooses which of its children join. Members can call everyone in the group and invite more families. Calling needs at least two children and installer activation.</p>
         <div class="connection-grid">
             {% for group in conference_groups %}
                 <article class="panel">
                     <h3>{{ group.name }}</h3>
                     <p class="small-empty">
-                        {% for member in group.members.all %}{{ member.name }}{% if not forloop.last %}, {% endif %}
+                        {% for member in group.members.all %}{{ member.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    </p>
+                    <p class="small-empty">
+                        {% if group.members.count < 2 %}Waiting for another child to join{% elif group.is_active and group.calling_enabled %}Extension {{ group.dial_extension }}{% else %}Calling not enabled{% endif %}
+                    </p>
+                    <div class="inline-actions">
+                        <a class="text-button blue-text" href="{% url 'directory:conference_group_update' group.id %}">Manage your children</a>
+                        {% if group.is_active %}<a class="text-button blue-text" href="{% url 'directory:group_invite' group.id %}">Invite a family</a>{% endif %}
+                    </div>
+                </article>
+            {% empty %}
+                <p class="small-empty">No group calls set up yet.</p>
             {% endfor %}
-        </p>
-        <p class="small-empty">
-            {% if group.is_active and group.calling_enabled %}Extension {{ group.dial_extension }}{% else %}Calling not enabled{% endif %}
-        </p>
-        <a class="text-button blue-text"
-           href="{% url 'directory:conference_group_update' group.id %}">Manage group</a>
-    </article>
-{% empty %}
-    <p class="small-empty">No group calls set up yet.</p>
-{% endfor %}
-</div>
-</section>
+        </div>
+    </section>
 {% endblock %}

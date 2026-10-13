@@ -1,0 +1,1071 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier, Event
+from unittest.mock import patch
+
+from django.contrib.admin.models import LogEntry
+from django.contrib.auth.models import User
+from django.db import OperationalError, close_old_connections, connections, transaction
+from django.test import Client, TestCase, TransactionTestCase
+from django.urls import reverse
+
+from directory import models as m
+from directory.forms import _lock_group_children, GroupInvitationForm
+from directory.admin import ConferenceGroupAdmin
+from directory.groups import invitation_available, _require_parent
+from directory.asterisk.builder import build_asterisk_configuration
+from directory.services import shortcut_destination_allowed
+
+
+class GroupMembershipTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.family = m.Family.objects.create(name="River", directory_listed=True)
+        cls.other = m.Family.objects.create(name="Maple", directory_listed=True)
+        cls.stranger = m.Family.objects.create(name="Cedar")
+        cls.parent = m.Parent.objects.create(
+            family=cls.family,
+            display_name="Taylor",
+            user=User.objects.create_user("taylor"),
+        )
+        cls.recipient = m.Parent.objects.create(
+            family=cls.other,
+            display_name="Morgan",
+            user=User.objects.create_user("morgan"),
+        )
+        cls.outsider = m.Parent.objects.create(
+            family=cls.stranger,
+            display_name="Sam",
+            user=User.objects.create_user("sam"),
+        )
+        cls.child = m.Child.objects.create(family=cls.family, name="Alex")
+        cls.sibling = m.Child.objects.create(family=cls.family, name="Noah")
+        cls.peer = m.Child.objects.create(family=cls.other, name="Emma")
+        cls.excluded = m.Child.objects.create(family=cls.other, name="Robin")
+        cls.group = m.ConferenceGroup.objects.create(
+            name="Friends", approved_by=cls.parent
+        )
+        cls.group.members.add(cls.child)
+
+    def setUp(self):
+        self.client.force_login(self.parent.user)
+
+    def url(self, name, *args):
+        return reverse("directory:" + name, args=args)
+
+    def invite(self):
+        response = self.client.post(
+            self.url("group_invite", self.group.pk), {"family": self.other.pk}
+        )
+        self.assertRedirects(response, self.url("invitations") + "?tab=sent")
+        return m.GroupInvitation.objects.get(group=self.group)
+
+    def test_single_child_can_start_group_then_invite_without_granting_calls(self):
+        response = self.client.post(
+            self.url("conference_group_create"),
+            {
+                "name": "New friends",
+                "members": [self.child.pk],
+                "is_active": "on",
+            },
+        )
+        self.assertRedirects(response, self.url("connections"))
+        new_group = m.ConferenceGroup.objects.get(name="New friends")
+        self.assertFalse(new_group.calling_enabled)
+        activity = m.FamilyActivity.objects.get(family=self.family)
+        self.assertEqual(activity.actor, self.parent.user)
+        self.assertEqual(activity.description, "New friends was created.")
+        self.assertFalse(m.FamilyActivity.objects.exclude(family=self.family).exists())
+        invitation = self.invite()
+        self.assertEqual(invitation.sent_by, self.parent)
+        self.assertEqual(list(self.group.members.all()), [self.child])
+        self.assertFalse(m.ChildConnection.objects.exists())
+        self.assertContains(
+            self.client.get(self.url("invitations") + "?tab=sent"), "Friends"
+        )
+        self.client.force_login(self.recipient.user)
+        self.assertContains(
+            self.client.get(self.url("invitations")), "Review group invitation"
+        )
+
+    def test_accept_selects_only_own_children_preserves_members_and_records_approval(
+        self,
+    ):
+        invitation = self.invite()
+        self.client.force_login(self.recipient.user)
+        review = self.client.get(self.url("group_review", invitation.pk))
+        self.assertContains(review, "Current families: River")
+        self.assertNotContains(review, "Alex")
+        response = self.client.post(
+            self.url("group_review", invitation.pk), {"members": [self.peer.pk]}
+        )
+        self.assertRedirects(response, self.url("connections"))
+        self.assertEqual(set(self.group.members.all()), {self.child, self.peer})
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "accepted")
+        self.assertEqual(invitation.responded_by, self.recipient)
+        self.assertEqual(list(invitation.accepted_children.all()), [self.peer])
+        self.assertFalse(m.ChildConnection.objects.exists())
+        self.assertTrue(
+            LogEntry.objects.filter(
+                user=self.recipient.user, object_id=str(self.group.pk)
+            ).exists()
+        )
+        self.assertTrue(
+            m.FamilyActivity.objects.filter(
+                family=self.family, description__contains="membership"
+            ).exists()
+        )
+        self.assertTrue(
+            m.FamilyActivity.objects.filter(
+                family=self.other, description="Joined Friends with 1 child."
+            ).exists()
+        )
+        # An already consumed invitation cannot add a later child or restore a departure.
+        self.group.members.remove(self.peer)
+        self.client.post(
+            self.url("group_review", invitation.pk), {"members": [self.excluded.pk]}
+        )
+        self.assertEqual(list(self.group.members.all()), [self.child])
+
+    def test_acceptance_with_maximum_length_names_keeps_activity_bounded(self):
+        self.group.name = "G" * 200
+        self.group.save()
+        for child, initial in ((self.peer, "E"), (self.excluded, "R")):
+            child.name = initial * 200
+            child.save()
+        invitation = self.invite()
+        self.client.force_login(self.recipient.user)
+
+        response = self.client.post(
+            self.url("group_review", invitation.pk),
+            {"members": [self.peer.pk, self.excluded.pk]},
+        )
+
+        self.assertRedirects(response, self.url("connections"))
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "accepted")
+        self.assertEqual(
+            set(self.group.members.all()), {self.child, self.peer, self.excluded}
+        )
+        activity = m.FamilyActivity.objects.filter(family=self.other).latest("pk")
+        self.assertEqual(
+            activity.description, f"Joined {self.group.name} with 2 children."
+        )
+        self.assertLessEqual(len(activity.description), 500)
+        audit = LogEntry.objects.get(
+            user=self.recipient.user, object_id=str(self.group.pk)
+        )
+        self.assertEqual(
+            audit.change_message,
+            f"Joined {self.group.name}; members: "
+            f"{self.peer.name} (Maple; child #{self.peer.pk}), "
+            f"{self.excluded.name} (Maple; child #{self.excluded.pk}), "
+            f"{self.child.name} (River; child #{self.child.pk})",
+        )
+
+    def test_audit_distinguishes_same_named_children_after_acceptance_and_edit(self):
+        self.peer.name = self.child.name
+        self.peer.save()
+        invitation = self.invite()
+        self.client.force_login(self.recipient.user)
+        self.client.post(
+            self.url("group_review", invitation.pk), {"members": [self.peer.pk]}
+        )
+        self.client.force_login(self.parent.user)
+        self.client.post(
+            self.url("conference_group_update", self.group.pk),
+            {"members": [self.child.pk]},
+        )
+        audits = LogEntry.objects.filter(object_id=str(self.group.pk))
+        self.assertEqual(audits.count(), 2)
+        for audit in audits:
+            self.assertIn(f"Alex (Maple; child #{self.peer.pk})", audit.change_message)
+            self.assertIn(f"Alex (River; child #{self.child.pk})", audit.change_message)
+
+    def test_shared_group_edit_preserves_other_family_and_shared_settings(self):
+        self.group.members.add(self.peer)
+        url = self.url("conference_group_update", self.group.pk)
+        response = self.client.get(url)
+        self.assertEqual(set(response.context["form"].fields), {"members"})
+        self.assertNotContains(response, "Emma")
+        self.assertRedirects(
+            self.client.post(
+                url,
+                {
+                    "members": [self.sibling.pk],
+                    "name": "Hijacked",
+                    "notes": "Changed",
+                    "calling_enabled": "on",
+                    "dial_extension": "9999",
+                    "approved_by": self.recipient.pk,
+                },
+            ),
+            self.url("connections"),
+        )
+        self.group.refresh_from_db()
+        self.assertEqual(set(self.group.members.all()), {self.sibling, self.peer})
+        self.assertEqual(self.group.name, "Friends")
+        self.assertEqual(self.group.notes, "")
+        self.assertTrue(self.group.is_active)
+        self.assertFalse(self.group.calling_enabled)
+        self.assertIsNone(self.group.dial_extension)
+        self.assertEqual(self.group.approved_by, self.parent)
+
+    def test_leave_removes_call_routes_and_shortcuts_and_prevents_reentry(self):
+        self.group.members.add(self.peer)
+        self.group.calling_enabled = True
+        self.group.save()
+        phone = m.Device.objects.create(
+            assigned_child=self.child,
+            friendly_name="Bedroom",
+            sip_extension="4101",
+            sip_username="test-alex",
+            sip_secret="fictional-test-only",
+        )
+        m.Device.objects.create(
+            assigned_child=self.peer,
+            friendly_name="Desk",
+            sip_extension="4102",
+            sip_username="test-emma",
+            sip_secret="fictional-test-only",
+        )
+        shortcut = m.DialShortcut.objects.create(
+            source_device=phone,
+            digits="2",
+            conference_group_target=self.group,
+            approved_by=self.parent,
+        )
+        self.assertTrue(shortcut_destination_allowed(shortcut))
+        self.assertEqual(len(build_asterisk_configuration().conference_routes), 1)
+        url = self.url("conference_group_update", self.group.pk)
+        self.assertRedirects(self.client.post(url, {}), self.url("connections"))
+        self.assertEqual(list(self.group.members.all()), [self.peer])
+        shortcut.refresh_from_db()
+        self.assertFalse(shortcut_destination_allowed(shortcut))
+        config = build_asterisk_configuration()
+        self.assertEqual(config.conference_routes, ())
+        self.assertEqual(config.shortcut_rules, ())
+        self.assertEqual(
+            self.client.post(url, {"members": [self.child.pk]}).status_code, 404
+        )
+        self.assertEqual(
+            self.client.get(self.url("group_invite", self.group.pk)).status_code, 404
+        )
+
+    def test_last_family_can_leave_empty_group(self):
+        self.client.post(
+            self.url("conference_group_update", self.group.pk),
+            {
+                "name": "Friends",
+                "is_active": "on",
+                "members": [],
+            },
+        )
+        self.assertFalse(self.group.members.exists())
+
+    def test_rejects_foreign_members_in_create_update_and_accept(self):
+        self.assertEqual(
+            self.client.post(
+                self.url("conference_group_create"),
+                {
+                    "name": "Invalid",
+                    "members": [self.child.pk, self.peer.pk],
+                    "is_active": "on",
+                },
+            ).status_code,
+            200,
+        )
+        self.assertFalse(m.ConferenceGroup.objects.filter(name="Invalid").exists())
+        response = self.client.post(
+            self.url("conference_group_update", self.group.pk),
+            {
+                "name": "Friends",
+                "members": [self.peer.pk],
+                "is_active": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        invitation = self.invite()
+        self.client.force_login(self.recipient.user)
+        for selection in ([self.child.pk], []):
+            response = self.client.post(
+                self.url("group_review", invitation.pk), {"members": selection}
+            )
+            self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(self.group.members.all()), [self.child])
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "pending")
+
+    def test_unrelated_households_cannot_read_or_mutate_group_or_invitation(self):
+        invitation = self.invite()
+        self.client.force_login(self.outsider.user)
+        for name, args in [
+            ("conference_group_update", [self.group.pk]),
+            ("group_invite", [self.group.pk]),
+            ("group_review", [invitation.pk]),
+            ("group_invitation_action", [invitation.pk, "cancel"]),
+            ("group_invitation_action", [invitation.pk, "decline"]),
+        ]:
+            with self.subTest(name=name, args=args):
+                self.assertEqual(
+                    self.client.post(self.url(name, *args), {}).status_code, 404
+                )
+        self.assertNotContains(self.client.get(self.url("connections")), "Friends")
+        self.assertNotContains(self.client.get(self.url("invitations")), "Friends")
+
+    def test_private_family_requires_current_code_and_duplicates_are_rejected(self):
+        url = self.url("group_invite", self.group.pk)
+        self.assertNotContains(self.client.get(url), "Cedar")
+        self.assertEqual(
+            self.client.post(url, {"family": self.stranger.pk}).status_code, 200
+        )
+        self.assertFalse(m.GroupInvitation.objects.exists())
+        self.assertRedirects(
+            self.client.post(url, {"code": self.stranger.invite_code}),
+            self.url("invitations") + "?tab=sent",
+        )
+        self.assertEqual(
+            self.client.post(url, {"code": self.stranger.invite_code}).status_code, 200
+        )
+        self.assertEqual(m.GroupInvitation.objects.count(), 1)
+        self.assertEqual(
+            self.client.post(url, {"code": self.family.invite_code}).status_code, 200
+        )
+
+    def test_decline_cancel_and_get_requests_do_not_grant_membership(self):
+        invitation = self.invite()
+        url = self.url("group_invitation_action", invitation.pk, "cancel")
+        self.assertEqual(self.client.get(url).status_code, 405)
+        self.client.force_login(self.recipient.user)
+        self.assertEqual(self.client.post(url).status_code, 404)
+        self.client.post(self.url("group_invitation_action", invitation.pk, "decline"))
+        self.client.post(
+            self.url("group_review", invitation.pk), {"members": [self.peer.pk]}
+        )
+        self.assertEqual(list(self.group.members.all()), [self.child])
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "declined")
+        self.client.force_login(self.parent.user)
+        self.client.post(
+            self.url("group_invite", self.group.pk), {"family": self.other.pk}
+        )
+        pending = m.GroupInvitation.objects.get(status="pending")
+        self.client.post(self.url("group_invitation_action", pending.pk, "cancel"))
+        self.client.force_login(self.recipient.user)
+        self.client.post(
+            self.url("group_review", pending.pk), {"members": [self.peer.pk]}
+        )
+        self.assertEqual(list(self.group.members.all()), [self.child])
+
+    def test_departure_cancels_pending_invitations(self):
+        invitation = self.invite()
+        self.client.post(
+            self.url("conference_group_update", self.group.pk),
+            {"name": "Friends", "is_active": "on"},
+        )
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "cancelled")
+        self.client.force_login(self.recipient.user)
+        self.client.post(
+            self.url("group_review", invitation.pk), {"members": [self.peer.pk]}
+        )
+        self.assertFalse(self.group.members.exists())
+
+    def test_membership_removal_cancels_invitations_even_after_rejoining(self):
+        removals = {
+            "forward_remove": lambda: self.group.members.remove(self.child),
+            "forward_clear": lambda: self.group.members.clear(),
+            "forward_set": lambda: self.group.members.set([]),
+            "reverse_remove": lambda: self.child.conference_groups.remove(self.group),
+            "reverse_clear": lambda: self.child.conference_groups.clear(),
+        }
+        for name, remove in removals.items():
+            with self.subTest(name=name):
+                self.group.members.set([self.child])
+                invitation = m.GroupInvitation.objects.create(
+                    group=self.group,
+                    source_family=self.family,
+                    target_family=self.other,
+                    sent_by=self.parent,
+                )
+                remove()
+                self.group.members.add(self.sibling)
+                invitation.refresh_from_db()
+                self.assertEqual(invitation.status, "cancelled")
+                self.client.force_login(self.recipient.user)
+                self.client.post(
+                    self.url("group_review", invitation.pk), {"members": [self.peer.pk]}
+                )
+                self.assertFalse(self.group.members.filter(pk=self.peer.pk).exists())
+
+    def test_child_deletion_permanently_cancels_outgoing_group_invitations(self):
+        invitation = self.invite()
+        self.child.delete()
+        self.group.members.add(self.sibling)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "cancelled")
+        self.client.force_login(self.recipient.user)
+        self.client.post(
+            self.url("group_review", invitation.pk), {"members": [self.peer.pk]}
+        )
+        self.assertFalse(self.group.members.filter(pk=self.peer.pk).exists())
+
+    def test_staff_join_supersedes_invitation_and_departure_requires_new_invite(self):
+        invitation = self.invite()
+        self.group.members.add(self.peer)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "cancelled")
+        self.group.members.remove(self.peer)
+        self.client.force_login(self.recipient.user)
+        response = self.client.post(
+            self.url("group_review", invitation.pk), {"members": [self.peer.pk]}
+        )
+        self.assertRedirects(response, self.url("invitations"))
+        self.assertFalse(self.group.members.filter(pk=self.peer.pk).exists())
+        self.client.force_login(self.parent.user)
+        self.client.post(
+            self.url("group_invite", self.group.pk), {"family": self.other.pk}
+        )
+        fresh = m.GroupInvitation.objects.get(group=self.group, status="pending")
+        self.client.force_login(self.recipient.user)
+        self.client.post(
+            self.url("group_review", fresh.pk), {"members": [self.peer.pk]}
+        )
+        self.assertTrue(self.group.members.filter(pk=self.peer.pk).exists())
+
+    def test_changing_child_household_cancels_former_family_invitations(self):
+        invitation = self.invite()
+        self.child.family = self.stranger
+        self.child.save()
+        self.group.members.add(self.sibling)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "cancelled")
+
+    def test_child_transfer_revokes_memberships_and_new_household_group_access(self):
+        self.group.members.add(self.peer, self.excluded)
+        self.group.calling_enabled = True
+        self.group.save()
+        for index, child in enumerate((self.child, self.peer, self.excluded)):
+            m.Device.objects.create(
+                assigned_child=child,
+                friendly_name=f"Test phone {index}",
+                sip_extension=str(4501 + index),
+                sip_username=f"test-transfer-{index}",
+                sip_secret="fictional-transfer-test-only",
+            )
+        self.assertIn(
+            self.child.pk,
+            {
+                member.child_id
+                for route in build_asterisk_configuration().conference_routes
+                for member in route.members
+            },
+        )
+
+        self.child.family = self.stranger
+        self.child.save()
+
+        self.assertEqual(set(self.group.members.all()), {self.peer, self.excluded})
+        self.client.force_login(self.outsider.user)
+        self.assertNotContains(self.client.get(self.url("connections")), "Friends")
+        for name in ("conference_group_update", "group_invite"):
+            self.assertEqual(
+                self.client.get(self.url(name, self.group.pk)).status_code, 404
+            )
+        self.assertEqual(
+            {
+                member.child_id
+                for route in build_asterisk_configuration().conference_routes
+                for member in route.members
+            },
+            {self.peer.pk, self.excluded.pk},
+        )
+
+    def test_unsaved_household_change_does_not_remove_group_membership(self):
+        invitation = self.invite()
+        self.child.family = self.stranger
+        self.child.notes = "Updated notes only"
+        self.child.save(update_fields=["notes"])
+        self.child.refresh_from_db()
+        invitation.refresh_from_db()
+        self.assertEqual(self.child.family, self.family)
+        self.assertEqual(list(self.group.members.all()), [self.child])
+        self.assertEqual(invitation.status, "pending")
+
+    def test_replacing_own_child_preserves_pending_invitation(self):
+        invitation = self.invite()
+        self.client.post(
+            self.url("conference_group_update", self.group.pk),
+            {
+                "name": "Friends",
+                "is_active": "on",
+                "members": [self.sibling.pk],
+            },
+        )
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "pending")
+        self.assertEqual(list(self.group.members.all()), [self.sibling])
+
+    def test_admin_sibling_replacement_preserves_invitation_but_departure_cancels(self):
+        invitation = self.invite()
+        for members, expected in (
+            ([self.sibling], "pending"),
+            ([self.peer], "cancelled"),
+        ):
+            form = ConferenceGroupAdmin.ConferenceGroupAdminForm(
+                data={
+                    "name": self.group.name,
+                    "members": [child.pk for child in members],
+                    "is_active": True,
+                    "ring_timeout_seconds": 20,
+                },
+                instance=self.group,
+            )
+            self.assertTrue(form.is_valid(), form.errors)
+            form.save()
+            invitation.refresh_from_db()
+            self.assertEqual(invitation.status, expected)
+            self.assertEqual(set(self.group.members.all()), set(members))
+
+    def test_removing_one_child_preserves_invitations_while_family_remains(self):
+        invitation = self.invite()
+        self.group.members.add(self.sibling)
+        self.child.delete()
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "pending")
+
+    def test_revoked_sender_and_paused_group_cannot_authorize_join(self):
+        invitation = self.invite()
+        self.client.force_login(self.recipient.user)
+        for kind in ("guardian", "account", "group", "membership"):
+            with self.subTest(kind=kind):
+                m.Parent.objects.filter(pk=self.parent.pk).update(
+                    is_guardian=kind != "guardian"
+                )
+                User.objects.filter(pk=self.parent.user_id).update(
+                    is_active=kind != "account"
+                )
+                m.ConferenceGroup.objects.filter(pk=self.group.pk).update(
+                    is_active=kind != "group"
+                )
+                if kind == "membership":
+                    self.group.members.clear()
+                response = self.client.post(
+                    self.url("group_review", invitation.pk), {"members": [self.peer.pk]}
+                )
+                self.assertRedirects(response, self.url("invitations"))
+                self.assertFalse(self.group.members.filter(pk=self.peer.pk).exists())
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "cancelled")
+
+    def test_acceptance_rechecks_recipient_after_initial_authentication(self):
+        invitation = self.invite()
+        for kind in ("guardian", "family", "account"):
+            with self.subTest(kind=kind):
+                m.Parent.objects.filter(pk=self.recipient.pk).update(
+                    family=self.other, is_guardian=True
+                )
+                User.objects.filter(pk=self.recipient.user_id).update(is_active=True)
+                self.client.force_login(self.recipient.user)
+
+                def revoke_after_authentication(request):
+                    parent = _require_parent(request)
+                    if kind == "account":
+                        User.objects.filter(pk=parent.user_id).update(is_active=False)
+                    elif kind == "family":
+                        m.Parent.objects.filter(pk=parent.pk).update(
+                            family=self.stranger
+                        )
+                    else:
+                        m.Parent.objects.filter(pk=parent.pk).update(is_guardian=False)
+                    return parent
+
+                with patch(
+                    "directory.groups._require_parent",
+                    side_effect=revoke_after_authentication,
+                ):
+                    response = self.client.post(
+                        self.url("group_review", invitation.pk),
+                        {"members": [self.peer.pk]},
+                    )
+                self.assertEqual(response.status_code, 403)
+                self.assertFalse(self.group.members.filter(pk=self.peer.pk).exists())
+                invitation.refresh_from_db()
+                self.assertEqual(invitation.status, "pending")
+
+    def test_group_mutations_recheck_actor_after_initial_authentication(self):
+        invitation = self.invite()
+        cases = [
+            ("conference_group_create", (), "views", self.parent),
+            ("conference_group_update", (self.group.pk,), "views", self.parent),
+            ("group_invite", (self.group.pk,), "groups", self.parent),
+            (
+                "group_invitation_action",
+                (invitation.pk, "cancel"),
+                "groups",
+                self.parent,
+            ),
+            (
+                "group_invitation_action",
+                (invitation.pk, "decline"),
+                "groups",
+                self.recipient,
+            ),
+        ]
+        for name, args, module, actor in cases:
+            for kind in ("guardian", "family", "account"):
+                with self.subTest(name=name, action=args, kind=kind):
+                    m.Parent.objects.filter(pk=actor.pk).update(
+                        family=actor.family, is_guardian=True
+                    )
+                    User.objects.filter(pk=actor.user_id).update(is_active=True)
+                    self.client.force_login(actor.user)
+
+                    def revoke(request):
+                        parent = _require_parent(request)
+                        if kind == "account":
+                            User.objects.filter(pk=parent.user_id).update(
+                                is_active=False
+                            )
+                        elif kind == "family":
+                            m.Parent.objects.filter(pk=parent.pk).update(
+                                family=self.stranger
+                            )
+                        else:
+                            m.Parent.objects.filter(pk=parent.pk).update(
+                                is_guardian=False
+                            )
+                        return parent
+
+                    with patch(
+                        f"directory.{module}._require_parent", side_effect=revoke
+                    ):
+                        response = self.client.post(
+                            self.url(name, *args),
+                            {
+                                "name": "Changed",
+                                "members": [self.sibling.pk],
+                                "is_active": True,
+                                "family": self.other.pk,
+                            },
+                        )
+                    self.assertEqual(response.status_code, 403)
+                    self.assertEqual(list(self.group.members.all()), [self.child])
+                    self.assertEqual(m.ConferenceGroup.objects.count(), 1)
+                    invitation.refresh_from_db()
+                    self.assertEqual(invitation.status, "pending")
+
+    def test_guardian_login_and_csrf_required(self):
+        url = self.url("group_invite", self.group.pk)
+        self.client.logout()
+        self.assertEqual(self.client.get(url).status_code, 302)
+        self.client.force_login(self.parent.user)
+        m.Parent.objects.filter(pk=self.parent.pk).update(is_guardian=False)
+        self.assertEqual(
+            self.client.post(url, {"family": self.other.pk}).status_code, 403
+        )
+        m.Parent.objects.filter(pk=self.parent.pk).update(is_guardian=True)
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.parent.user)
+        self.assertEqual(client.post(url, {"family": self.other.pk}).status_code, 403)
+        self.assertFalse(m.GroupInvitation.objects.exists())
+
+    def test_group_forms_recheck_child_ownership_after_initial_selection(self):
+        invitation = self.invite()
+        for name, args, actor, child in (
+            ("conference_group_create", (), self.parent, self.sibling),
+            ("conference_group_update", (self.group.pk,), self.parent, self.sibling),
+            ("group_review", (invitation.pk,), self.recipient, self.peer),
+        ):
+            with self.subTest(action=name):
+                child.family = actor.family
+                child.save()
+                self.client.force_login(actor.user)
+
+                def transfer_after_selection(members, family):
+                    # The field has already validated and cached its selection.
+                    child.family = self.stranger
+                    child.save()
+                    return _lock_group_children(members, family)
+
+                with patch(
+                    "directory.forms._lock_group_children",
+                    side_effect=transfer_after_selection,
+                ):
+                    response = self.client.post(
+                        self.url(name, *args),
+                        {
+                            "name": "Friends",
+                            "members": [child.pk],
+                            "is_active": True,
+                        },
+                    )
+                self.assertContains(
+                    response, "A selected child no longer belongs to your family."
+                )
+                self.assertEqual(list(self.group.members.all()), [self.child])
+                self.assertEqual(m.ConferenceGroup.objects.count(), 1)
+                invitation.refresh_from_db()
+                self.assertEqual(invitation.status, "pending")
+
+    def test_invitation_rechecks_discoverability_after_target_resolution(self):
+        lock_targets = m.Family.objects.select_for_update
+        for kind in ("directory", "code"):
+            with self.subTest(kind=kind):
+                m.Family.objects.filter(pk=self.other.pk).update(
+                    directory_listed=True, invite_code="original-code"
+                )
+
+                def revoke_discovery(**kwargs):
+                    changes = (
+                        {"directory_listed": False}
+                        if kind == "directory"
+                        else {"invite_code": "rotated-code"}
+                    )
+                    m.Family.objects.filter(pk=self.other.pk).update(**changes)
+                    return lock_targets(**kwargs)
+
+                data = (
+                    {"family": self.other.pk}
+                    if kind == "directory"
+                    else {"code": "original-code"}
+                )
+                with patch.object(
+                    m.Family.objects, "select_for_update", side_effect=revoke_discovery
+                ):
+                    response = self.client.post(
+                        self.url("group_invite", self.group.pk), data
+                    )
+                self.assertContains(
+                    response, "This invitation option is no longer available."
+                )
+                self.assertFalse(m.GroupInvitation.objects.exists())
+
+
+class ConcurrentGroupMembershipTests(TransactionTestCase):
+    def setUp(self):
+        self.parents = []
+        self.children = []
+        for index in range(2):
+            family = m.Family.objects.create(name=f"Fictional family {index}")
+            self.parents.append(
+                m.Parent.objects.create(
+                    family=family,
+                    display_name=f"Guardian {index}",
+                    user=User.objects.create_user(f"guardian-{index}"),
+                )
+            )
+            self.children.append(
+                [
+                    m.Child.objects.create(family=family, name=f"Child {index}-{n}")
+                    for n in range(2)
+                ]
+            )
+        self.group = m.ConferenceGroup.objects.create(name="Friends")
+        self.group.members.add(*(children[0] for children in self.children))
+
+    def concurrent_posts(self, requests):
+        barrier = Barrier(2)
+
+        def post(item):
+            parent, url, data = item
+            close_old_connections()
+            try:
+                client = Client()
+                client.force_login(parent.user)
+                barrier.wait(timeout=10)
+                return client.post(url, data).status_code
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            return list(pool.map(post, requests))
+
+    def test_two_families_membership_edits_do_not_overwrite_each_other(self):
+        url = reverse("directory:conference_group_update", args=[self.group.pk])
+        responses = self.concurrent_posts(
+            [
+                (parent, url, {"members": [children[1].pk]})
+                for parent, children in zip(self.parents, self.children)
+            ]
+        )
+        self.assertEqual(responses, [302, 302])
+        self.assertEqual(set(self.group.members.all()), {c[1] for c in self.children})
+
+    def test_invitation_locks_discoverability_through_creation(self):
+        target = self.parents[1].family
+        target.directory_listed = True
+        target.save()
+        self.group.members.remove(self.children[1][0])
+        validate = GroupInvitationForm.clean
+        for data in ({"family": target.pk}, {"code": target.invite_code}):
+            ready, release = Event(), Event()
+
+            def hold_validation(form):
+                result = validate(form)
+                ready.set()
+                if not release.wait(timeout=10):
+                    raise TimeoutError("Test did not release target validation.")
+                return result
+
+            def invite():
+                close_old_connections()
+                try:
+                    client = Client()
+                    client.force_login(self.parents[0].user)
+                    return client.post(
+                        reverse("directory:group_invite", args=[self.group.pk]), data
+                    ).status_code
+                finally:
+                    connections.close_all()
+
+            with (
+                self.subTest(selection=data),
+                patch.object(GroupInvitationForm, "clean", hold_validation),
+            ):
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(invite)
+                    try:
+                        self.assertTrue(ready.wait(timeout=10))
+                        with self.assertRaises(OperationalError):
+                            with transaction.atomic():
+                                m.Family.objects.select_for_update(
+                                    nowait=True, no_key=True
+                                ).get(pk=target.pk)
+                    finally:
+                        release.set()
+                        self.assertEqual(future.result(timeout=10), 302)
+            self.assertEqual(self.group.invitations.filter(status="pending").count(), 1)
+            self.group.invitations.update(status="cancelled")
+
+    def test_selected_children_are_locked_before_group_membership_writes(self):
+        self.group.members.remove(self.children[1][0])
+        invitation = m.GroupInvitation.objects.create(
+            group=self.group,
+            source_family=self.parents[0].family,
+            target_family=self.parents[1].family,
+            sent_by=self.parents[0],
+        )
+        for name, args, actor, child in (
+            ("conference_group_create", [], self.parents[0], self.children[0][1]),
+            (
+                "conference_group_update",
+                [self.group.pk],
+                self.parents[0],
+                self.children[0][1],
+            ),
+            ("group_review", [invitation.pk], self.parents[1], self.children[1][1]),
+        ):
+            ready, release = Event(), Event()
+
+            def hold_selection(members, family):
+                result = _lock_group_children(members, family)
+                ready.set()
+                if not release.wait(timeout=10):
+                    raise TimeoutError("Test did not release the selected children.")
+                return result
+
+            def submit():
+                close_old_connections()
+                try:
+                    client = Client()
+                    client.force_login(actor.user)
+                    return client.post(
+                        reverse("directory:" + name, args=args),
+                        {
+                            "name": "Friends",
+                            "members": [child.pk],
+                            "is_active": True,
+                        },
+                    ).status_code
+                finally:
+                    connections.close_all()
+
+            with (
+                self.subTest(action=name),
+                patch(
+                    "directory.forms._lock_group_children", side_effect=hold_selection
+                ),
+            ):
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    future = pool.submit(submit)
+                    try:
+                        self.assertTrue(ready.wait(timeout=10))
+                        with self.assertRaises(OperationalError):
+                            with transaction.atomic():
+                                # A household UPDATE takes NO KEY UPDATE; an
+                                # insertion's FK key-share lock is insufficient.
+                                m.Child.objects.select_for_update(
+                                    nowait=True, no_key=True
+                                ).get(pk=child.pk)
+                    finally:
+                        release.set()
+                        self.assertEqual(future.result(timeout=10), 302)
+
+    def test_staff_mutations_hold_the_same_group_lock_as_acceptance(self):
+        def mutate(action):
+            child = m.Child.objects.get(pk=self.children[0][0].pk)
+            if action == "transfer":
+                child.family = self.parents[1].family
+                child.save()
+            elif action == "delete":
+                child.delete()
+            elif action == "forward_remove":
+                self.group.members.remove(child)
+            else:
+                child.conference_groups.clear()
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            for action in ("transfer", "delete", "forward_remove", "reverse_clear"):
+                ready, release = Event(), Event()
+
+                def hold_mutation():
+                    close_old_connections()
+                    try:
+                        with transaction.atomic():
+                            mutate(action)
+                            ready.set()
+                            if not release.wait(timeout=10):
+                                raise TimeoutError(
+                                    "Test did not release the membership change."
+                                )
+                            transaction.set_rollback(True)
+                    finally:
+                        connections.close_all()
+
+                with self.subTest(action=action):
+                    future = pool.submit(hold_mutation)
+                    try:
+                        self.assertTrue(ready.wait(timeout=10))
+                        # A second transaction must not be able to acquire the
+                        # group lock while the staff mutation is uncommitted.
+                        with self.assertRaises(OperationalError):
+                            with transaction.atomic():
+                                m.ConferenceGroup.objects.select_for_update(
+                                    nowait=True
+                                ).get(pk=self.group.pk)
+                    finally:
+                        release.set()
+                        future.result(timeout=10)
+
+    def test_portal_saves_wait_for_extension_lock_before_locking_group_or_actor(self):
+        self.group.members.remove(self.children[1][0])
+        lock_extensions = m.lock_extension_namespace
+        for name, args in (
+            ("conference_group_create", []),
+            ("conference_group_update", [self.group.pk]),
+        ):
+            ready = Event()
+
+            def wait_for_extensions():
+                ready.set()
+                lock_extensions()
+
+            def edit():
+                close_old_connections()
+                try:
+                    client = Client()
+                    client.force_login(self.parents[0].user)
+                    return client.post(
+                        reverse("directory:" + name, args=args),
+                        {
+                            "name": "Friends",
+                            "members": [self.children[0][0].pk],
+                            "is_active": True,
+                        },
+                    ).status_code
+                finally:
+                    connections.close_all()
+
+            with self.subTest(action=name), ThreadPoolExecutor(max_workers=1) as pool:
+                with patch(
+                    "directory.models.lock_extension_namespace",
+                    side_effect=wait_for_extensions,
+                ):
+                    with transaction.atomic():
+                        # Simulate a staff save holding the namespace lock before
+                        # taking its row locks. The portal must not invert this.
+                        lock_extensions()
+                        future = pool.submit(edit)
+                        self.assertTrue(ready.wait(timeout=10))
+                        m.ConferenceGroup.objects.select_for_update(nowait=True).get(
+                            pk=self.group.pk
+                        )
+                        m.Parent.objects.select_for_update(nowait=True).get(
+                            pk=self.parents[0].pk
+                        )
+                    self.assertEqual(future.result(timeout=10), 302)
+
+    def test_acceptance_locks_both_guardians_and_accounts_until_commit(self):
+        self.group.members.remove(self.children[1][0])
+        invitation = m.GroupInvitation.objects.create(
+            group=self.group,
+            source_family=self.parents[0].family,
+            target_family=self.parents[1].family,
+            sent_by=self.parents[0],
+        )
+        ready, release = Event(), Event()
+
+        def check_and_hold(invitation):
+            result = invitation_available(invitation)
+            ready.set()
+            if not release.wait(timeout=10):
+                raise TimeoutError("Test did not release acceptance.")
+            return result
+
+        def accept():
+            close_old_connections()
+            try:
+                client = Client()
+                client.force_login(self.parents[1].user)
+                return client.post(
+                    reverse("directory:group_review", args=[invitation.pk]),
+                    {"members": [self.children[1][0].pk]},
+                ).status_code
+            finally:
+                connections.close_all()
+
+        with patch("directory.groups.invitation_available", side_effect=check_and_hold):
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(accept)
+                try:
+                    self.assertTrue(ready.wait(timeout=10))
+                    for model, pk in (
+                        (m.Parent, self.parents[0].pk),
+                        (User, self.parents[0].user_id),
+                        (m.Parent, self.parents[1].pk),
+                        (User, self.parents[1].user_id),
+                    ):
+                        with self.subTest(model=model.__name__):
+                            with self.assertRaises(OperationalError):
+                                with transaction.atomic():
+                                    model.objects.select_for_update(nowait=True).get(
+                                        pk=pk
+                                    )
+                finally:
+                    release.set()
+                    self.assertEqual(future.result(timeout=10), 302)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "accepted")
+
+    def test_simultaneous_acceptance_consumes_invitation_once(self):
+        self.group.members.remove(self.children[1][0])
+        invitation = m.GroupInvitation.objects.create(
+            group=self.group,
+            source_family=self.parents[0].family,
+            target_family=self.parents[1].family,
+            sent_by=self.parents[0],
+        )
+        url = reverse("directory:group_review", args=[invitation.pk])
+        responses = self.concurrent_posts(
+            [
+                (self.parents[1], url, {"members": [child.pk]})
+                for child in self.children[1]
+            ]
+        )
+        self.assertEqual(responses, [302, 302])
+        self.assertEqual(self.group.members.count(), 2)
+        self.assertEqual(invitation.accepted_children.count(), 1)
+        self.assertEqual(
+            LogEntry.objects.filter(object_id=str(self.group.pk)).count(), 1
+        )
