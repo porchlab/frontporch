@@ -66,6 +66,12 @@
                     {% csrf_token %}
                     <button class="text-button">Pause</button>
                 </form>
+            {% else %}
+                <form method="post"
+                      action="{% url 'directory:blackout_activate' period.id %}">
+                    {% csrf_token %}
+                    <button class="text-button">Unpause</button>
+                </form>
             {% endif %}
         </div>
     </div>
