@@ -42,7 +42,7 @@ class GoogleSignupTests(test_accounts.AccountFixture):
         )
         self.invite_url = reverse("directory:register_invited", args=[self.token])
         self.signup_url = reverse("socialaccount_signup")
-        self.data = {"family_name": "Willow", "display_name": "Morgan"}
+        self.data = {"family_name": "Willow", "display_name": "Morgan", "timezone": "America/Los_Angeles"}
 
     def begin_signup(self):
         request, response = self.social_login(
@@ -155,6 +155,7 @@ class GoogleSignupTests(test_accounts.AccountFixture):
         self.assertTrue(parent.is_primary)
         self.assertEqual(parent.display_name, "Morgan")
         self.assertEqual(parent.family.name, "Willow")
+        self.assertEqual(parent.family.timezone, "America/Los_Angeles")
         self.assertFalse(parent.family.directory_listed)
         self.assertFalse(parent.directory_visible)
         self.invitation.refresh_from_db()
@@ -179,6 +180,15 @@ class GoogleSignupTests(test_accounts.AccountFixture):
         parent = Parent.objects.get(user__email=self.invitation.email)
         self.assertTrue(parent.family.directory_listed)
         self.assertTrue(parent.directory_visible)
+
+    def test_invalid_timezone_cannot_create_a_family(self):
+        self.begin_signup()
+        response = self.client.post(self.signup_url, {**self.data, "timezone": "UTC?bad,s,1"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("timezone", response.context["form"].errors)
+        self.assert_not_created()
+        self.invitation.refresh_from_db()
+        self.assertTrue(self.invitation.available)
 
     def test_invalid_family_details_preserve_pending_signup(self):
         self.begin_signup()

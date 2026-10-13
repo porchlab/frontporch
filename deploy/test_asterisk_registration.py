@@ -8,6 +8,7 @@ Never connects to production or loads real phone credentials.
 """
 
 import hashlib
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -147,6 +148,59 @@ password=test-only-password
         self.assertRegex(self.cli("pjsip show aor testphone"), r"Contact:\s+testphone/")
         self.cli("channel originate PJSIP/testphone application Hangup")
         self.wait_for_phone("INVITE received after registration")
+
+    def test_named_quiet_hour_zones_ignore_server_zone_and_follow_dst(self):
+        # Exercise actual GotoIfTime on synthetic Local channels; no phones ring.
+        # The test PBX runs in UTC. These instants straddle local bedtime,
+        # midnight, shifted day groups, and both DST transitions.
+        cases = [
+            ("2026-07-06T23:59:00", "America/New_York", "ALLOWED"),
+            ("2026-07-07T00:00:00", "America/New_York", "BLOCKED"),
+            ("2026-07-07T00:00:00", "America/Los_Angeles", "ALLOWED"),
+            ("2026-01-06T00:59:00", "America/New_York", "ALLOWED"),
+            ("2026-01-06T01:00:00", "America/New_York", "BLOCKED"),
+            ("2026-01-06T01:00:00", "America/Los_Angeles", "ALLOWED"),
+            ("2026-07-07T04:00:00", "America/New_York", "BLOCKED"),
+            ("2026-07-11T11:15:00", "America/New_York", "BLOCKED"),
+            ("2026-07-11T11:16:00", "America/New_York", "ALLOWED"),
+            ("2026-07-13T12:59:00", "America/New_York", "BLOCKED"),
+            ("2026-07-13T13:01:00", "America/New_York", "ALLOWED"),
+            ("2026-03-08T06:59:00", "America/New_York", "BLOCKED"),
+            ("2026-03-08T07:01:00", "America/New_York", "BLOCKED"),
+            ("2026-11-01T05:30:00", "America/New_York", "BLOCKED"),
+            ("2026-11-01T06:30:00", "America/New_York", "BLOCKED"),
+            ("2026-07-07T12:00:00", "Pacific/Auckland", "BLOCKED"),
+        ]
+        windows = (
+            ("20:00-23:59", "mon-fri"), ("00:00-07:15", "tue-sat"),
+            ("22:00-23:59", "sat-sun"), ("00:00-09:00", "sun-mon"),
+        )
+        lines = ["[quiet-hours-test]"]
+        for index, (instant, zone, expected) in enumerate(cases, start=100):
+            epoch = int(datetime.fromisoformat(instant).replace(tzinfo=timezone.utc).timestamp())
+            lines.append(f"exten => {index},1,Set(TESTTIME={epoch})")
+            for hours, days in windows:
+                lines.append(f" same => n,GotoIfTime({hours},{days},*,*,{zone}?blocked)")
+            lines.extend([
+                f" same => n,NoOp(QUIET-HOURS-{index}-ALLOWED)",
+                " same => n,Hangup()",
+                f" same => n(blocked),NoOp(QUIET-HOURS-{index}-BLOCKED)",
+                " same => n,Hangup()",
+            ])
+        (self.workspace / "etc/asterisk/extensions.conf").write_text("\n".join(lines) + "\n")
+        self.cli("dialplan reload")
+        for index in range(100, 100 + len(cases)):
+            self.cli(f"channel originate Local/{index}@quiet-hours-test application Wait 1")
+        for _ in range(60):
+            logs = self.compose("logs", "asterisk")
+            if all(f"QUIET-HOURS-{index}-" in logs for index in range(100, 100 + len(cases))):
+                break
+            time.sleep(0.25)
+        for index, (_, _, expected) in enumerate(cases, start=100):
+            with self.subTest(instant=cases[index - 100][0], zone=cases[index - 100][1]):
+                self.assertIn(f"QUIET-HOURS-{index}-{expected}", logs)
+                wrong = "ALLOWED" if expected == "BLOCKED" else "BLOCKED"
+                self.assertNotIn(f"QUIET-HOURS-{index}-{wrong}", logs)
 
     def test_migrate_existing_database_before_first_replacement(self):
         # Recreate the legacy layout before registering the synthetic phone.

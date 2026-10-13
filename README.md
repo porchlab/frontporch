@@ -81,6 +81,7 @@ FrontPorch should default to deny.
 The current model is built around these rules:
 
 - Parents and guardians control children, devices, contacts, exact child-to-child connections, approved external callers, blackout periods, and conference groups.
+- Quiet hours follow each family's selected time zone, including daylight saving changes. Choose it during signup or under family settings. Existing families default to `America/New_York`; changing zones preserves saved local times. Phone routing checks each child's zone explicitly, independent of the server's clock display.
 - Staff can attach an existing household landline to a child as a FrontPorch extension, while parents still control reachability through exact child-to-child connections.
 - Children should not discover other children or families through an open directory.
 - Children should not dial arbitrary public phone numbers.

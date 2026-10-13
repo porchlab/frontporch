@@ -6,6 +6,8 @@ import phonenumbers
 import random
 import secrets
 
+from .timezones import DEFAULT_FAMILY_TIMEZONE, validate_timezone
+
 
 def lock_extension_namespace():
     # Extensions span five model tables and may be shared only by the same owner.
@@ -28,6 +30,12 @@ class TimeStampedModel(models.Model):
 
 class Family(TimeStampedModel):
     name = models.CharField(max_length=200, unique=True)
+    timezone = models.CharField(
+        max_length=100,
+        default=DEFAULT_FAMILY_TIMEZONE,
+        validators=[validate_timezone],
+        help_text="Quiet hours follow this time zone, including daylight saving changes.",
+    )
     notes = models.TextField(blank=True)
     directory_listed = models.BooleanField(default=False)
     invite_code = models.CharField(
@@ -41,6 +49,10 @@ class Family(TimeStampedModel):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        validate_timezone(self.timezone)
+        super().save(*args, **kwargs)
 
 
 class Parent(TimeStampedModel):

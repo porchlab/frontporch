@@ -40,6 +40,7 @@ class FamilyInvitationTests(TestCase):
         self.signup_data = {
             "email": "new@example.com",
             "family_name": "Willow",
+            "timezone": "America/New_York",
             "display_name": "Morgan",
             "password1": "different-test-pass-123",
             "password2": "different-test-pass-123",
@@ -428,6 +429,7 @@ class FamilyInvitationConcurrencyTests(TransactionTestCase):
                 form = ParentRegistrationForm(
                     {
                         "family_name": family_name,
+                        "timezone": "America/New_York",
                         "display_name": "Morgan",
                         "password1": "different-test-pass-123",
                         "password2": "different-test-pass-123",

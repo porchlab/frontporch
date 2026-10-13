@@ -55,6 +55,15 @@ const PORTAL = {
         "max_length": 200
       },
       {
+        "name": "timezone",
+        "label": "Family time zone",
+        "required": true,
+        "type": "select",
+        "help": "Choose where your family’s phones are used. Quiet hours follow this time zone.",
+        "initial": "America/New_York",
+        "dynamic_choices": "timezones"
+      },
+      {
         "name": "display_name",
         "label": "Guardian name",
         "required": true,
@@ -239,6 +248,14 @@ const PORTAL = {
         "type": "text",
         "help": "",
         "max_length": 200
+      },
+      {
+        "name": "timezone",
+        "label": "Family time zone",
+        "required": true,
+        "type": "select",
+        "help": "Changing this keeps your saved quiet-hour times and applies them in the new time zone.",
+        "dynamic_choices": "timezones"
       },
       {
         "name": "directory_listed",

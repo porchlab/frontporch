@@ -1024,8 +1024,8 @@ class AsteriskConfigRendererTests(SimpleTestCase):
             secret="alex-secret",
             child_id=1,
             blackout_windows=(
-                BlackoutWindow(time_range="20:30-23:59", days="mon-fri"),
-                BlackoutWindow(time_range="22:00-23:59", days="sat-sun"),
+                BlackoutWindow(time_range="20:30-23:59", days="mon-fri", timezone="America/New_York"),
+                BlackoutWindow(time_range="22:00-23:59", days="sat-sun", timezone="America/New_York"),
             ),
         )
         mara_endpoint = SipEndpoint(
@@ -1090,23 +1090,23 @@ class AsteriskConfigRendererTests(SimpleTestCase):
         self.assertIn("exten => 201,1,Dial(PJSIP/mara,30)", content)
         self.assertIn("exten => 101,1,Dial(PJSIP/alex,30)", content)
         self.assertNotIn(
-            "exten => 201,1,GotoIfTime(20:30-23:59,mon-fri,*,*?frontporch-blackout,s,1)",
+            "exten => 201,1,GotoIfTime(20:30-23:59,mon-fri,*,*,America/New_York?frontporch-blackout,s,1)",
             content,
         )
         self.assertIn(
-            "exten => 102,1,GotoIfTime(20:30-23:59,mon-fri,*,*?frontporch-blackout,s,1)",
+            "exten => 102,1,GotoIfTime(20:30-23:59,mon-fri,*,*,America/New_York?frontporch-blackout,s,1)",
             content,
         )
         self.assertIn(
-            " same => n,GotoIfTime(22:00-23:59,sat-sun,*,*?frontporch-blackout,s,1)",
+            " same => n,GotoIfTime(22:00-23:59,sat-sun,*,*,America/New_York?frontporch-blackout,s,1)",
             content,
         )
         self.assertIn(
-            "exten => 101,1,GotoIfTime(20:30-23:59,mon-fri,*,*?frontporch-blackout,s,1)",
+            "exten => 101,1,GotoIfTime(20:30-23:59,mon-fri,*,*,America/New_York?frontporch-blackout,s,1)",
             content,
         )
         self.assertIn(
-            " same => n(approved-12025550199-1),GotoIfTime(20:30-23:59,mon-fri,*,*?frontporch-blackout,s,1)",
+            " same => n(approved-12025550199-1),GotoIfTime(20:30-23:59,mon-fri,*,*,America/New_York?frontporch-blackout,s,1)",
             content,
         )
         self.assertIn(

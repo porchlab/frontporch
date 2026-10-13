@@ -936,9 +936,58 @@ class AsteriskConfigurationBuilderTests(TestCase):
             ("00:00-07:30", "tue-sat"),
         ):
             self.assertIn(
-                f"GotoIfTime({time_range},{days},*,*?frontporch-blackout,s,1)",
+                f"GotoIfTime({time_range},{days},*,*,America/New_York?frontporch-blackout,s,1)",
                 content,
             )
+
+    @override_settings(TIME_ZONE="UTC")
+    def test_cross_family_quiet_hours_use_each_childs_zone_in_both_directions(self):
+        self.river.timezone = "America/New_York"
+        self.river.save()
+        self.maple.timezone = "America/Los_Angeles"
+        self.maple.save()
+        self.connect_children(self.alex, self.emma)
+        for child, parent in ((self.alex, self.river_parent), (self.emma, self.maple_parent)):
+            ChildBlackoutPeriod.objects.create(
+                child=child, approved_by=parent, label="Bedtime",
+                day_group="weekdays", start_time=time(20), end_time=time(7, 15),
+            )
+        number, _ = ExternalPhoneNumber.objects.get_or_create_normalized("+1 212 555 0100")
+        ChildLandline.objects.create(
+            child=self.emma, external_phone_number=number,
+            approved_by=self.maple_parent, dial_extension="2222",
+        )
+        configuration = build_asterisk_configuration()
+        for child_id, zone in ((self.alex.pk, self.river.timezone), (self.emma.pk, self.maple.timezone)):
+            endpoint = next(e for e in configuration.endpoints if e.child_id == child_id)
+            self.assertEqual(
+                [(w.time_range, w.days, w.timezone) for w in endpoint.blackout_windows],
+                [("20:00-23:59", "mon-fri", zone), ("00:00-07:15", "tue-sat", zone)],
+            )
+        self.assertEqual(
+            {window.timezone for endpoint in configuration.landline_endpoints for window in endpoint.blackout_windows},
+            {"America/Los_Angeles"},
+        )
+        content = AsteriskConfigRenderer().render_extensions(configuration)
+        for source in (self.alex_device, self.emma_device):
+            checks = content.split(f"[frontporch-{source.sip_username}]", 1)[1].split("\n[", 1)[0]
+            # The source and destination's quiet hours both constrain this call.
+            for zone in (self.river.timezone, self.maple.timezone):
+                self.assertIn(
+                    f"GotoIfTime(20:00-23:59,mon-fri,*,*,{zone}?frontporch-blackout,s,1)",
+                    checks,
+                )
+                self.assertIn(
+                    f"GotoIfTime(00:00-07:15,tue-sat,*,*,{zone}?frontporch-blackout,s,1)",
+                    checks,
+                )
+
+        # A saved timezone change updates both halves of the generated schedule.
+        self.river.timezone = "Pacific/Auckland"
+        self.river.save()
+        content = AsteriskConfigRenderer().render_extensions(build_asterisk_configuration())
+        self.assertIn("*,*,Pacific/Auckland?frontporch-blackout", content)
+        self.assertNotIn("*,*,America/New_York?frontporch-blackout", content)
 
     def test_child_connection_does_not_allow_parent_or_shared_phones(self):
         configuration = build_asterisk_configuration()

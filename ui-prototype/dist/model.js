@@ -2,7 +2,7 @@
 
 // Fictional, tab-local state. Django remains the authority for real permissions.
 const Demo = (() => {
-  const VERSION = 8;
+  const VERSION = 9;
   const STORAGE_KEY = "frontporch-design-v1";
   const TIME_ZONE = "America/New_York";
   const id = () => globalThis.crypto.randomUUID();
@@ -39,7 +39,7 @@ const Demo = (() => {
     casey.devices[0].shortcuts.push({id:"casey-alex", digits:"2", target:"device:river-phone-0", label:"Alex", active:true, targetName:"Alex’s phone"});
     casey.quietHours.push({id:"homework", label:"Homework", day_group:"weekdays", start_time:"16:00", end_time:"17:00", is_active:true, notes:""});
     return {
-      family:"Maple", setupDismissed:false, directoryListed:false, inviteCode:"MAPLE-9Q4T",
+      family:"Maple", timezone:TIME_ZONE, setupDismissed:false, directoryListed:false, inviteCode:"MAPLE-9Q4T",
       guardians:[primary], currentGuardianId:primary.id, guardianInvites:[],
       children:[casey, child("jordan", "Jordan", "blue")], network:network(),
       connections:[{id:"casey-alex-pair", childId:"casey", familyId:"river", peerId:"river-0"}],
@@ -55,6 +55,19 @@ const Demo = (() => {
   }
 
   function actor(data) { return data.guardians.find(g => g.id === data.currentGuardianId && g.active); }
+  function validateTimezone(zone) {
+    assert(/^[A-Za-z0-9_+-]+(?:\/[A-Za-z0-9_+-]+)*$/.test(zone) && !["localtime", "posixrules"].includes(zone), "Choose a valid named time zone.");
+    try { new Intl.DateTimeFormat("en", {timeZone:zone}); }
+    catch { throw new Error("Choose a valid named time zone."); }
+    return zone;
+  }
+  function timezoneChoices(current = TIME_ZONE) {
+    return [...new Set(["UTC", current, ...Intl.supportedValuesOf("timeZone")])].sort().map(zone => [zone, zone.replaceAll("_", " ")]);
+  }
+  function saveFamilyTimezone(data, zone) {
+    assert(actor(data), "A guardian must manage family settings.");
+    data.timezone = validateTimezone(zone);
+  }
   function primaryOnly(data) { assert(actor(data)?.primary, "The primary guardian manages family membership."); }
   function findChild(data, childId) { return data.children.find(c => c.id === childId); }
   function findDevice(data, deviceId) {
@@ -386,6 +399,7 @@ const Demo = (() => {
     return migrateParentCalls(data);
   }
   function migrateParentCalls(data) {
+    data.timezone ||= TIME_ZONE;
     for (const parent of data.guardians) {
       if (!parent.extension) parent.extension = nextExtension(data);
       const approvedMobile = parent.phone && data.children.some(c => c.devices.some(p => p.active && p.shortcuts.some(s => s.active && s.target === `parent:${parent.id}`)));
@@ -399,13 +413,13 @@ const Demo = (() => {
       const saved = JSON.parse(storage.getItem(STORAGE_KEY));
       if (saved?.version === VERSION && Array.isArray(saved.data?.network)
           && Array.isArray(saved.data?.children) && saved.data?.guardians?.some(g => g.primary)) return saved.data;
-      if (saved?.version === 7 && Array.isArray(saved.data?.network) && saved.data?.guardians?.some(g => g.primary)) return migrateParentCalls(saved.data);
+      if ([7,8].includes(saved?.version) && Array.isArray(saved.data?.network) && saved.data?.guardians?.some(g => g.primary)) return migrateParentCalls(saved.data);
       if ([1,2,3,4,5,6].includes(saved?.version) && Array.isArray(saved.data?.children)) return migrateLegacy(saved.data);
     } catch { /* Storage may be unavailable; a fresh in-memory demo still works. */ }
     return seed();
   }
   function save(storage, data) { storage.setItem(STORAGE_KEY, JSON.stringify({version:VERSION, data})); }
-  return {VERSION, STORAGE_KEY, TIME_ZONE, id, same, assert, seed, actor, primaryOnly, findChild, findDevice, family, nextExtension,
+  return {VERSION, STORAGE_KEY, TIME_ZONE, validateTimezone, timezoneChoices, saveFamilyTimezone, id, same, assert, seed, actor, primaryOnly, findChild, findDevice, family, nextExtension,
     reservePhone, saveChild, saveQuiet, listedFamilies, sendInvitation, acceptInvitation, destinations, phonebook, saveShortcut,
     normalizePhone, saveContact, inviteStatus, inviteGuardian, resendGuardian, joinGuardian, removeGuardian, saveProfile,
     saveGroup, sendGroupInvitation, acceptGroupInvitation, groupInvitationAction, migrateLegacy, load, save};

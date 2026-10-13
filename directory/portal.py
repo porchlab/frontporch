@@ -288,7 +288,11 @@ def family_settings(request):
             record_activity(
                 parent,
                 (
-                    "Updated family settings."
+                    (
+                        f"Updated family settings. Quiet hours use {form.instance.timezone}."
+                        if "timezone" in form.changed_data
+                        else "Updated family settings."
+                    )
                     if form == family_form
                     else f"Updated guardian profile. Calls ring: {parent.get_call_destination_display()}."
                 ),

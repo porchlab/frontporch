@@ -5,15 +5,6 @@ from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
 from directory.asterisk.builder import build_asterisk_configuration
-from directory.models import (
-    Child,
-    ChildConnection,
-    ConnectionInvitation,
-    Device,
-    Family,
-    FamilyActivity,
-    Parent,
-)
 from directory.tests.factories import create_user
 
 
@@ -24,9 +15,11 @@ class LegacyRelationshipRemovalTests(TransactionTestCase):
         executor = MigrationExecutor(connection)
         executor.migrate([before])
         try:
-            Relationship = executor.loader.project_state([before]).apps.get_model(
-                "directory", "AllowedChildFamilyRelationship"
-            )
+            old_apps = executor.loader.project_state([before]).apps
+            Relationship = old_apps.get_model("directory", "AllowedChildFamilyRelationship")
+            Family = old_apps.get_model("directory", "Family")
+            Child = old_apps.get_model("directory", "Child")
+            FamilyActivity = old_apps.get_model("directory", "FamilyActivity")
             first = Family.objects.create(name="Maple rollback")
             second = Family.objects.create(name="Willow rollback")
             child = Child.objects.create(family=first, name="Casey")
@@ -36,6 +29,9 @@ class LegacyRelationshipRemovalTests(TransactionTestCase):
                 notes="Unapproved historical request.",
             )
             MigrationExecutor(connection).migrate([after])
+            FamilyActivity = executor.loader.project_state([after]).apps.get_model(
+                "directory", "FamilyActivity"
+            )
             archive_before = FamilyActivity.objects.get().details
             # Use the historical model: later migrations may add family relations
             # whose tables do not exist at the revision under test.
@@ -67,17 +63,26 @@ class LegacyRelationshipRemovalTests(TransactionTestCase):
                 "directory", "AllowedChildFamilyRelationship"
             )
             Activity = old_apps.get_model("directory", "FamilyActivity")
+            # Migration fixtures must use the schema under test, which predates
+            # the current family's timezone field and later group relations.
+            Family = old_apps.get_model("directory", "Family")
+            Parent = old_apps.get_model("directory", "Parent")
+            Child = old_apps.get_model("directory", "Child")
+            Device = old_apps.get_model("directory", "Device")
+            ChildConnection = old_apps.get_model("directory", "ChildConnection")
+            ConnectionInvitation = old_apps.get_model("directory", "ConnectionInvitation")
+            FamilyActivity = Activity
             first = Family.objects.create(name="Maple removal")
             second = Family.objects.create(name="Willow removal")
             first_parent = Parent.objects.create(
                 family=first,
-                user=create_user(),
+                user_id=create_user().pk,
                 display_name="Taylor",
                 dial_extension="201",
             )
             second_parent = Parent.objects.create(
                 family=second,
-                user=create_user(),
+                user_id=create_user().pk,
                 display_name="Morgan",
                 dial_extension="202",
             )
@@ -154,10 +159,12 @@ class LegacyRelationshipRemovalTests(TransactionTestCase):
             invitations_before = list(
                 ConnectionInvitation.objects.order_by("pk").values()
             )
-            configuration_before = build_asterisk_configuration()
 
             executor = MigrationExecutor(connection)
             executor.migrate([after])
+            FamilyActivity = executor.loader.project_state([after]).apps.get_model(
+                "directory", "FamilyActivity"
+            )
 
             self.assertEqual(
                 list(ChildConnection.objects.order_by("pk").values()), pairs_before
@@ -168,7 +175,6 @@ class LegacyRelationshipRemovalTests(TransactionTestCase):
             )
             self.assertEqual(list(invitation.source_children.all()), [pending])
             self.assertFalse(invitation.accepted_children.exists())
-            self.assertEqual(build_asterisk_configuration(), configuration_before)
             archives = FamilyActivity.objects.exclude(pk=old_activity.pk)
             self.assertEqual(archives.count(), len(relationships_before))
             for original in relationships_before:
@@ -228,7 +234,18 @@ class LegacyRelationshipRemovalTests(TransactionTestCase):
             executor = MigrationExecutor(connection)
             executor.migrate([after])
             self.assertEqual(FamilyActivity.objects.count(), len(relationships_before) + 1)
-            self.assertEqual(build_asterisk_configuration(), configuration_before)
+            # Run current routing code only once its schema is available. The
+            # legacy approvals must not revive revoked or unapproved child pairs.
+            executor = MigrationExecutor(connection)
+            executor.migrate(executor.loader.graph.leaf_nodes())
+            configuration = build_asterisk_configuration()
+            cross_family_pairs = {
+                (rule.source_endpoint.child_id, rule.target_endpoint.child_id)
+                for rule in configuration.dialplan_rules
+                if rule.source_endpoint.child_id and rule.target_endpoint.child_id
+                and rule.source_endpoint.family_id != rule.target_endpoint.family_id
+            }
+            self.assertEqual(cross_family_pairs, {(a.pk, b.pk), (b.pk, a.pk)})
         finally:
             executor = MigrationExecutor(connection)
             executor.migrate(executor.loader.graph.leaf_nodes())

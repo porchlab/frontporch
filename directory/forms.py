@@ -9,6 +9,7 @@ from django.db import transaction
 from django.shortcuts import render
 
 from .accounts import validate_account_email
+from .timezones import DEFAULT_FAMILY_TIMEZONE, timezone_choices
 from .registration import (
     create_invited_family,
     lock_registration_invitation,
@@ -26,8 +27,17 @@ from .models import (
 )
 
 
+class FamilyTimezoneField(forms.ChoiceField):
+    def __init__(self, **kwargs):
+        super().__init__(choices=timezone_choices, label="Family time zone", **kwargs)
+
+
 class FamilyRegistrationFields(forms.Form):
     family_name = forms.CharField(max_length=200)
+    timezone = FamilyTimezoneField(
+        initial=DEFAULT_FAMILY_TIMEZONE,
+        help_text="Choose where your family’s phones are used. Quiet hours follow this time zone.",
+    )
     display_name = forms.CharField(
         max_length=200,
         label="Guardian name",
@@ -175,11 +185,9 @@ class ChildBlackoutPeriodForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.child = child
         self.approved_by = approved_by
-        from django.conf import settings
-
         self.fields[
             "start_time"
-        ].help_text = f"Times use {settings.TIME_ZONE}, the phone system’s time zone. An end time before the start time means the next morning. The day group selects the days quiet hours start."
+        ].help_text = f"Times use {child.family.timezone}, your family’s time zone. An end time before the start time means the next morning. The day group selects the days quiet hours start."
 
     class Meta:
         model = ChildBlackoutPeriod
@@ -378,9 +386,13 @@ class GroupAcceptForm(forms.Form):
 
 
 class FamilySettingsForm(forms.ModelForm):
+    timezone = FamilyTimezoneField(
+        help_text="Changing this keeps your saved quiet-hour times and applies them in the new time zone.",
+    )
+
     class Meta:
         model = Family
-        fields = ("name", "directory_listed")
+        fields = ("name", "timezone", "directory_listed")
         labels = {
             "name": "Family name",
             "directory_listed": "List our family in the private directory",

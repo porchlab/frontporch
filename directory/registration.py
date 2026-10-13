@@ -69,7 +69,9 @@ def create_invited_family(user, invitation, data):
     from .services import record_activity
 
     family = Family.objects.create(
-        name=data["family_name"], directory_listed=data["directory_listed"]
+        name=data["family_name"],
+        directory_listed=data["directory_listed"],
+        timezone=data["timezone"],
     )
     parent = Parent.objects.create(
         user=user,
