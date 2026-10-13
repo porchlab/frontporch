@@ -92,7 +92,18 @@ class FamilyTimezoneTests(TestCase):
 
 class FamilyTimezoneMigrationTests(TransactionTestCase):
     @override_settings(TIME_ZONE="UTC")
-    def test_upgrade_preserves_existing_local_schedules(self):
+    def test_upgrade_preserves_utc_schedules(self):
+        self.check_upgrade("UTC")
+
+    @override_settings(TIME_ZONE="America/Los_Angeles")
+    def test_upgrade_preserves_pacific_schedules(self):
+        self.check_upgrade("America/Los_Angeles")
+
+    @override_settings(TIME_ZONE="America/New_York")
+    def test_upgrade_preserves_eastern_schedules(self):
+        self.check_upgrade("America/New_York")
+
+    def check_upgrade(self, deployment_timezone):
         before = ("directory", "0023_groupinvitation")
         after = ("directory", "0024_family_timezone")
         executor = MigrationExecutor(connection)
@@ -100,6 +111,7 @@ class FamilyTimezoneMigrationTests(TransactionTestCase):
         try:
             apps = executor.loader.project_state([before]).apps
             family = apps.get_model("directory", "Family").objects.create(name="Oak")
+            other_family = apps.get_model("directory", "Family").objects.create(name="Willow")
             parent = apps.get_model("directory", "Parent").objects.create(
                 family=family, user_id=create_user().pk, display_name="Taylor", dial_extension="3101",
             )
@@ -111,8 +123,10 @@ class FamilyTimezoneMigrationTests(TransactionTestCase):
             )
             saved_schedules = list(Period.objects.values())
             MigrationExecutor(connection).migrate([after])
-            self.assertEqual(Family.objects.get(pk=family.pk).timezone, "America/New_York")
+            for existing in (family, other_family):
+                self.assertEqual(Family.objects.get(pk=existing.pk).timezone, deployment_timezone)
             self.assertEqual(list(ChildBlackoutPeriod.objects.values()), saved_schedules)
+            self.assertEqual(Family.objects.create(name="New family").timezone, "America/New_York")
         finally:
             executor = MigrationExecutor(connection)
             executor.migrate(executor.loader.graph.leaf_nodes())

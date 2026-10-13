@@ -105,8 +105,9 @@ for routing choices, migration behavior, and rollback requirements.
    font license remains alongside the fonts.
 
 Quiet hours show the family's selected named time zone, set during signup or in
-family settings. Existing families default to `America/New_York`; changing the
-zone preserves saved local times. Generated checks specify each child's family
+family settings. Existing families inherit the deployment's configured
+`TIME_ZONE` on upgrade; new signup forms initially select `America/New_York`.
+Changing the zone preserves saved local times. Generated checks specify each child's family
 zone explicitly, including daylight saving and overnight schedules, so the PBX
 can run in UTC. Deployments must migrate and regenerate/reload phone configuration
 to apply this change, and keep the PBX's timezone database current. Phones

@@ -56,7 +56,9 @@ and activate it through Admin. Parent pages never expose SIP credentials or clai
 live registration. Quiet hours use the family's explicitly selected IANA time
 zone, displayed in the portal. Signup and family settings expose this selection;
 the browser and PBX default time zones do not determine quiet hours. Existing
-families default to `America/New_York` to preserve their intended local schedules.
+families inherit the deployment's configured Django `TIME_ZONE` on upgrade to
+preserve their intended local schedules. New signup forms initially select
+`America/New_York`; parents confirm or change that selection.
 Times remain local recurring wall times. Generated `GotoIfTime` checks carry the
 family's named zone, so daylight saving changes require no schedule conversion or
 reload. Overnight intervals keep the zone on both halves and shift the morning

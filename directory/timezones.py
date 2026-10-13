@@ -7,7 +7,7 @@ from zoneinfo import available_timezones
 from django.core.exceptions import ValidationError
 
 
-# Preserve existing families' local schedules when adding timezone support.
+# Initial selection for new families; migration preserves the deployment's zone.
 DEFAULT_FAMILY_TIMEZONE = "America/New_York"
 
 

@@ -187,7 +187,13 @@ password=test-only-password
                 f" same => n(blocked),NoOp(QUIET-HOURS-{index}-BLOCKED)",
                 " same => n,Hangup()",
             ])
-        (self.workspace / "etc/asterisk/extensions.conf").write_text("\n".join(lines) + "\n")
+        # The upstream entrypoint chowns the mounted config to Asterisk. Write
+        # outside that directory and copy through Docker, which also works on
+        # Linux runners whose UID differs from the container's Asterisk UID.
+        fixture = self.workspace / "quiet-hours.conf"
+        fixture.write_text("\n".join(lines) + "\n")
+        container = self.compose("ps", "-q", "asterisk")
+        docker("cp", str(fixture), f"{container}:/etc/asterisk/extensions.conf")
         self.cli("dialplan reload")
         for index in range(100, 100 + len(cases)):
             self.cli(f"channel originate Local/{index}@quiet-hours-test application Wait 1")
