@@ -66,7 +66,12 @@ except TimeoutError:print('blocked')
 
 
 def main():
-    os.umask(0o077)
+    # Native Linux bind mounts retain the runner's UID/GID. With all capabilities
+    # dropped, container root cannot bypass a runner-owned 0700/0600 fixture.
+    # Share only the runner group with these disposable containers; production
+    # artifacts remain root-owned 0700/0600. No DAC override capability is needed.
+    os.umask(0o007)
+    fixture_group = str(os.getgid())
     prefix = "frontporch-vpn-test-" + uuid.uuid4().hex[:10]
     containers = []
     network_created = False
@@ -118,12 +123,14 @@ def main():
             for suffix, ip in (("pbx", "10.240.190.3"), ("other-lan", "10.240.190.6")):
                 name = prefix + "-" + suffix
                 docker("run", "-d", "--name", name, "--network", prefix, "--ip", ip,
+                       "--group-add", fixture_group,
                        "--cap-drop", "ALL", "--read-only", "--security-opt", "no-new-privileges",
                        "--mount", f"type=bind,src={directory / 'echo.py'},dst=/echo.py,readonly",
                        IMAGE, "python", "/echo.py")
                 containers.append(name)
             name = prefix + "-server"
             docker("run", "-d", "--name", name, "--network", prefix, "--ip", "10.240.190.2",
+                   "--group-add", fixture_group,
                    "--cap-drop", "ALL", "--cap-add", "NET_ADMIN", "--cap-add", "NET_RAW",
                    "--read-only", "--security-opt", "no-new-privileges",
                    "--sysctl", "net.ipv4.ip_forward=1", "--sysctl", "net.ipv6.conf.all.disable_ipv6=1",
@@ -147,6 +154,7 @@ def main():
                     + "Endpoint = 10.240.190.2:51821\nAllowedIPs = 10.240.191.0/29,10.240.190.3/32,10.240.190.6/32\nPersistentKeepalive = 25\n")
                 name = prefix + f"-client{index}"
                 docker("run", "-d", "--name", name, "--network", prefix, "--ip", f"10.240.190.{index+4}",
+                       "--group-add", fixture_group,
                        "--cap-drop", "ALL", "--cap-add", "NET_ADMIN", "--read-only",
                        "--security-opt", "no-new-privileges", "--mount", f"type=bind,src={fixture},dst=/fixture,readonly",
                        "-e", f"CLIENT_ADDRESS={peers[index]['address']}", IMAGE, "python", "/fixture/client.py")
@@ -169,6 +177,18 @@ def main():
             wait_for(lambda: peer_count() == 0, "Expired snapshot did not remove peers")
             assert probe(1, "10.240.191.1", 5060) == "blocked"
             print("PASS: expired control-plane state fails closed.", flush=True)
+        except Exception:
+            # Only disposable fixture containers, never production logs. Include
+            # startup diagnostics while still removing every generated key.
+            redactions = [server_private, server_public, psk,
+                          *[value for pair in client_keys for value in pair]]
+            for name in containers:
+                result = subprocess.run(["docker", "logs", name], capture_output=True, text=True, timeout=10)
+                output = result.stdout + result.stderr
+                for value in redactions:
+                    output = output.replace(value, "[redacted fixture key]")
+                print(f"Fixture {name.removeprefix(prefix + '-')}: {output[-2000:]}", flush=True)
+            raise
         finally:
             for name in reversed(containers):
                 subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
