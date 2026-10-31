@@ -31,6 +31,7 @@ asterisk_image="ghcr.io/porchlab/frontporch-asterisk@$asterisk_digest"
 policy_dir=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd) || exit 1
 # This file is private operator configuration, never supplied by the caller.
 . "$policy_dir/config.sh"
+case "${WP816_VPN_ENABLED:-0}" in 0|1) ;; *) echo 'Invalid host VPN enable setting.'; exit 64 ;; esac
 : "${DOCKER:?}" "${CHECKOUT:?}" "${STATE_DIR:?}" "${BACKUP_DIR:?}"
 : "${SSH_DIR:?}" "${ORIGIN:?}" "${REPOSITORY:?}" "${PROJECT:?}"
 : "${PYTHON_IMAGE:?}" "${GIT_IMAGE:?}"
@@ -48,6 +49,14 @@ git_tool() {
         "$GIT_IMAGE" -c safe.directory=/workspace -c core.hooksPath=/dev/null "$@"
 }
 compose() {
+    if [ "${WP816_VPN_ENABLED:-0}" = 1 ]; then
+        "$DOCKER" compose --project-name "$PROJECT" --project-directory "$CHECKOUT" \
+            --env-file "$CHECKOUT/.env" --env-file "$images" -f "$CHECKOUT/compose.yaml" \
+            -f "$CHECKOUT/compose.public.yaml" -f "$CHECKOUT/compose.wireguard.yaml" \
+            -f "$CHECKOUT/compose.registry.yaml" -f "$CHECKOUT/compose.wireguard.registry.yaml" \
+            --profile wp816 "$@"
+        return
+    fi
     "$DOCKER" compose --project-name "$PROJECT" --project-directory "$CHECKOUT" \
         --env-file "$CHECKOUT/.env" --env-file "$images" -f "$CHECKOUT/compose.yaml" \
         -f "$CHECKOUT/compose.public.yaml" -f "$CHECKOUT/compose.registry.yaml" "$@"
@@ -82,6 +91,9 @@ deploy() {
     stage pull
     compose config --quiet
     compose pull web portal asterisk public-ingress cloudflared
+    if [ "${WP816_VPN_ENABLED:-0}" = 1 ]; then
+        compose pull vpn-reconciler wireguard
+    fi
     # Inspect metadata, never execute an image to validate it. Registry writers
     # remain trusted publishers; these labels are consistency checks.
     [ "$("$DOCKER" image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$web_image")" = "$revision" ]
@@ -113,6 +125,11 @@ deploy() {
         attempt=$((attempt + 1)); [ "$attempt" -lt 30 ]; sleep 2
     done
     compose exec -T web python manage.py render_asterisk_config --reload
+    if [ "${WP816_VPN_ENABLED:-0}" = 1 ]; then
+        stage vpn
+        compose up -d --no-build --pull never --no-deps vpn-reconciler
+        compose up -d --no-build --pull never --no-deps --wait --wait-timeout 60 wireguard
+    fi
     stage verification
     "$DOCKER" run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
         --volume "$policy_dir/verify_http.py:/policy/verify_http.py:ro" \
@@ -132,6 +149,15 @@ deploy() {
     done
     db_container=$(compose ps -q db)
     [ "$("$DOCKER" inspect --format '{{.State.Health.Status}}' "$db_container")" = healthy ]
+    if [ "${WP816_VPN_ENABLED:-0}" = 1 ]; then
+        for service in vpn-reconciler wireguard; do
+            container=$(compose ps --all -q "$service")
+            [ -n "$container" ]
+            [ "$("$DOCKER" inspect --format '{{.State.Status}}' "$container")" = running ]
+        done
+        container=$(compose ps -q wireguard)
+        [ "$("$DOCKER" inspect --format '{{.State.Health.Status}}' "$container")" = healthy ]
+    fi
     cp "$images" "$STATE_DIR/deployed-images.env.tmp"
     mv "$STATE_DIR/deployed-images.env.tmp" "$STATE_DIR/deployed-images.env"
     printf '%s\n' "$revision" > "$STATE_DIR/deployed-revision.tmp"

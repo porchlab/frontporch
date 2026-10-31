@@ -22,6 +22,8 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: frontporch.public_settings
       FRONTPORCH_PUBLIC_HOST: ${FRONTPORCH_PUBLIC_HOST:-front.porchlab.app}
+      # Peer-key downloads and administration are private admin operations.
+      WIREGUARD_ENCRYPTION_KEY: ""
     ports: !reset []
     networks:
       - default

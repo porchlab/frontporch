@@ -77,6 +77,22 @@ ASTERISK_TTS_NOISE_W_SCALE = float(os.environ.get("ASTERISK_TTS_NOISE_W_SCALE", 
 ASTERISK_TTS_RANDOM_SEED = int(os.environ.get("ASTERISK_TTS_RANDOM_SEED", "1729"))
 ASTERISK_TTS_VOLUME = float(os.environ.get("ASTERISK_TTS_VOLUME", "1.0"))
 ASTERISK_AUTO_APPLY_CONFIG = env_bool("ASTERISK_AUTO_APPLY_CONFIG", default=False)
+# Optional GDMS pilot tooling. Empty credentials never enable enrollment or
+# initiate requests at application startup. Keep these in the local environment.
+GDMS_REGION = os.environ.get("GDMS_REGION", "us")
+GDMS_USERNAME = os.environ.get("GDMS_USERNAME", "")
+GDMS_PASSWORD = os.environ.get("GDMS_PASSWORD", "")
+GDMS_CLIENT_ID = os.environ.get("GDMS_CLIENT_ID", "")
+GDMS_CLIENT_SECRET = os.environ.get("GDMS_CLIENT_SECRET", "")
+# An empty configuration never starts a VPN service or peer reconciler.
+WIREGUARD_ENABLED = env_bool("WIREGUARD_ENABLED", default=False)
+WIREGUARD_SERVER_ADDRESS = os.environ.get("WIREGUARD_SERVER_ADDRESS", "")
+WIREGUARD_ENCRYPTION_KEY = os.environ.get("WIREGUARD_ENCRYPTION_KEY", "")
+WIREGUARD_DESIRED_DIR = os.environ.get("WIREGUARD_DESIRED_DIR", "")
+WIREGUARD_OBSERVED_DIR = os.environ.get("WIREGUARD_OBSERVED_DIR", "")
+WIREGUARD_NETWORK_FILE = os.environ.get("WIREGUARD_NETWORK_FILE", "")
+WIREGUARD_SERVER_PUBLIC_KEY = os.environ.get("WIREGUARD_SERVER_PUBLIC_KEY", "")
+WIREGUARD_ENDPOINT = os.environ.get("WIREGUARD_ENDPOINT", "")
 ASTERISK_AMI_HOST = os.environ.get("ASTERISK_AMI_HOST", "")
 ASTERISK_AMI_PORT = int(os.environ.get("ASTERISK_AMI_PORT", "5038"))
 ASTERISK_AMI_USERNAME = os.environ.get("ASTERISK_AMI_USERNAME", "")

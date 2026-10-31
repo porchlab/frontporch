@@ -146,6 +146,8 @@ Django models
 - [Automatic production deployment and merge controls](docs/operations/automatic-deployment.md)
 - [Browser demo: Cloudflare Pages publishing and verification](ui-prototype/deploy/cloudflare-pages.md)
 - [GL.iNet Opal router setup checklist](docs/operations/opal-router-checklist.md)
+- [WP816 automated onboarding: GDMS compatibility gate](docs/operations/wp816-onboarding.md)
+- [Family WireGuard peers and staged QNAP migration](docs/operations/wireguard-server.md)
 
 ## Local Setup
 

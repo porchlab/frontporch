@@ -1,4 +1,4 @@
-FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e
+FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS network-tools
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -9,9 +9,14 @@ WORKDIR /app
 # Pinned μ-law conversion keeps generated prompt bytes reproducible.
 RUN apt-get update && \
     apt-get install --yes --no-install-recommends \
+        iproute2=6.1.0-3 \
+        iptables=1.8.9-2 \
+        wireguard-tools=1.0.20210914-1+b1 \
         libsox-fmt-base=14.4.2+git20190427-3.5 \
         sox=14.4.2+git20190427-3.5 && \
     rm -rf /var/lib/apt/lists/*
+
+FROM network-tools AS application
 
 RUN pip install --no-cache-dir uv==0.12.15
 

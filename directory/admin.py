@@ -3,6 +3,7 @@ from django import forms
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.forms import AdminUserCreationForm, UserChangeForm
 from django.contrib.auth.models import User
+from django.views.decorators.debug import sensitive_variables
 
 from .accounts import sync_account_email, validate_account_email
 
@@ -27,6 +28,7 @@ from .models import (
     FamilyContact,
     Parent,
     PublicPhoneNumber,
+    WireGuardPeer,
 )
 
 
@@ -152,6 +154,7 @@ class DeviceAdmin(admin.ModelAdmin):
         "sip_extension",
         "sip_username",
         "is_active",
+        "wireguard_peer",
     )
     list_filter = (
         "is_active",
@@ -170,6 +173,114 @@ class DeviceAdmin(admin.ModelAdmin):
         "assigned_family__name",
     )
     ordering = ("sip_extension", "friendly_name")
+
+
+class WireGuardPeerForm(forms.ModelForm):
+    public_key = forms.CharField(required=False, max_length=44,
+                                 help_text="Paste an existing client's public key, or leave blank to generate a new downloadable connection.")
+    class Meta:
+        model = WireGuardPeer
+        fields = "__all__"
+
+    def clean(self):
+        data = super().clean()
+        if self.instance._state.adding and not data.get("public_key"):
+            from django.core.exceptions import ImproperlyConfigured, ValidationError
+            from .wireguard import generate_peer_keys
+            try:
+                generate_peer_keys(self.instance)
+                data["public_key"] = self.instance.public_key
+            except ImproperlyConfigured:
+                raise ValidationError("The operator must configure private peer-key storage before creating a new connection.") from None
+        if self.instance._state.adding and not data.get("client_address"):
+            # Django admin keeps this POST in a transaction through save_model.
+            from .models import lock_extension_namespace
+            lock_extension_namespace()
+            data["client_address"] = WireGuardPeer.available_address()
+        return data
+
+
+@admin.register(WireGuardPeer)
+class WireGuardPeerAdmin(admin.ModelAdmin):
+    form = WireGuardPeerForm
+    list_display = ("name", "family", "provisioning_method", "client_address", "is_active",
+                    "last_applied_at", "last_handshake_at")
+    list_filter = ("family", "provisioning_method", "is_active")
+    search_fields = ("name", "family__name")
+    exclude = ("encrypted_secrets",)
+    readonly_fields = ("last_applied_at", "last_handshake_at")
+    actions = ("disable_peers", "download_configuration")
+
+    def get_readonly_fields(self, request, obj=None):
+        return (*self.readonly_fields, "public_key", "client_address") if obj else self.readonly_fields
+
+    def save_model(self, request, obj, form, change):
+        from .wireguard import audit
+        old_family_id = WireGuardPeer.objects.filter(pk=obj.pk).values_list("family_id", flat=True).first() if change else None
+        super().save_model(request, obj, form, change)
+        audit(obj, request.user, f"{'Updated' if change else 'Added'} network connection: {obj.name}.")
+        if old_family_id and old_family_id != obj.family_id:
+            FamilyActivity.objects.create(family_id=old_family_id, actor=request.user,
+                                          description="A network connection was transferred out of this family.",
+                                          details={"wireguard_peer_id": str(obj.pk)})
+
+    @admin.action(description="Disable selected network connections", permissions=["change"])
+    def disable_peers(self, request, queryset):
+        from django.db import transaction
+        from .models import lock_extension_namespace
+        from .wireguard import audit
+        with transaction.atomic():
+            lock_extension_namespace()
+            for peer in queryset.filter(is_active=True):
+                peer.is_active = False
+                peer.save(update_fields=["is_active", "updated_at"])
+                audit(peer, request.user, f"Disabled network connection: {peer.name}.")
+
+    def delete_model(self, request, obj):
+        from django.db import transaction
+        from .models import lock_extension_namespace
+        from .wireguard import audit
+        with transaction.atomic():
+            lock_extension_namespace()
+            audit(obj, request.user, f"Removed network connection: {obj.name}.")
+            super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        from django.db import transaction
+        from .models import lock_extension_namespace
+        from .wireguard import audit
+        with transaction.atomic():
+            lock_extension_namespace()
+            for peer in queryset:
+                audit(peer, request.user, f"Removed network connection: {peer.name}.")
+            super().delete_queryset(request, queryset)
+
+    @admin.action(description="Download selected client configuration (one connection)", permissions=["change"])
+    @sensitive_variables()
+    def download_configuration(self, request, queryset):
+        from django.core.exceptions import ImproperlyConfigured, PermissionDenied, ValidationError
+        from django.http import HttpResponse
+        from .wireguard import audit, client_configuration
+        from frontporch.vpn_config import VPNConfigurationError
+        peers = list(queryset[:2])
+        if len(peers) != 1:
+            self.message_user(request, "Select one connection to download.", level="error")
+            return
+        peer = peers[0]
+        if not self.has_change_permission(request, peer):
+            raise PermissionDenied
+        try:
+            content = client_configuration(peer)
+        except (ValidationError, ImproperlyConfigured, VPNConfigurationError):
+            self.message_user(request, "Configuration unavailable. Imported clients keep their original file; new connections need complete server settings.", level="error")
+            return
+        audit(peer, request.user, f"Downloaded client configuration for network connection: {peer.name}.")
+        response = HttpResponse(content, content_type="application/octet-stream")
+        response["Content-Disposition"] = 'attachment; filename="frontporch.conf"'
+        response["Cache-Control"] = "no-store, private, max-age=0"
+        response["Pragma"] = "no-cache"
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
 
 
 @admin.register(ExternalPhoneNumber)

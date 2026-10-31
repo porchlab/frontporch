@@ -74,14 +74,19 @@ def build_asterisk_configuration():
             extension=device.sip_extension,
             username=device.sip_username,
             secret=device.sip_secret,
+            media_address=str(device.wireguard_peer.server_interface().ip) if device.wireguard_peer_id else "",
             child_id=device.assigned_child_id,
             blackout_windows=tuple(
                 blackout_windows_by_child_id.get(device.assigned_child_id, ())
             ),
         )
         for device in Device.objects.filter(is_active=True)
-        .select_related("assigned_child", "assigned_parent", "assigned_family")
+        .select_related("assigned_child", "assigned_parent", "assigned_family", "wireguard_peer")
         .order_by("id")
+        if not device.wireguard_peer_id or (
+            device.wireguard_peer.is_active
+            and device.wireguard_peer.family_id == device.owning_family.id
+        )
     )
     endpoints_by_device_id = {endpoint.device_id: endpoint for endpoint in endpoints}
     sip_endpoints_by_extension = {}
