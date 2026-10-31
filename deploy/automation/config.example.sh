@@ -6,6 +6,9 @@ STATE_DIR=/srv/frontporch-deploy/state
 BACKUP_DIR=/srv/frontporch-backups
 SSH_DIR=/root/.ssh
 PROJECT=frontporch
+# Enable only after importing peers and preparing the private VPN files.
+# This is a host-owned choice, never part of the SSH request or repository env.
+WP816_VPN_ENABLED=0
 REPOSITORY=porchlab/frontporch
 ORIGIN=git@github.com:porchlab/frontporch.git
 PYTHON_IMAGE=python@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e

@@ -266,6 +266,7 @@ case "$*" in
   *'rev-parse FETCH_HEAD'*) echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;;
   *'rev-parse HEAD'*) echo bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;;
   *'pg_dump'*) echo archive;;
+  *'ps -q wireguard'*) echo wireguard-container;;
   *'ps --all -q'*|*'ps -q db'*) echo container;;
   *'.State.Status'*) echo running;;
   *'.State.Health.Status'*)
@@ -273,6 +274,10 @@ case "$*" in
       rm "$(dirname "$0")/state/stage"
       mkdir "$(dirname "$0")/state/stage"
     fi
+    case "$*" in
+      *wireguard-container*)
+        if [ -f "$(dirname "$0")/vpn-unhealthy" ]; then echo unhealthy; exit 0; fi;;
+    esac
     echo healthy;;
 esac
 exit 0
@@ -360,6 +365,53 @@ exit 0
         self.assertEqual((self.state / "deployed-revision").read_text().strip(), SHA)
         self.assertFalse((self.state / "failed").exists())
         self.assertFalse((self.state / "lock").exists())
+        self.assertNotIn("compose.wireguard", calls)
+        self.assertNotIn("vpn-reconciler", calls)
+
+    def enable_vpn(self, value="1"):
+        with (self.root / "config.sh").open("a") as stream:
+            stream.write(f"\nWP816_VPN_ENABLED={value}\n")
+
+    def test_invalid_host_vpn_flag_is_rejected_before_docker(self):
+        self.enable_vpn("unexpected")
+        self.assertNotEqual(self.run_receiver().returncode, 0)
+        self.assertFalse(self.calls.exists())
+
+    def test_opt_in_vpn_uses_verified_images_and_waits_for_web_and_pbx_configuration(self):
+        self.enable_vpn()
+        result = self.run_receiver()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = self.calls.read_text()
+        stages = ["pull vpn-reconciler wireguard", "org.opencontainers.image.revision", "pg_dump",
+                  "--wait-timeout 180 web", "render_asterisk_config", "--no-deps vpn-reconciler",
+                  "--wait-timeout 60 wireguard", "verify_http.py"]
+        self.assertEqual(sorted(calls.index(stage) for stage in stages), [calls.index(stage) for stage in stages])
+        startups = [line for line in calls.splitlines() if " up -d " in line]
+        self.assertEqual(len(startups), 6)
+        self.assertTrue(all("compose.wireguard.registry.yaml --profile wp816" in line for line in startups))
+        self.assertTrue(all("--no-build --pull never --no-deps" in line for line in startups))
+        self.assertNotIn("up -d db", calls)
+
+    def test_vpn_pull_and_start_failures_keep_the_recovery_latch(self):
+        self.enable_vpn()
+        for failure, forbidden in (("pull vpn-reconciler", "pg_dump"),
+                                   ("--no-deps vpn-reconciler", "--wait-timeout 60 wireguard"),
+                                   ("--wait-timeout 60 wireguard", "verify_http.py")):
+            with self.subTest(failure=failure):
+                (self.root / "fail").write_text(failure)
+                self.calls.unlink(missing_ok=True)
+                (self.state / "failed").unlink(missing_ok=True)
+                self.assertNotEqual(self.run_receiver().returncode, 0)
+                self.assertNotIn(forbidden, self.calls.read_text())
+                self.assertTrue((self.state / "failed").exists())
+                self.assertFalse((self.state / "lock").exists())
+
+    def test_unhealthy_vpn_cannot_mark_deployment_complete(self):
+        self.enable_vpn()
+        (self.root / "vpn-unhealthy").touch()
+        self.assertNotEqual(self.run_receiver().returncode, 0)
+        self.assertTrue((self.state / "failed").exists())
+        self.assertFalse((self.state / "deployed-revision").exists())
 
     def test_wrong_image_revision_or_source_cannot_migrate_or_replace_services(self):
         for marker in ("wrong-revision", "wrong-source"):

@@ -48,6 +48,10 @@ jobs:
         run: |
           npm ci --prefix ui-prototype --ignore-scripts
           uv run --frozen python manage.py test --noinput
+      - name: Verify WireGuard routing and revocation in disposable containers
+        run: |
+          docker build --target network-tools -t frontporch-vpn-test-tools:local .
+          python deploy/test_wireguard_network.py
 
   deployment-policy:
     runs-on: ubuntu-latest

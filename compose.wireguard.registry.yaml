@@ -1,0 +1,9 @@
+# Use after compose.wireguard.yaml. Reuse the CI-verified Django image digest;
+# no new registry, image publisher, credentials, or host deployment protocol.
+services:
+  vpn-reconciler:
+    build: !reset null
+    image: ${FRONTPORCH_WEB_IMAGE:?set the verified release image digest}
+  wireguard:
+    build: !reset null
+    image: ${FRONTPORCH_WEB_IMAGE:?set the verified release image digest}

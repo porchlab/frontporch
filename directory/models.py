@@ -5,6 +5,8 @@ from django.db import models, transaction, connection
 import phonenumbers
 import random
 import secrets
+import uuid
+import ipaddress
 
 from .timezones import DEFAULT_FAMILY_TIMEZONE, validate_timezone
 
@@ -314,7 +316,113 @@ class ChildBlackoutPeriod(TimeStampedModel):
         super().save(*args, **kwargs)
 
 
+class WireGuardPeer(TimeStampedModel):
+    """A family's network connection, independent of handset provisioning."""
+
+    class Provisioning(models.TextChoices):
+        MANUAL = "manual", "Manual configuration"
+        GDMS = "gdms", "GDMS provisioning"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    family = models.ForeignKey(Family, on_delete=models.PROTECT, related_name="wireguard_peers")
+    name = models.CharField(max_length=200)
+    provisioning_method = models.CharField(max_length=12, choices=Provisioning.choices, default=Provisioning.MANUAL)
+    public_key = models.CharField(max_length=44, unique=True)
+    client_address = models.GenericIPAddressField(protocol="IPv4", unique=True, blank=True, null=True)
+    # Recoverable client/PSK material is optional: imported peers usually have
+    # no client private key. Never display this field in the admin or audit log.
+    encrypted_secrets = models.TextField(blank=True, editable=False)
+    persistent_keepalive = models.PositiveIntegerField(default=0, validators=[MaxValueValidator(65535)])
+    is_active = models.BooleanField(default=True)
+    last_handshake_at = models.DateTimeField(null=True, blank=True, editable=False)
+    last_applied_at = models.DateTimeField(null=True, blank=True, editable=False)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["family__name", "name", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["family", "name"], name="unique_family_wireguard_peer_name"),
+            models.CheckConstraint(condition=models.Q(client_address__isnull=False), name="wireguard_peer_has_address"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.family})"
+
+    @staticmethod
+    def server_interface():
+        from frontporch.vpn_config import PRIVATE_NETWORKS
+        try:
+            value = ipaddress.IPv4Interface(settings.WIREGUARD_SERVER_ADDRESS)
+            if (not 16 <= value.network.prefixlen <= 29
+                    or not any(value.network.subnet_of(n) for n in PRIVATE_NETWORKS)
+                    or value.ip in (value.network.network_address, value.network.broadcast_address)):
+                raise ValueError
+            return value
+        except (ValueError, AttributeError):
+            raise ValidationError("Configure the private WireGuard server subnet before managing peers.") from None
+
+    def clean(self):
+        from frontporch.vpn_config import VPNConfigurationError, key
+        errors = {}
+        try:
+            key(self.public_key)
+        except VPNConfigurationError:
+            errors["public_key"] = "Enter a valid WireGuard public key."
+        if self.provisioning_method == self.Provisioning.GDMS:
+            from django.core.exceptions import ImproperlyConfigured
+            from .wireguard import peer_secrets
+            try:
+                if not peer_secrets(self)["private_key"]:
+                    raise VPNConfigurationError("Missing client key.")
+            except (VPNConfigurationError, ImproperlyConfigured):
+                errors["provisioning_method"] = "GDMS provisioning requires a recoverable client key. Generate a new connection or import its matching client configuration."
+        server = self.server_interface()
+        if self.client_address:
+            try:
+                address = ipaddress.IPv4Address(self.client_address)
+                if address not in server.network or address in (
+                    server.ip, server.network.network_address, server.network.broadcast_address,
+                ):
+                    raise ValueError
+            except ValueError:
+                errors["client_address"] = "Use an available host address from the server VPN subnet."
+        if not self._state.adding:
+            old = type(self).objects.filter(pk=self.pk).values("public_key", "client_address", "family_id").first()
+            if old and (old["public_key"] != self.public_key or old["client_address"] != self.client_address):
+                errors["__all__"] = "Create a replacement peer to change a connection's key or address."
+            if old and old["family_id"] != self.family_id and self.devices.exists():
+                errors["family"] = "Remove the phone assignments before transferring this connection."
+            if self.provisioning_method == self.Provisioning.GDMS and self.devices.count() > 1:
+                errors["provisioning_method"] = "A GDMS-provisioned connection belongs to one physical phone."
+        if errors:
+            raise ValidationError(errors)
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        # Shared with Device writes so assignment and ownership checks serialize.
+        lock_extension_namespace()
+        if not self.client_address:
+            self.client_address = self.available_address()
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def available_address(cls):
+        """Caller holds the shared transaction lock through validation/save."""
+        server = cls.server_interface()
+        used = set(cls.objects.values_list("client_address", flat=True))
+        address = next((str(ip) for ip in server.network.hosts()
+                        if ip != server.ip and str(ip) not in used), None)
+        if address is None:
+            raise ValidationError("The WireGuard address pool is full.")
+        return address
+
+
 class Device(TimeStampedModel):
+    wireguard_peer = models.ForeignKey(
+        WireGuardPeer, on_delete=models.PROTECT, related_name="devices", null=True, blank=True,
+        help_text="The family's network connection used by this phone. A manually configured gateway may serve several phones.",
+    )
     assigned_child = models.ForeignKey(
         Child,
         on_delete=models.PROTECT,
@@ -437,6 +545,12 @@ class Device(TimeStampedModel):
                     "This extension is already assigned to a different child, parent, "
                     "or family."
                 )
+        if self.wireguard_peer_id and owner_count == 1:
+            if self.wireguard_peer.family_id != self.owning_family.pk:
+                errors["wireguard_peer"] = "The network connection must belong to this phone's family."
+            elif (self.wireguard_peer.provisioning_method == WireGuardPeer.Provisioning.GDMS
+                  and Device.objects.filter(wireguard_peer=self.wireguard_peer).exclude(pk=self.pk).exists()):
+                errors["wireguard_peer"] = "A GDMS-provisioned connection belongs to one physical phone."
         if (
             self.sip_extension
             and "ExternalNumberExtension" in globals()

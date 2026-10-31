@@ -82,6 +82,7 @@ class SipEndpoint:
     secret: str
     child_id: int | None = None
     blackout_windows: tuple[BlackoutWindow, ...] = ()
+    media_address: str = ""
 
     @property
     def endpoint_name(self):
