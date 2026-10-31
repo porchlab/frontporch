@@ -5,6 +5,7 @@ description = "Private neighborhood voice communication platform for children."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "cryptography==50.0.1",
     "django>=5.2,<6.0",
     "dj-database-url>=2.3,<3.0",
     "gunicorn>=23.0,<24.0",
