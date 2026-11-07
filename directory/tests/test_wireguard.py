@@ -10,7 +10,9 @@ from django.test import SimpleTestCase
 from frontporch.vpn_config import (
     ServerConfig, VPNConfigurationError, firewall_config, parse_snapshot, wireguard_config,
 )
-from frontporch.vpn_runtime import VPNRuntimeError, atomic_private_file, command, read_json, verify_namespace
+from frontporch.vpn_runtime import (
+    VPNRuntimeError, atomic_private_file, command, install_firewall, read_json, verify_namespace,
+)
 
 
 SERVER_KEY = base64.b64encode(b"s" * 32).decode()
@@ -97,6 +99,46 @@ class WireGuardConfigurationTests(SimpleTestCase):
 
 
 class WireGuardRuntimeTests(SimpleTestCase):
+    def test_firewall_prefers_legacy_when_filter_and_nat_are_available(self):
+        with patch("frontporch.vpn_runtime.command") as run, patch("builtins.print"):
+            install_firewall(ServerConfig.parse(SERVER))
+        self.assertEqual([call.args[0] for call in run.call_args_list], [
+            ["iptables-legacy", "--wait", "5", "-t", "filter", "-S"],
+            ["iptables-legacy", "--wait", "5", "-t", "nat", "-S"],
+            ["iptables-legacy-restore", "--wait", "5"],
+        ])
+        self.assertEqual(run.call_args.kwargs["input"], firewall_config(ServerConfig.parse(SERVER)))
+
+    def test_missing_legacy_nat_uses_nft_with_the_same_isolation_rules(self):
+        def execute(args, **kwargs):
+            if args == ["iptables-legacy", "--wait", "5", "-t", "nat", "-S"]:
+                raise VPNRuntimeError("Legacy NAT unavailable.")
+        with patch("frontporch.vpn_runtime.command", side_effect=execute) as run, patch("builtins.print"):
+            install_firewall(ServerConfig.parse(SERVER))
+        self.assertEqual([call.args[0] for call in run.call_args_list], [
+            ["iptables-legacy", "--wait", "5", "-t", "filter", "-S"],
+            ["iptables-legacy", "--wait", "5", "-t", "nat", "-S"],
+            ["iptables-nft", "--wait", "5", "-t", "filter", "-S"],
+            ["iptables-nft", "--wait", "5", "-t", "nat", "-S"],
+            ["iptables-nft-restore", "--wait", "5"],
+        ])
+        self.assertEqual(run.call_args.kwargs["input"], firewall_config(ServerConfig.parse(SERVER)))
+
+    def test_missing_backends_and_partial_rule_failures_stop_startup(self):
+        for failing in ("probes", "restore"):
+            def execute(args, **kwargs):
+                if failing == "probes" or args[0].endswith("-restore"):
+                    raise VPNRuntimeError("Fixture failure.")
+            with self.subTest(failing=failing), \
+                    patch("frontporch.vpn_runtime.command", side_effect=execute) as run:
+                with self.assertRaises(VPNRuntimeError):
+                    install_firewall(ServerConfig.parse(SERVER))
+                commands = [call.args[0][0] for call in run.call_args_list]
+                if failing == "probes":
+                    self.assertEqual(commands, ["iptables-legacy", "iptables-nft"])
+                else:
+                    self.assertEqual(commands, ["iptables-legacy", "iptables-legacy", "iptables-legacy-restore"])
+
     def test_host_or_unexpected_namespace_is_rejected_before_any_mutation(self):
         with patch.dict(os.environ, {}, clear=True), patch("frontporch.vpn_runtime.command") as run:
             with self.assertRaises(VPNRuntimeError):

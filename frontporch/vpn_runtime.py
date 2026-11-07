@@ -75,6 +75,25 @@ def verify_namespace(server):
             raise VPNRuntimeError("The VPN container requires IPv4 forwarding and disabled IPv6.")
 
 
+def install_firewall(server):
+    # Probe both tables before choosing a backend. New kernels may support the
+    # legacy filter table but omit legacy NAT. Prefer legacy on the existing
+    # host, and use nft only when the legacy probes fail. These commands run
+    # after namespace verification and before creating the WireGuard interface.
+    for backend in ("legacy", "nft"):
+        try:
+            for table in ("filter", "nat"):
+                command([f"iptables-{backend}", "--wait", "5", "-t", table, "-S"])
+        except VPNRuntimeError:
+            continue
+        # Never switch backends after a partial rule application. A restore
+        # failure stops startup with no WireGuard interface accepting traffic.
+        command([f"iptables-{backend}-restore", "--wait", "5"], input=firewall_config(server))
+        print("VPN firewall backend: " + backend, flush=True)
+        return
+    raise VPNRuntimeError("No supported firewall backend provides both filter and NAT tables.")
+
+
 def apply_peers(server, peers):
     path = RUNTIME / "wg.conf"
     try:
@@ -114,7 +133,7 @@ def run():
     signal.signal(signal.SIGINT, stop)
     interface_created = False
     try:
-        command(["iptables-legacy-restore", "--wait", "5"], input=firewall_config(server))
+        install_firewall(server)
         command(["ip", "link", "add", "wg0", "type", "wireguard"])
         interface_created = True
         command(["ip", "address", "add", str(server.address), "dev", "wg0"])

@@ -37,7 +37,12 @@ and the GDMS firmware/onboarding worker remain separate, subsequent work.
 
 The server uses a dedicated Docker bridge and only `NET_ADMIN` and `NET_RAW` in its
 own network namespace. The latter supports the host's legacy iptables control
-socket. It has no host networking, privileged mode, Docker socket, host-root
+socket. Startup probes filter and NAT support, preferring legacy iptables on the
+existing host and using `iptables-nft` on newer kernels without legacy NAT.
+Both backends receive the same default-deny rules. If neither backend supports
+both tables, or applying the selected rules fails, startup stops before creating
+the WireGuard interface; it never switches backends after a failed rule application.
+It has no host networking, privileged mode, Docker socket, host-root
 mount, database connection, or management HTTP API. The host must already support
 kernel WireGuard; no kernel modules are installed or mounted from the container.
 Before changing firewall rules, the runtime verifies that it is in a container

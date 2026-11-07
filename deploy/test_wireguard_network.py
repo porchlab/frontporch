@@ -140,9 +140,14 @@ def main():
                    "--mount", f"type=bind,src={config},dst=/etc/frontporch-vpn,readonly",
                    "--mount", f"type=bind,src={desired},dst=/var/lib/frontporch-vpn-desired,readonly",
                    "--mount", f"type=bind,src={observed},dst=/var/lib/frontporch-vpn",
-                   IMAGE, "python", "-m", "frontporch.vpn_runtime")
+                   # Keep the failing startup frame in synthetic fixture logs;
+                   # the production entry point deliberately hides tracebacks.
+                   IMAGE, "python", "-c", "from frontporch.vpn_runtime import run; run()")
             containers.append(name)
             wait_for(lambda: (observed / "status.json").exists(), "VPN runtime did not become ready")
+            for line in docker("logs", name).splitlines():
+                if line in ("VPN firewall backend: legacy", "VPN firewall backend: nft"):
+                    print(line, flush=True)
             for index, (private, _) in enumerate(client_keys):
                 fixture = directory / f"client{index}"
                 fixture.mkdir()
