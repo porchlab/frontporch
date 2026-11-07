@@ -18,7 +18,7 @@
             {% for device in child.devices.all %}
                 <div class="device-row">
                     <h3>{{ device.friendly_name }}</h3>
-                    <p>Extension {{ device.sip_extension }} · {% if device.is_active %}Enabled{% else %}Setup pending · your installer activates this phone{% endif %}
+                    <p>Extension {{ device.sip_extension }} · {% if device.setup_pending %}<a href="{% url 'directory:phone_setup_detail' device.enrollment.pk %}">Continue phone setup</a>{% elif device.is_active %}Enabled{% else %}Setup pending · your installer activates this phone{% endif %}
                     </p>
                     <div class="inline-actions">
                         <a class="button secondary"
@@ -40,7 +40,12 @@
                        href="{% url 'directory:landline_phonebook' landline.id %}">Print phonebook</a>
                 </div>
             {% endfor %}
+            {% if phone_enrollment_enabled %}
+            <a class="button" href="{% url 'directory:phone_setup_register' %}?person=child:{{ child.pk }}">Set up a WP816</a>
+            <a class="text-button" href="{% url 'directory:phone_create' child.id %}">Other phone · installer setup</a>
+            {% else %}
             <a class="button" href="{% url 'directory:phone_create' child.id %}">Add a phone</a>
+            {% endif %}
             <p class="form-note">Your installer connects and tests the physical phone. Enabled does not mean the phone is currently online.</p>
         </section>
         <section class="panel">

@@ -267,6 +267,7 @@ case "$*" in
   *'rev-parse HEAD'*) echo bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;;
   *'pg_dump'*) echo archive;;
   *'ps -q wireguard'*) echo wireguard-container;;
+  *'ps -q phone-profiles'*) echo profile-container;;
   *'ps --all -q'*|*'ps -q db'*) echo container;;
   *'.State.Status'*) echo running;;
   *'.State.Health.Status'*)
@@ -391,6 +392,31 @@ exit 0
         self.assertTrue(all("compose.wireguard.registry.yaml --profile wp816" in line for line in startups))
         self.assertTrue(all("--no-build --pull never --no-deps" in line for line in startups))
         self.assertNotIn("up -d db", calls)
+
+    def test_enrollment_requires_vpn_and_checked_release_before_start(self):
+        with (self.root / "config.sh").open("a") as stream:
+            stream.write("\nWP816_ENROLLMENT_ENABLED=1\n")
+        self.assertNotEqual(self.run_receiver().returncode, 0)
+        self.assertFalse(self.calls.exists())
+        self.enable_vpn()
+        result = self.run_receiver()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = self.calls.read_text()
+        stages = ["pull phone-provisioner phone-profiles", "org.opencontainers.image.revision", "pg_dump",
+            "--wait-timeout 180 web", "render_asterisk_config", "--wait-timeout 60 wireguard",
+            "--wait-timeout 60 phone-profiles", "--wait-timeout 180 phone-provisioner", "verify_http.py"]
+        self.assertEqual(sorted(calls.index(stage) for stage in stages), [calls.index(stage) for stage in stages])
+        startups = [line for line in calls.splitlines() if " up -d " in line]
+        self.assertTrue(all("compose.provisioning.registry.yaml --profile wp816" in line for line in startups))
+
+    def test_provisioner_failure_preserves_recovery_latch(self):
+        self.enable_vpn()
+        with (self.root / "config.sh").open("a") as stream:
+            stream.write("\nWP816_ENROLLMENT_ENABLED=1\n")
+        (self.root / "fail").write_text("--wait-timeout 180 phone-provisioner")
+        self.assertNotEqual(self.run_receiver().returncode, 0)
+        self.assertTrue((self.state / "failed").exists())
+        self.assertFalse((self.state / "deployed-revision").exists())
 
     def test_vpn_pull_and_start_failures_keep_the_recovery_latch(self):
         self.enable_vpn()

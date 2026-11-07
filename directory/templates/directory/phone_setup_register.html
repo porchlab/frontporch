@@ -1,0 +1,32 @@
+{% extends "directory/base.html" %}
+{% load static %}
+{% block title %}Register a phone · FrontPorch{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">PHONE SETUP · STEP 1</div><h1>Who’s picking up?</h1><p>Register the phone from its box label. You’ll connect it to home Wi-Fi next.</p></div></div>
+<section class="panel form-panel">
+    <form method="post" id="phone-registration">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% for field in form %}
+            {% if field.name == 'mac' %}
+        <div class="phone-scanner" data-phone-scanner>
+            <p class="form-note">On a mobile device, scan the barcodes labelled MAC and S/N to fill the fields below. Camera images stay on your device.</p>
+            <div class="inline-actions"><button class="button secondary" type="button" data-scan="mac">Scan MAC</button><button class="button secondary" type="button" data-scan="serial">Scan S/N</button><button class="text-button" type="button" data-scan-stop hidden>Stop camera</button></div>
+            <video data-scan-video playsinline muted hidden aria-label="Box-label camera preview"></video>
+            <p data-scan-message role="status" aria-live="polite"></p>
+        </div>
+            {% endif %}
+            <div class="field {% if field.errors %}invalid{% endif %}">
+                {{ field.label_tag }}{{ field }}
+                {% if field.help_text %}<div class="form-note" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</div>{% endif %}
+                {{ field.errors }}
+            </div>
+        {% endfor %}
+        <p class="form-note">Use the label’s MAC and S/N. FrontPorch does not need the phone’s admin password or your Wi-Fi password here.</p>
+        <button class="button" type="submit">Register phone</button>
+        <a class="text-button" href="{% url 'directory:phone_setup' %}">Back to phone setup</a>
+    </form>
+</section>
+<script src="{% static 'directory/vendor/zxing-browser.min.js' %}" defer></script>
+<script src="{% static 'directory/phone-setup.js' %}" defer></script>
+{% endblock %}

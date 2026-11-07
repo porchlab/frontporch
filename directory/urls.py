@@ -1,11 +1,16 @@
 from django.urls import path
 
-from . import views, portal, guardians, family_invitations, groups
+from . import views, portal, guardians, family_invitations, groups, phone_setup
 
 
 app_name = "directory"
 
 urlpatterns = [
+    path("phones/setup/", phone_setup.index, name="phone_setup"),
+    path("phones/setup/new/", phone_setup.register, name="phone_setup_register"),
+    path("phones/setup/<uuid:enrollment_id>/", phone_setup.detail, name="phone_setup_detail"),
+    path("phones/setup/<uuid:enrollment_id>/progress/", phone_setup.progress, name="phone_setup_progress"),
+    path("phones/setup/<uuid:enrollment_id>/check/", phone_setup.check_again, name="phone_setup_check"),
     path("conference-groups/<int:group_id>/invite/", groups.invite, name="group_invite"),
     path("group-invitations/<int:invitation_id>/", groups.review, name="group_review"),
     path("group-invitations/<int:invitation_id>/<str:action>/", groups.invitation_action, name="group_invitation_action"),

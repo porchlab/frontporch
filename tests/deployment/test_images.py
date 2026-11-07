@@ -11,15 +11,19 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @unittest.skipUnless(shutil.which("docker"), "Docker Compose CLI required")
 class ComposeTests(unittest.TestCase):
-    def config(self, registry=False, environment=None, vpn=False):
+    def config(self, registry=False, environment=None, vpn=False, enrollment=False):
         arguments = ["docker", "compose", "--env-file", str(ROOT / ".env.example"),
                      "-f", str(ROOT / "compose.yaml"), "-f", str(ROOT / "compose.public.yaml")]
         if vpn:
             arguments += ["-f", str(ROOT / "compose.wireguard.yaml")]
+        if enrollment:
+            arguments += ["-f", str(ROOT / "compose.provisioning.yaml")]
         if registry:
             arguments += ["-f", str(ROOT / "compose.registry.yaml")]
             if vpn:
                 arguments += ["-f", str(ROOT / "compose.wireguard.registry.yaml")]
+        if registry and enrollment:
+            arguments += ["-f", str(ROOT / "compose.provisioning.registry.yaml")]
         if vpn:
             arguments += ["--profile", "wp816"]
         return subprocess.run([*arguments, "config", "--format", "json"], env=environment,
@@ -88,3 +92,42 @@ class ComposeTests(unittest.TestCase):
         self.assertNotIn("config", worker_mounts)
         self.assertEqual(server["ports"][0]["host_ip"], "192.0.2.10")
         self.assertEqual(server["ports"][0]["protocol"], "udp")
+
+
+    def test_enrollment_isolates_provider_keys_and_public_profile_service(self):
+        environment = {**os.environ,
+            "FRONTPORCH_WEB_IMAGE": "ghcr.io/porchlab/frontporch@sha256:" + "c" * 64,
+            "FRONTPORCH_ASTERISK_IMAGE": "ghcr.io/porchlab/frontporch-asterisk@sha256:" + "d" * 64,
+            "FRONTPORCH_VPN_DIR": "/operator/private-vpn", "FRONTPORCH_VPN_BIND_IP": "192.0.2.10",
+            "WIREGUARD_SERVER_ADDRESS": "10.77.0.1/24", "WIREGUARD_SERVER_PUBLIC_KEY": "fixture-key",
+            "WIREGUARD_ENCRYPTION_KEY": "fixture-cipher", "WIREGUARD_ENDPOINT": "vpn.example.com:51820",
+            "FRONTPORCH_PROVISIONING_DIR": "/operator/private-provisioning",
+            "GDMS_USERNAME": "fixture-user", "GDMS_PASSWORD": "fixture-pass",
+            "GDMS_CLIENT_ID": "fixture-id", "GDMS_CLIENT_SECRET": "fixture-secret", "GDMS_ORG_ID": "1", "GDMS_SITE_ID": "2"}
+        result = self.config(registry=True, vpn=True, enrollment=True, environment=environment)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        config = json.loads(result.stdout)
+        services = config["services"]
+        for name in ("phone-profiles", "phone-provisioner"):
+            service = services[name]
+            self.assertEqual(service["image"], environment["FRONTPORCH_WEB_IMAGE"])
+            self.assertNotIn("build", service)
+            self.assertTrue(service["read_only"])
+            self.assertEqual(service["cap_drop"], ["ALL"])
+            self.assertFalse(service.get("cap_add"))
+            self.assertNotIn("network_mode", service)
+            self.assertFalse(service.get("privileged"))
+            self.assertFalse(service.get("ports"))
+            self.assertFalse(any("docker.sock" in m["source"] for m in service["volumes"]))
+        profiles = services["phone-profiles"]
+        self.assertEqual(set(profiles["environment"]), {"PHONE_PROFILE_DIR", "PHONE_RECEIPT_DIR"})
+        self.assertEqual(set(profiles["networks"]), {"profile_backend"})
+        self.assertTrue(config["networks"]["profile_backend"]["internal"])
+        self.assertIn("profile_backend", services["public-ingress"]["networks"])
+        mounts = {m["target"]: m for m in profiles["volumes"]}
+        self.assertTrue(mounts["/var/lib/frontporch-profiles"]["read_only"])
+        self.assertFalse(mounts["/var/lib/frontporch-receipts"].get("read_only"))
+        for name in ("web", "portal", "wireguard", "vpn-reconciler"):
+            self.assertFalse(services[name].get("environment", {}).get("GDMS_PASSWORD"))
+        self.assertFalse(services["portal"]["environment"].get("WIREGUARD_ENCRYPTION_KEY"))
+        self.assertEqual(services["phone-provisioner"]["environment"]["ASTERISK_AUTO_APPLY_CONFIG"], "false")

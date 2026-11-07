@@ -40,6 +40,7 @@
                         <span class="avatar yellow small-avatar">{{ guardian.display_name|first|upper }}</span>
                         <div>
                             <strong>{{ guardian.display_name }}</strong>
+                            {% if phone_enrollment_enabled %}<a href="{% url 'directory:phone_setup_register' %}?person=parent:{{ guardian.pk }}">Set up a phone</a>{% endif %}
                             <span>{{ guardian.email }}</span>
                         </div>
                         <span class="pill neutral">

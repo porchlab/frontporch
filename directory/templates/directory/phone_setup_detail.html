@@ -1,0 +1,36 @@
+{% extends "directory/base.html" %}
+{% load static %}
+{% block title %}Phone setup · FrontPorch{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">PHONE SETUP</div><h1>{{ enrollment.friendly_name }}</h1><p>For {{ enrollment.person_name }} · MAC ending {{ enrollment.mac|slice:'-6:' }}</p></div></div>
+<div class="settings-grid" data-phone-progress="{% url 'directory:phone_setup_progress' enrollment.pk %}" data-finished="{{ progress.finished|yesno:'true,false' }}">
+    <section class="panel" aria-live="polite" aria-atomic="true">
+        <h2 data-progress-title>{{ progress.title }}</h2>
+        <p data-progress-message>{{ progress.message }}</p>
+        <p data-progress-working {% if progress.finished %}hidden{% endif %}>You can leave this page and return from Phone setup. FrontPorch will keep working.</p>
+        <p data-progress-firmware {% if not progress.firmware %}hidden{% endif %}>Phone software: <span>{{ progress.firmware }}</span></p>
+        <p data-progress-downloaded {% if not progress.downloaded %}hidden{% endif %}>The phone has downloaded its FrontPorch settings. We’re checking its connection.</p>
+        <div data-progress-ready {% if progress.state != 'ready' %}hidden{% endif %}>
+            <p>Look for <strong>FrontPorch <span data-progress-extension>{{ progress.extension }}</span></strong> on the phone.</p>
+            <p>Dial <strong>100</strong> for an echo test. Say a few words; you should hear them back. Then try a call to an approved contact.</p>
+            {% if enrollment.assigned_parent_id %}<p>Incoming calls follow {{ enrollment.person_name }}’s calling preference in <a href="{% url 'directory:settings' %}">Family settings</a>.</p>{% endif %}
+            <p class="form-note">We verified the phone’s private connection and calling registration. The echo test checks the microphone and speaker.</p>
+        </div>
+        <p data-progress-stale hidden>We couldn’t refresh this page. Setup continues in the background. Reconnect this device to the Internet to see progress.</p>
+        <form method="post" action="{% url 'directory:phone_setup_check' enrollment.pk %}">{% csrf_token %}<button class="button secondary" data-progress-check {% if progress.state == 'ready' %}hidden{% endif %}>Check again</button></form>
+    </section>
+    <section class="panel">
+        <h2>Connect the phone to home Wi-Fi</h2>
+        <ol class="setup-instructions">
+            <li>Put the WP816 on its charger and open <strong>Quick Network Configuration</strong> on the phone. Choose the option to configure it with a mobile browser.</li>
+            <li>On your iPhone or other mobile device, join the Wi-Fi hotspot shown on the WP816 screen.</li>
+            <li>Wait for the Wi-Fi setup page to open. Choose your home network, enter its Wi-Fi password, and finish setup.</li>
+            <li>After the WP816 says <strong>Network connection success</strong>, reconnect your mobile device to its usual network and return here.</li>
+        </ol>
+        <details><summary>The Wi-Fi setup page hasn’t appeared</summary><p>Give the captive Wi-Fi screen a moment to open. On iPhone, open Settings → Wi-Fi → the information button beside the phone’s hotspot. Copy the Router address, then open that address in Safari.</p></details>
+        <p class="form-note">Keep the phone charging while setup runs. It may restart as its software and settings are applied. You don’t need to enter a server address or account password on the phone.</p>
+    </section>
+</div>
+<p class="section-footnote"><a href="{% url 'directory:phone_setup' %}">All phone setups</a></p>
+<script src="{% static 'directory/phone-setup.js' %}" defer></script>
+{% endblock %}

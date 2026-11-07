@@ -38,6 +38,18 @@ class GDMSClientTests(SimpleTestCase):
     def requests(self):
         return [c.args[0] for c in self.opener.open.call_args_list]
 
+    def test_live_details_require_followup_and_matching_identity(self):
+        live = {"device": {"mac": MAC, "softwareVersion": "1.0.3.39"}}
+        self.opener.open.side_effect = [response(self.token), ok(live), ok(live), ok({"device": {"mac": "020000000002"}})]
+        self.assertIsNone(self.client.live_device(MAC, first=True))
+        self.assertEqual(self.client.live_device(MAC, first=False)["softwareVersion"], "1.0.3.39")
+        with self.assertRaises(GDMSProtocolError):
+            self.client.live_device(MAC, first=False)
+        request = self.requests()[1]
+        self.assertEqual(urlsplit(request.full_url).path, "/oapi/v1.0.0/device/detail")
+        self.assertEqual(json.loads(request.data)["isFirst"], 1)
+        self.assertEqual(json.loads(self.requests()[2].data)["isFirst"], 0)
+
     def test_login_uses_post_and_hashes_locally(self):
         self.opener.open.return_value = response(self.token)
         self.client.authenticate()

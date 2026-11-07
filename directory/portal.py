@@ -32,7 +32,7 @@ def welcome(request):
 def _children(family):
     return (
         models.Child.objects.filter(family=family)
-        .prefetch_related("devices__dial_shortcuts", "blackout_periods", "landlines")
+        .prefetch_related("devices__dial_shortcuts", "devices__enrollment", "blackout_periods", "landlines")
         .order_by("name")
     )
 
@@ -54,7 +54,7 @@ def _context(parent, section):
         ).select_related("external_phone_number__dialable_extension"),
         "phone_done": bool(children)
         and all(
-            any(d.is_active for d in c.devices.all())
+            any(d.is_active and not d.setup_pending for d in c.devices.all())
             or any(l.is_active for l in c.landlines.all())
             for c in children
         ),

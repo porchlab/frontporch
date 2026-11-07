@@ -2,10 +2,15 @@
 
 ## Current implementation
 
+The opt-in [family setup flow](wp816-family-setup.md) now builds on this pilot.
+It adds the guardian registration page, durable worker, and isolated production
+profile service. The historical compatibility results below remain relevant.
+
+
 The first stage includes a tested GDMS UC API client, a read-only account/inventory
 check, a strict WP816 XML compiler, and an isolated, expiring single-phone HTTPS
-pilot. No parent enrollment page, production worker, public production profile
-service, or WireGuard container is enabled by this stage. No automatic network
+pilot. The pilot command itself does not enable production enrollment or a WireGuard
+container. No automatic network
 requests occur during Django startup.
 
 The [family peer model and staged server](wireguard-server.md) now provide the

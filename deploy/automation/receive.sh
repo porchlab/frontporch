@@ -32,6 +32,10 @@ policy_dir=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd) || exit 1
 # This file is private operator configuration, never supplied by the caller.
 . "$policy_dir/config.sh"
 case "${WP816_VPN_ENABLED:-0}" in 0|1) ;; *) echo 'Invalid host VPN enable setting.'; exit 64 ;; esac
+case "${WP816_ENROLLMENT_ENABLED:-0}" in 0|1) ;; *) echo 'Invalid host enrollment setting.'; exit 64 ;; esac
+if [ "${WP816_ENROLLMENT_ENABLED:-0}" = 1 ] && [ "${WP816_VPN_ENABLED:-0}" != 1 ]; then
+    echo 'Enrollment requires the private phone VPN.'; exit 64
+fi
 : "${DOCKER:?}" "${CHECKOUT:?}" "${STATE_DIR:?}" "${BACKUP_DIR:?}"
 : "${SSH_DIR:?}" "${ORIGIN:?}" "${REPOSITORY:?}" "${PROJECT:?}"
 : "${PYTHON_IMAGE:?}" "${GIT_IMAGE:?}"
@@ -49,6 +53,15 @@ git_tool() {
         "$GIT_IMAGE" -c safe.directory=/workspace -c core.hooksPath=/dev/null "$@"
 }
 compose() {
+    if [ "${WP816_ENROLLMENT_ENABLED:-0}" = 1 ]; then
+        "$DOCKER" compose --project-name "$PROJECT" --project-directory "$CHECKOUT" \
+            --env-file "$CHECKOUT/.env" --env-file "$images" -f "$CHECKOUT/compose.yaml" \
+            -f "$CHECKOUT/compose.public.yaml" -f "$CHECKOUT/compose.wireguard.yaml" \
+            -f "$CHECKOUT/compose.provisioning.yaml" -f "$CHECKOUT/compose.registry.yaml" \
+            -f "$CHECKOUT/compose.wireguard.registry.yaml" -f "$CHECKOUT/compose.provisioning.registry.yaml" \
+            --profile wp816 "$@"
+        return
+    fi
     if [ "${WP816_VPN_ENABLED:-0}" = 1 ]; then
         "$DOCKER" compose --project-name "$PROJECT" --project-directory "$CHECKOUT" \
             --env-file "$CHECKOUT/.env" --env-file "$images" -f "$CHECKOUT/compose.yaml" \
@@ -94,6 +107,9 @@ deploy() {
     if [ "${WP816_VPN_ENABLED:-0}" = 1 ]; then
         compose pull vpn-reconciler wireguard
     fi
+    if [ "${WP816_ENROLLMENT_ENABLED:-0}" = 1 ]; then
+        compose pull phone-provisioner phone-profiles
+    fi
     # Inspect metadata, never execute an image to validate it. Registry writers
     # remain trusted publishers; these labels are consistency checks.
     [ "$("$DOCKER" image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$web_image")" = "$revision" ]
@@ -130,6 +146,11 @@ deploy() {
         compose up -d --no-build --pull never --no-deps vpn-reconciler
         compose up -d --no-build --pull never --no-deps --wait --wait-timeout 60 wireguard
     fi
+    if [ "${WP816_ENROLLMENT_ENABLED:-0}" = 1 ]; then
+        stage provisioning
+        compose up -d --no-build --pull never --no-deps --wait --wait-timeout 60 phone-profiles
+        compose up -d --no-build --pull never --no-deps --wait --wait-timeout 180 phone-provisioner
+    fi
     stage verification
     "$DOCKER" run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
         --volume "$policy_dir/verify_http.py:/policy/verify_http.py:ro" \
@@ -156,6 +177,15 @@ deploy() {
             [ "$("$DOCKER" inspect --format '{{.State.Status}}' "$container")" = running ]
         done
         container=$(compose ps -q wireguard)
+        [ "$("$DOCKER" inspect --format '{{.State.Health.Status}}' "$container")" = healthy ]
+    fi
+    if [ "${WP816_ENROLLMENT_ENABLED:-0}" = 1 ]; then
+        for service in phone-profiles phone-provisioner; do
+            container=$(compose ps --all -q "$service")
+            [ -n "$container" ]
+            [ "$("$DOCKER" inspect --format '{{.State.Status}}' "$container")" = running ]
+        done
+        container=$(compose ps -q phone-profiles)
         [ "$("$DOCKER" inspect --format '{{.State.Health.Status}}' "$container")" = healthy ]
     fi
     cp "$images" "$STATE_DIR/deployed-images.env.tmp"

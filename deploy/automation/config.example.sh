@@ -13,3 +13,6 @@ REPOSITORY=porchlab/frontporch
 ORIGIN=git@github.com:porchlab/frontporch.git
 PYTHON_IMAGE=python@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e
 GIT_IMAGE=alpine/git@sha256:8d6ede0b29c666ac111c732468c4d758c1c08f054f211dd98f15d421a6ffab40
+
+# Requires reviewed receiver install, VPN enabled, private spool and GDMS env.
+WP816_ENROLLMENT_ENABLED=0

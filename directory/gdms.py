@@ -283,3 +283,25 @@ class GDMSClient:
         return self._request("POST", "/device/config/xml", form={
             "mac": wire_mac(mac), "orgId": str(positive_id(org_id)), "applyConfig": "true",
         }, xml=xml)
+
+    def live_device(self, mac, *, first):
+        """Start a fresh read, then poll within one minute. Inventory is cached.
+
+        The initial response is deliberately ignored; only the following poll
+        may establish a firmware observation for this request cycle.
+        """
+        data = self._request("POST", "/device/detail", data={
+            "mac": wire_mac(mac), "isFirst": 1 if first else 0,
+        })
+        if first or data in (None, "", {}):
+            return None
+        if not isinstance(data, dict) or not isinstance(data.get("device"), dict):
+            raise GDMSProtocolError("GDMS live device response is invalid.")
+        device = data["device"]
+        try:
+            matches = normalize_mac(device.get("mac", "")) == normalize_mac(mac)
+        except (ValueError, AttributeError):
+            matches = False
+        if not matches:
+            raise GDMSProtocolError("GDMS live device identity does not match.")
+        return device
