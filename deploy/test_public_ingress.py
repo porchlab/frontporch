@@ -64,7 +64,7 @@ HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
         cls.backend = cls.prefix + "-backend"
         docker(
             "run", "-d", "--name", cls.backend, "--network", cls.prefix,
-            "--network-alias", "portal", "-v", f"{fixture}:/server.py:ro",
+            "--network-alias", "portal", "--network-alias", "phone-profiles", "-v", f"{fixture}:/server.py:ro",
             "python:3.12-slim-bookworm", "python", "/server.py",
         )
         cls.addClassCleanup(docker, "rm", "-f", cls.backend)
@@ -135,6 +135,17 @@ HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
         status, headers, _ = self.request("/welcome/", **{"X-Forwarded-Proto": "http"})
         self.assertEqual(status, 301)
         self.assertEqual(headers["Location"], "https://front.porchlab.app/welcome/")
+
+    def test_profile_route_does_not_forward_parent_session_cookies(self):
+        status, headers, body = self.request("/phone-profiles/fixture/cfg020000000001.xml", **{
+            "Cookie": "parent-session=private", "Authorization": "Basic fixture", "Forwarded": "for=spoofed"
+        })
+        self.assertEqual(status, 200)
+        forwarded = {key.lower(): value for key, value in json.loads(body).items()}
+        self.assertNotIn("cookie", forwarded)
+        self.assertNotIn("forwarded", forwarded)
+        self.assertEqual(forwarded["authorization"], "Basic fixture")
+        self.assertIn("no-store", headers["Cache-Control"])
 
     def test_proxy_overwrites_untrusted_forwarding_headers(self):
         status, _, body = self.request("/", **{

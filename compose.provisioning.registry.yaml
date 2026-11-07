@@ -1,0 +1,7 @@
+services:
+  phone-provisioner:
+    build: !reset null
+    image: ${FRONTPORCH_WEB_IMAGE:?set the release image digest}
+  phone-profiles:
+    build: !reset null
+    image: ${FRONTPORCH_WEB_IMAGE:?set the release image digest}

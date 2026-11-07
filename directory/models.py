@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.utils import timezone
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction, connection
@@ -9,6 +10,18 @@ import uuid
 import ipaddress
 
 from .timezones import DEFAULT_FAMILY_TIMEZONE, validate_timezone
+
+
+class PhoneEnrollmentState(models.TextChoices):
+    QUEUED = "queued", "Registering your phone"
+    WIFI = "wifi", "Connect your phone to Wi-Fi"
+    FIRMWARE = "firmware", "Checking the phone software"
+    UPGRADING = "upgrading", "Updating the phone software"
+    CONFIGURING = "configuring", "Setting up FrontPorch"
+    CONNECTING = "connecting", "Waiting for the phone to connect"
+    READY = "ready", "Ready for a test call"
+    HELP = "help", "Setup needs attention"
+    CANCELLED = "cancelled", "Setup cancelled"
 
 
 def lock_extension_namespace():
@@ -503,6 +516,11 @@ class Device(TimeStampedModel):
     def owner_display_name(self):
         owner = self.owner
         return str(owner) if owner else "unassigned"
+
+    @property
+    def setup_pending(self):
+        enrollment = getattr(self, "enrollment", None)
+        return enrollment is not None and enrollment.state != PhoneEnrollmentState.READY
 
     @property
     def owning_family(self):
@@ -1736,3 +1754,79 @@ class GuardianInvitation(TimeStampedModel):
         from django.utils import timezone
 
         return self.status == "pending" and self.expires_at > timezone.now()
+
+
+class PhoneEnrollment(TimeStampedModel):
+    """A durable family claim. Provider actions run only in the private worker."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    family = models.ForeignKey(Family, on_delete=models.PROTECT, related_name="phone_enrollments")
+    requested_by = models.ForeignKey(Parent, on_delete=models.PROTECT)
+    assigned_child = models.ForeignKey(Child, null=True, blank=True, on_delete=models.PROTECT)
+    assigned_parent = models.ForeignKey(Parent, null=True, blank=True, on_delete=models.PROTECT, related_name="phone_enrollments")
+    device = models.OneToOneField(Device, null=True, blank=True, on_delete=models.PROTECT, related_name="enrollment")
+    friendly_name = models.CharField(max_length=80)
+    mac = models.CharField(max_length=12, unique=True)
+    serial = models.CharField(max_length=64, unique=True)
+    state = models.CharField(max_length=16, choices=PhoneEnrollmentState.choices, default=PhoneEnrollmentState.QUEUED)
+    problem = models.CharField(max_length=40, blank=True)
+    consecutive_failures = models.PositiveIntegerField(default=0)
+    org_id = models.PositiveBigIntegerField(null=True, blank=True)
+    site_id = models.PositiveBigIntegerField(null=True, blank=True)
+    gdms_added_at = models.DateTimeField(null=True, blank=True)
+    detail_started_at = models.DateTimeField(null=True, blank=True)
+    firmware_version = models.CharField(max_length=32, blank=True)
+    firmware_verified_at = models.DateTimeField(null=True, blank=True)
+    pbx_applied_at = models.DateTimeField(null=True, blank=True)
+    encrypted_bootstrap = models.TextField(blank=True)
+    profile_expires_at = models.DateTimeField(null=True, blank=True)
+    profile_downloaded_at = models.DateTimeField(null=True, blank=True)
+    connected_at = models.DateTimeField(null=True, blank=True)
+    next_attempt_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [models.CheckConstraint(
+            condition=~(models.Q(assigned_child__isnull=False) & models.Q(assigned_parent__isnull=False)),
+            name="enrollment_at_most_one_person",
+        )]
+
+    def __str__(self):
+        return f"{self.friendly_name} ({self.get_state_display()})"
+
+    @property
+    def person_name(self):
+        return (self.assigned_child.name if self.assigned_child_id else
+                self.assigned_parent.display_name if self.assigned_parent_id else "Your household")
+
+    @property
+    def provider_name(self):
+        # Never put family or person names in GDMS.
+        return "fp-" + self.pk.hex
+
+    def clean(self):
+        from .gdms import normalize_mac
+        import re
+        try:
+            self.mac = normalize_mac(self.mac)
+        except ValueError as error:
+            raise ValidationError({"mac": str(error)}) from None
+        if not re.fullmatch(r"[A-Z0-9]{8,64}", self.serial):
+            raise ValidationError({"serial": "Enter the S/N printed on the box label."})
+        if (self.requested_by.family_id != self.family_id
+                or (self.assigned_child_id and self.assigned_child.family_id != self.family_id)
+                or (self.assigned_parent_id and self.assigned_parent.family_id != self.family_id)
+                or (self.device_id and self.device.owning_family.pk != self.family_id)):
+            raise ValidationError("The phone and its owner must belong to this family.")
+
+
+class PhoneEnrollmentOperation(TimeStampedModel):
+    """Persist intent before a provider write; unknown outcomes are not retried."""
+
+    enrollment = models.ForeignKey(PhoneEnrollment, on_delete=models.CASCADE, related_name="operations")
+    kind = models.CharField(max_length=16, choices=[(x, x) for x in ("add", "upgrade", "bootstrap", "retire")])
+    status = models.CharField(max_length=12, choices=[(x, x) for x in ("started", "accepted", "rejected")], default="started")
+    reference = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["enrollment", "kind"], name="one_enrollment_operation")]

@@ -579,3 +579,34 @@ class PortalHistoryAdmin(admin.ModelAdmin):
             if self.model in {GuardianInvitation, FamilyInvitation}
             else ()
         )
+
+
+from .models import PhoneEnrollment, PhoneEnrollmentOperation
+
+
+class EnrollmentOperationInline(admin.TabularInline):
+    model = PhoneEnrollmentOperation
+    fields = ("kind", "status", "reference", "created_at", "updated_at")
+    readonly_fields = fields
+    extra = 0
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(PhoneEnrollment)
+class PhoneEnrollmentAdmin(admin.ModelAdmin):
+    list_display = ("friendly_name", "family", "state", "problem", "firmware_version", "updated_at")
+    list_filter = ("state",)
+    search_fields = ("mac", "serial", "friendly_name", "family__name")
+    exclude = ("encrypted_bootstrap",)
+    readonly_fields = tuple(f.name for f in PhoneEnrollment._meta.fields if f.name != "encrypted_bootstrap")
+    inlines = (EnrollmentOperationInline,)
+    actions = None
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

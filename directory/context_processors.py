@@ -14,4 +14,5 @@ def portal(request):
         ),
         "portal_demo_url": settings.FRONTPORCH_DEMO_URL,
         "portal_allow_registration": settings.FRONTPORCH_ALLOW_REGISTRATION,
+        "phone_enrollment_enabled": settings.PHONE_ENROLLMENT_ENABLED,
     }

@@ -246,3 +246,11 @@
     }
     .sidebar-bottom { display: none; }
 }
+
+/* Phone enrollment keeps the existing portal's forms and panels. */
+.phone-scanner { margin: 1.5rem 0; }
+.phone-scanner video { width: 100%; max-height: 18rem; object-fit: cover; border-radius: 12px; margin-top: 1rem; background: #182129; }
+.setup-instructions { padding-left: 1.4rem; }
+.setup-instructions li { margin: 1rem 0; line-height: 1.65; }
+[data-phone-progress] details { margin: 1.25rem 0; }
+[data-phone-progress] summary { cursor: pointer; font-weight: 700; }

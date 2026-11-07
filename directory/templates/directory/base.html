@@ -48,6 +48,9 @@
                     <nav aria-label="Family navigation">
                         {% include "directory/nav.html" with name="Overview" route="directory:dashboard" key="overview" symbol="home" %}
                         {% include "directory/nav.html" with name="Children & phones" route="directory:children" key="children" symbol="users" %}
+                        {% if phone_enrollment_enabled %}
+                        {% include "directory/nav.html" with name="Phone setup" route="directory:phone_setup" key="phones" symbol="phone" %}
+                        {% endif %}
                         {% include "directory/nav.html" with name="Family connections" route="directory:connections" key="circle" symbol="leaf" %}
                         {% include "directory/nav.html" with name="Family directory" route="directory:family_directory" key="directory" symbol="search" %}
                         {% include "directory/nav.html" with name="Invitations" route="directory:invitations" key="invites" symbol="mail" %}

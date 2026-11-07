@@ -261,3 +261,12 @@ FRONTPORCH_DEMO_URL = os.environ.get(
 ).strip()
 # Enables invited registration only; there is no open signup route.
 FRONTPORCH_ALLOW_REGISTRATION = True
+
+# Self-service enrollment is opt-in; provider secrets remain worker-only.
+PHONE_ENROLLMENT_ENABLED = env_bool("PHONE_ENROLLMENT_ENABLED", default=False)
+GDMS_ORG_ID = os.environ.get("GDMS_ORG_ID", "")
+GDMS_SITE_ID = os.environ.get("GDMS_SITE_ID", "")
+PHONE_PROFILE_PUBLIC_URL = os.environ.get("PHONE_PROFILE_PUBLIC_URL", "")
+PHONE_PROFILE_DIR = os.environ.get("PHONE_PROFILE_DIR", "")
+PHONE_RECEIPT_DIR = os.environ.get("PHONE_RECEIPT_DIR", "")
+WP816_FIRMWARE_URL = os.environ.get("WP816_FIRMWARE_URL", "")

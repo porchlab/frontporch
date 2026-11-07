@@ -37,7 +37,7 @@ Ready to explore the code? Follow [Local Setup](#local-setup), or read the [arch
 
 FrontPorch is an early pilot project. Running it for real families still requires technical setup and ongoing care from an operator.
 
-The repository currently contains a Django project, foundational domain models, Django Admin exposure, deterministic Asterisk configuration generation, tests, and Docker Compose scaffolding for Django, PostgreSQL, and Asterisk. It includes a Django parent portal and a deployment, testing, and rollback runbook for the optional public portal. It does not yet include production provisioning automation, SIP trunk account management, PBX reload hardening, emergency calling, or a complete host-provisioning runbook.
+The repository currently contains a Django project, foundational domain models, Django Admin exposure, deterministic Asterisk configuration generation, tests, and Docker Compose scaffolding for Django, PostgreSQL, and Asterisk. It includes a Django parent portal and a deployment, testing, and rollback runbook for the optional public portal. It includes opt-in WP816 enrollment for a supervised hardware pilot. It does not yet include SIP trunk account management, PBX reload hardening, emergency calling, or a complete host-provisioning runbook.
 
 This repository shares the application source and public examples. Real neighborhood configuration belongs outside the public repo.
 
@@ -51,8 +51,9 @@ Family settings appears with the other main navigation links. On narrow screens,
 the navigation wraps so every destination stays visible without swiping sideways.
 The portal provides children
 and phones, exact child-to-child invitations, private family discovery, contacts,
-quiet hours, dial shortcuts, guardian membership, and family settings. New phone
-reservations require installer activation. See the [implementation and upgrade
+quiet hours, dial shortcuts, guardian membership, and family settings. With the opt-in WP816 enrollment service, guardians can register a phone for a
+child, parent, or household through **Phone setup**. Other phone reservations
+require installer activation. See the [WP816 family setup guide](docs/operations/wp816-family-setup.md). See the [implementation and upgrade
 guide](docs/parent-ui-implementation.md) before deploying this version.
 Every guardian has a user account. Password recovery, email management, and optional
 Google/Apple sign-in use django-allauth; see the [guardian account upgrade and
@@ -146,6 +147,7 @@ Django models
 - [Automatic production deployment and merge controls](docs/operations/automatic-deployment.md)
 - [Browser demo: Cloudflare Pages publishing and verification](ui-prototype/deploy/cloudflare-pages.md)
 - [GL.iNet Opal router setup checklist](docs/operations/opal-router-checklist.md)
+- [WP816 family registration and deployment](docs/operations/wp816-family-setup.md)
 - [WP816 automated onboarding: GDMS compatibility gate](docs/operations/wp816-onboarding.md)
 - [Family WireGuard peers and staged QNAP migration](docs/operations/wireguard-server.md)
 

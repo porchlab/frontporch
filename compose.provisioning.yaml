@@ -1,0 +1,105 @@
+# Opt-in family WP816 enrollment. Requires the reviewed WireGuard overlay.
+services:
+  web:
+    environment:
+      PHONE_ENROLLMENT_ENABLED: "true"
+  portal:
+    environment:
+      PHONE_ENROLLMENT_ENABLED: "true"
+      # Neither portal may call GDMS. Only the worker gets provider credentials.
+      GDMS_USERNAME: ""
+      GDMS_PASSWORD: ""
+      GDMS_CLIENT_ID: ""
+      GDMS_CLIENT_SECRET: ""
+  phone-provisioner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: [python, manage.py, provision_phones]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-frontporch}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-frontporch}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: "false"
+      PHONE_ENROLLMENT_ENABLED: "true"
+      GDMS_REGION: ${GDMS_REGION:-us}
+      GDMS_USERNAME: ${GDMS_USERNAME:?set GDMS_USERNAME}
+      GDMS_PASSWORD: ${GDMS_PASSWORD:?set GDMS_PASSWORD}
+      GDMS_CLIENT_ID: ${GDMS_CLIENT_ID:?set GDMS_CLIENT_ID}
+      GDMS_CLIENT_SECRET: ${GDMS_CLIENT_SECRET:?set GDMS_CLIENT_SECRET}
+      GDMS_ORG_ID: ${GDMS_ORG_ID:?set GDMS_ORG_ID}
+      GDMS_SITE_ID: ${GDMS_SITE_ID:?set GDMS_SITE_ID}
+      WP816_FIRMWARE_URL: https://firmware.grandstream.com/wp8x6fw.bin
+      PHONE_PROFILE_PUBLIC_URL: https://${FRONTPORCH_PUBLIC_HOST:-front.porchlab.app}/phone-profiles
+      PHONE_PROFILE_DIR: /var/lib/frontporch-profiles
+      PHONE_RECEIPT_DIR: /var/lib/frontporch-receipts
+      WIREGUARD_SERVER_ADDRESS: ${WIREGUARD_SERVER_ADDRESS:?set VPN server address/subnet}
+      WIREGUARD_ENCRYPTION_KEY: ${WIREGUARD_ENCRYPTION_KEY:?set private peer encryption key}
+      WIREGUARD_SERVER_PUBLIC_KEY: ${WIREGUARD_SERVER_PUBLIC_KEY:?set VPN server public key}
+      WIREGUARD_ENDPOINT: ${WIREGUARD_ENDPOINT:?set public UDP endpoint}
+      ASTERISK_AUTO_APPLY_CONFIG: "false"
+      ASTERISK_AMI_HOST: ${ASTERISK_AMI_HOST:?set ASTERISK_AMI_HOST}
+      ASTERISK_AMI_PORT: ${ASTERISK_AMI_PORT:-5038}
+      ASTERISK_AMI_USERNAME: ${ASTERISK_AMI_USERNAME:?set ASTERISK_AMI_USERNAME}
+      ASTERISK_AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:?set ASTERISK_AMI_PASSWORD}
+      ASTERISK_AMI_TIMEOUT: ${ASTERISK_AMI_TIMEOUT:-5}
+      ASTERISK_GENERATED_CONFIG_DIR: /etc/asterisk/conf.d
+      ASTERISK_CUSTOM_SOUNDS_DIR: /var/lib/asterisk/sounds/frontporch
+      ASTERISK_OUTBOUND_CALLER_ID: ${ASTERISK_OUTBOUND_CALLER_ID:-}
+      ASTERISK_TTS_ENGINE_SIGNATURE: ${ASTERISK_TTS_ENGINE_SIGNATURE:-piper-tts-1.7.0_en_US-ljspeech-medium-f5a6e9094787_sox-14.4.2+git20190427-3.5}
+      ASTERISK_TTS_MODEL_PATH: ${ASTERISK_TTS_MODEL_PATH:-/opt/frontporch/piper/en_US-ljspeech-medium.onnx}
+      ASTERISK_TTS_LENGTH_SCALE: ${ASTERISK_TTS_LENGTH_SCALE:-1.0}
+      ASTERISK_TTS_NOISE_SCALE: ${ASTERISK_TTS_NOISE_SCALE:-0.667}
+      ASTERISK_TTS_NOISE_W_SCALE: ${ASTERISK_TTS_NOISE_W_SCALE:-0.8}
+      ASTERISK_TTS_RANDOM_SEED: ${ASTERISK_TTS_RANDOM_SEED:-1729}
+      ASTERISK_TTS_VOICE: ${ASTERISK_TTS_VOICE:-en_US-ljspeech-medium}
+      ASTERISK_TTS_VOLUME: ${ASTERISK_TTS_VOLUME:-1.0}
+      TZ: ${TZ:-America/New_York}
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m
+    volumes:
+      - ${FRONTPORCH_PROVISIONING_DIR:?set private provisioning directory}/profiles:/var/lib/frontporch-profiles
+      - ${FRONTPORCH_PROVISIONING_DIR:?set private provisioning directory}/receipts:/var/lib/frontporch-receipts:ro
+      - ${ASTERISK_CONF_D_DIR:?set ASTERISK_CONF_D_DIR}:/etc/asterisk/conf.d
+      - ${ASTERISK_CUSTOM_SOUNDS_DIR:-./asterisk/sounds}:/var/lib/asterisk/sounds/frontporch
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import json,time; from pathlib import Path; at=json.loads(Path('/var/lib/frontporch-profiles/worker-health.json').read_text())['at']; raise SystemExit(0 if 0 <= time.time()-at < 600 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+  phone-profiles:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: [gunicorn, frontporch.phone_profiles:application, --bind, "0.0.0.0:8000", --workers, "1", --threads, "4", --timeout, "15", --access-logfile, /dev/null, --error-logfile, /dev/null]
+    environment:
+      PHONE_PROFILE_DIR: /var/lib/frontporch-profiles
+      PHONE_RECEIPT_DIR: /var/lib/frontporch-receipts
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=8m
+    volumes:
+      - ${FRONTPORCH_PROVISIONING_DIR:?set private provisioning directory}/profiles:/var/lib/frontporch-profiles:ro
+      - ${FRONTPORCH_PROVISIONING_DIR:?set private provisioning directory}/receipts:/var/lib/frontporch-receipts
+    networks: [profile_backend]
+    healthcheck:
+      test: [CMD, python, -c, "import socket; socket.create_connection(('127.0.0.1', 8000), timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+  public-ingress:
+    networks:
+      - profile_backend
+networks:
+  profile_backend:
+    internal: true
