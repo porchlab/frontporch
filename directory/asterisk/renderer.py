@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from frontporch.vpn_config import private_address
 
 from directory.asterisk.menus import external_caller_menu_shortcuts
 from directory.asterisk.tts import (
@@ -28,12 +29,17 @@ class AsteriskConfigRenderer:
                     f"auth={endpoint.auth_name}",
                     f"aors={endpoint.aor_name}",
                     f'callerid="{endpoint.owner_display_name}" <{endpoint.extension}>',
+                    *([f"media_address={private_address(endpoint.media_address)}",
+                       "bind_rtp_to_media_address=no"] if endpoint.media_address else []),
                     "",
                     f"[{endpoint.auth_name}](auth-userpass)",
                     f"username={endpoint.username}",
                     f"password={endpoint.secret}",
                     "",
                     f"[{endpoint.aor_name}](aor-single-reg)",
+                    # Legacy phones need no new handset setting: PBX-originated
+                    # OPTIONS preserve their SIP mapping through the VPN NAT.
+                    *(["qualify_frequency=25", "qualify_timeout=3.0"] if endpoint.media_address else []),
                     "",
                 ]
             )

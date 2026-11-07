@@ -19,6 +19,7 @@ from directory.models import (
     FamilyContact,
     Parent,
     PublicPhoneNumber,
+    WireGuardPeer,
 )
 
 
@@ -32,6 +33,8 @@ from directory.models import (
 @receiver(post_save, sender=ChildLandlineDialShortcut)
 @receiver(post_save, sender=ConferenceGroup)
 @receiver(post_save, sender=Device)
+@receiver(post_save, sender=WireGuardPeer)
+@receiver(post_delete, sender=WireGuardPeer)
 @receiver(post_save, sender=ExternalPhoneNumber)
 @receiver(post_save, sender=ExternalNumberExtension)
 @receiver(post_save, sender=FamilyContact)

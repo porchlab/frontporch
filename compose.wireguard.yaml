@@ -1,0 +1,98 @@
+# Staged server for the WP816 compatibility gate. Opt-in only.
+# Include before compose.registry.yaml in an owner-reviewed production rollout.
+# The application release image already contains the small VPN runtime/tools.
+services:
+  web:
+    environment:
+      WIREGUARD_SERVER_ADDRESS: ${WIREGUARD_SERVER_ADDRESS:?set VPN server address/subnet}
+      WIREGUARD_ENCRYPTION_KEY: ${WIREGUARD_ENCRYPTION_KEY:?set private peer encryption key}
+      WIREGUARD_SERVER_PUBLIC_KEY: ${WIREGUARD_SERVER_PUBLIC_KEY:?set VPN server public key}
+      WIREGUARD_ENDPOINT: ${WIREGUARD_ENDPOINT:?set public UDP endpoint}
+    healthcheck:
+      test: [CMD, python, -c, "import socket; socket.create_connection(('127.0.0.1', 8000), timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+
+  # The public portal also renders PBX configuration after authorized changes.
+  portal:
+    environment:
+      WIREGUARD_SERVER_ADDRESS: ${WIREGUARD_SERVER_ADDRESS:?set VPN server address/subnet}
+
+  vpn-reconciler:
+    profiles: [wp816]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: [python, manage.py, reconcile_wireguard]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-frontporch}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-frontporch}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY}
+      DJANGO_DEBUG: "false"
+      WIREGUARD_ENABLED: "true"
+      WIREGUARD_SERVER_ADDRESS: ${WIREGUARD_SERVER_ADDRESS:?set VPN server address/subnet}
+      WIREGUARD_ENCRYPTION_KEY: ${WIREGUARD_ENCRYPTION_KEY:?set private peer encryption key}
+      WIREGUARD_NETWORK_FILE: /etc/frontporch-vpn-network.json
+      WIREGUARD_DESIRED_DIR: /var/lib/frontporch-vpn-desired
+      WIREGUARD_OBSERVED_DIR: /var/lib/frontporch-vpn-observed
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=4m
+    volumes:
+      # No server private key, Docker socket, or network-administration capability.
+      - ${FRONTPORCH_VPN_DIR:?set private VPN directory}/config/network.json:/etc/frontporch-vpn-network.json:ro
+      - ${FRONTPORCH_VPN_DIR:?set private VPN directory}/desired:/var/lib/frontporch-vpn-desired
+      - ${FRONTPORCH_VPN_DIR:?set private VPN directory}/observed:/var/lib/frontporch-vpn-observed:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  wireguard:
+    profiles: [wp816]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: [python, -m, frontporch.vpn_runtime]
+    environment:
+      FRONTPORCH_VPN_CONTAINER: "1"
+    cap_drop: [ALL]
+    # NET_RAW is required by the legacy iptables control socket on this host.
+    cap_add: [NET_ADMIN, NET_RAW]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs:
+      - /run:rw,noexec,nosuid,nodev,size=4m,mode=0700
+      - /tmp:rw,noexec,nosuid,nodev,size=4m,mode=0700
+    sysctls:
+      net.ipv4.ip_forward: "1"
+      net.ipv6.conf.all.disable_ipv6: "1"
+      net.ipv6.conf.default.disable_ipv6: "1"
+    ports:
+      - ${FRONTPORCH_VPN_BIND_IP:?set private host bind IP}:${FRONTPORCH_VPN_PORT:-51821}:51821/udp
+    volumes:
+      - ${FRONTPORCH_VPN_DIR:?set private VPN directory}/config:/etc/frontporch-vpn:ro
+      - ${FRONTPORCH_VPN_DIR:?set private VPN directory}/desired:/var/lib/frontporch-vpn-desired:ro
+      - ${FRONTPORCH_VPN_DIR:?set private VPN directory}/observed:/var/lib/frontporch-vpn
+    networks:
+      phone_vpn:
+        ipv4_address: ${FRONTPORCH_VPN_CONTAINER_IP:-10.77.1.2}
+    healthcheck:
+      test: [CMD, python, -c, "from frontporch.vpn_runtime import healthy; raise SystemExit(0 if healthy() else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+networks:
+  phone_vpn:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${FRONTPORCH_VPN_BRIDGE_SUBNET:-10.77.1.0/29}
+          gateway: ${FRONTPORCH_VPN_PBX_IP:-10.77.1.1}

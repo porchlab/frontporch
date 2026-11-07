@@ -18,6 +18,7 @@ flowchart LR
     Phone["Analog corded phone"] --> ATA["Grandstream HT802 ATA"]
     ATA --> Gateway["Family gateway running WireGuard"]
     Gateway --> WireGuard["Private WireGuard network"]
+    WP816["WP816 Wi-Fi phone with WireGuard"] --> WireGuard
     WireGuard --> Asterisk["Asterisk PBX"]
     Operator["Operator"] --> Tailscale["Private Tailscale network"]
     Tailscale --> Admin["Private Django admin and server maintenance"]
@@ -114,7 +115,7 @@ The hand-written configuration under `asterisk/etc/` provides local scaffolding 
 
 ## Networking
 
-ATA gateways use WireGuard to reach Asterisk. Operators use Tailscale for the
+ATA gateways and WP816 phones use WireGuard to reach Asterisk. Operators use Tailscale for the
 private web service, Django admin, and server maintenance. Parents may use the
 public HTTPS portal without a VPN; see [ADR-011](docs/architecture/ADR-011-public-parent-portal.md).
 
@@ -122,15 +123,28 @@ Design assumptions:
 
 - SIP is not exposed to the public Internet.
 - Homes do not configure port forwarding.
-- Each family has a dedicated gateway on the private network.
+- Each family owns one or more private network connections, through a gateway or a phone with built-in WireGuard.
 - Family SIP and media traffic reaches the PBX over WireGuard.
 - Device identity should be tied to provisioned hardware, not to user-entered secrets alone.
 
-The preferred home gateway is a small GL.iNet router running WireGuard. It connects to the family's existing Internet service and provides private connectivity for the ATA and future neighborhood services.
+The WP816 combines Wi-Fi, WireGuard, and SIP in one handset and is the preferred
+hardware for automated phone onboarding. Existing analog phones can continue
+using an ATA behind a small GL.iNet WireGuard gateway connected to the family's
+Internet service.
 
 The same gateway may later provide a private Wi-Fi network for community applications such as Minecraft, shared file storage, AI services, or local web apps.
 
-Future gateway provisioning should be automatable from FrontPorch. The long-term direction is to track gateway inventory, family assignment, device naming, WireGuard peers and key lifecycle, provisioning status, SIP credentials, and generated gateway artifacts. Families should not have to manage VPN configuration themselves.
+`WireGuardPeer` belongs to a family and records manual or GDMS provisioning.
+Manual gateways may serve multiple phones; each GDMS-managed peer serves one
+physical phone. The private admin manages both together, including revocation,
+encrypted recoverable client keys, and importing existing peers. The staged
+Docker server receives bounded snapshots from a private reconciler. See the
+[WireGuard migration runbook](docs/operations/wireguard-server.md) for the network
+boundary and required live acceptance tests.
+
+Family self-service registration and durable firmware-first GDMS onboarding
+remain the next stage after the [WP816 compatibility gate](docs/operations/wp816-onboarding.md).
+Families should not have to manage VPN configuration themselves.
 
 ## Security Model
 
