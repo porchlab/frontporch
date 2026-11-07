@@ -302,7 +302,10 @@ class EnrollmentWorker:
     def configure(self, enrollment, now):
         entry = enrollment.operations.filter(kind="bootstrap").first()
         if entry:
-            save(enrollment, state=State.CONNECTING)
+            if entry.status == "rejected":
+                help_needed(enrollment, "service")
+            else:
+                save(enrollment, state=State.CONNECTING)
             return
         # Do not release secrets based on an old or cached observation.
         if not enrollment.firmware_verified_at or now - enrollment.firmware_verified_at > timedelta(minutes=2):

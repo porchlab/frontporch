@@ -238,6 +238,16 @@ class EnrollmentWorkerTests(TestCase):
         self.client.configure_xml.assert_called_once()
         self.assertEqual(self.enrollment.state, State.CONNECTING)
 
+    def test_rejected_bootstrap_revokes_the_unused_profile(self):
+        self.verified()
+        self.client.configure_xml.side_effect = GDMSAPIError(40003)
+        with self.assertRaises(GDMSAPIError):
+            self.tick()
+        self.tick()
+        self.assertEqual(self.enrollment.state, State.HELP)
+        self.assertFalse(profile_path(self.enrollment).exists())
+        self.client.configure_xml.assert_called_once()
+
     def test_ready_requires_download_fresh_handshake_and_contact_then_revokes_profile(self):
         self.configured()
         self.contact.return_value = True
