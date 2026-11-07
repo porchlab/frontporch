@@ -14,6 +14,43 @@ def inside(mode):
     from django.test import Client
 
     call_command("check")
+    if mode.startswith("storage-"):
+        import json
+        from pathlib import Path
+        from frontporch.provisioning_storage import check_worker_health, ProvisioningStorageError
+        config, sounds, profiles, receipts = map(Path, ("/storage/config", "/storage/sounds", "/storage/profiles", "/storage/receipts"))
+        if mode == "storage-seed":
+            (sounds / "tts").mkdir(exist_ok=True)
+            for path in (config, sounds, sounds / "tts"):
+                os.chown(path, 1000, 1000)
+                path.chmod(0o755)
+            for path in (profiles, receipts):
+                path.chmod(0o700)
+            (config / "existing.conf").write_text("; preserve existing generated files\n")
+            (profiles / "worker-health.json").write_text(json.dumps({"at": time.time()}))
+        elif mode == "storage-prepare":
+            call_command("prepare_phone_provisioning_storage")
+        elif mode == "storage-denied":
+            try:
+                check_worker_health()
+            except ProvisioningStorageError as error:
+                assert "PBX configuration" in str(error)
+            else:
+                raise AssertionError("Unwritable PBX storage passed health with a fresh heartbeat")
+        elif mode == "storage-ready":
+            from directory.asterisk.renderer import _atomic_write
+            check_worker_health()
+            assert config.stat().st_uid == 0
+            assert (sounds / "tts").stat().st_uid == 0
+            assert (config / "existing.conf").read_text() == "; preserve existing generated files\n"
+            probe = config / "storage-test.conf"
+            _atomic_write(probe, "; first\n")
+            _atomic_write(probe, "; replaced\n")
+            assert probe.read_text() == "; replaced\n"
+            probe.unlink()
+        else:
+            raise ValueError("Unknown storage test")
+        return
     if mode == "speech":
         from directory.asterisk.tts import TextToSpeechPromptGenerator, spoken_prompt, text_to_speech_settings
         result = TextToSpeechPromptGenerator(custom_sounds_dir="/tmp/smoke-prompts").generate(
@@ -40,6 +77,29 @@ def smoke(image):
     def docker(*args, **kwargs):
         return subprocess.run(["docker", *args], check=True, **kwargs)
 
+    # Named volumes preserve real Linux ownership even on Docker Desktop.
+    volumes = []
+    try:
+        for directory in ("config", "sounds", "profiles", "receipts"):
+            volume = name + "-" + directory
+            docker("volume", "create", volume)
+            volumes.append((volume, directory))
+        for mode in ("seed", "denied", "prepare", "ready", "readonly"):
+            mounts = []
+            for volume, directory in volumes:
+                readonly = ":ro" if (directory == "receipts" and mode != "seed") or (mode == "readonly" and directory == "config") else ""
+                mounts += ["-v", f"{volume}:/storage/{directory}{readonly}"]
+            restricted = ["--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", "0:0"] if mode in ("denied", "ready", "readonly") else []
+            docker("run", "--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp", *restricted, *mounts,
+                   "-e", "DJANGO_SETTINGS_MODULE=frontporch.settings", "-e", "PHONE_ENROLLMENT_ENABLED=true",
+                   "-e", "DATABASE_URL=postgresql://storage-test:storage-test@127.0.0.1/storage-test",
+                   "-e", "ASTERISK_AUTO_APPLY_CONFIG=false",
+                   "-e", "ASTERISK_GENERATED_CONFIG_DIR=/storage/config", "-e", "ASTERISK_CUSTOM_SOUNDS_DIR=/storage/sounds",
+                   "-e", "PHONE_PROFILE_DIR=/storage/profiles", "-e", "PHONE_RECEIPT_DIR=/storage/receipts",
+                   image, "python", "deploy/test_release_image.py", "--inside", "storage-" + ("denied" if mode == "readonly" else mode))
+    finally:
+        for volume, _ in reversed(volumes):
+            docker("volume", "rm", volume)
     docker("network", "create", "--internal", name)
     try:
         docker("run", "-d", "--name", name, "--network", name, "--network-alias", "db",

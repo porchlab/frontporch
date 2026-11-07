@@ -78,6 +78,12 @@ and `dialplan reload` through AMI; neither command restarts Asterisk. Keep this
 distinction when changing deployment scripts. Container replacements and process
 restarts can still interrupt active calls and belong in a maintenance window.
 
+Generated `conf.d` configuration is read-only in Asterisk and writable in private
+web and the enrollment worker. When phone enrollment is enabled, web startup
+prepares ownership for the restricted worker before readiness. The worker checks
+actual storage access at startup and during health checks; see
+[WP816 storage preparation](wp816-family-setup.md#operator-enablement).
+
 `compose.yaml` mounts the named `asterisk-data` volume at `/var/lib/asterisk`,
 including `astdb.sqlite3`. Its Docker name defaults to `frontporch-asterisk-data`
 and can be set with `ASTERISK_VOLUME_NAME`. Keep that name stable. Asterisk stores

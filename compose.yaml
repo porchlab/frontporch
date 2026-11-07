@@ -13,7 +13,8 @@ services:
       # Includes AstDB's registered phone contacts; retain across replacements.
       - asterisk-data:/var/lib/asterisk
       - ${ASTERISK_ETC_DIR:?set ASTERISK_ETC_DIR}:/etc/asterisk
-      - ${ASTERISK_CONF_D_DIR:?set ASTERISK_CONF_D_DIR}:/etc/asterisk/conf.d
+      # Django owns generated configuration; PBX startup must not chown it.
+      - ${ASTERISK_CONF_D_DIR:?set ASTERISK_CONF_D_DIR}:/etc/asterisk/conf.d:ro
       - ${ASTERISK_LOG_DIR:?set ASTERISK_LOG_DIR}:/var/log/asterisk
       - ${ASTERISK_SPOOL_DIR:?set ASTERISK_SPOOL_DIR}:/var/spool/asterisk
       - ${ASTERISK_CUSTOM_SOUNDS_DIR:-./asterisk/sounds}:/var/lib/asterisk/sounds/frontporch:ro
@@ -25,6 +26,7 @@ services:
       dockerfile: Dockerfile
     command: >
       sh -c "python manage.py migrate &&
+             python manage.py prepare_phone_provisioning_storage &&
              python manage.py collectstatic --noinput &&
              exec gunicorn frontporch.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --threads ${GUNICORN_THREADS:-4} --timeout ${GUNICORN_TIMEOUT:-60}"
     environment:

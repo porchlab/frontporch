@@ -82,6 +82,12 @@ username=testphone
 password=test-only-password
 [testphone](aor-single-reg)
 """)
+        # Private web prepares this mount for the restricted UID 0 writer.
+        # Parent /etc/asterisk remains owned by the runner, forcing upstream's
+        # recursive chown on first PBX startup on Linux CI.
+        self.generated_config = etc / "conf.d"
+        docker("run", "--rm", "--network", "none", "--entrypoint", "chown",
+               "-v", f"{self.generated_config}:/config", "python:3.12-slim-bookworm", "0:0", "/config")
         self.compose_file = self.workspace / "compose.json"
         self.compose_file.write_text(json.dumps({
             "services": {
@@ -148,6 +154,27 @@ password=test-only-password
         self.assertRegex(self.cli("pjsip show aor testphone"), r"Contact:\s+testphone/")
         self.cli("channel originate PJSIP/testphone application Hangup")
         self.wait_for_phone("INVITE received after registration")
+
+    def test_pbx_startup_and_replacement_preserve_generated_config_writer(self):
+        for replacement in (False, True):
+            with self.subTest(replacement=replacement):
+                if replacement:
+                    self.compose("up", "-d", "--no-deps", "--force-recreate", "asterisk")
+                    self.wait_ready()
+                container = self.compose("ps", "-q", "asterisk")
+                mounts = json.loads(docker("inspect", "--format", "{{json .Mounts}}", container))
+                self.assertFalse(next(m for m in mounts if m["Destination"] == "/etc/asterisk/conf.d")["RW"])
+                # Read-only PBX mounts must also defeat the entrypoint's root chown.
+                result = subprocess.run(["docker", "exec", container, "chown", "1000:1000", "/etc/asterisk/conf.d"],
+                                        capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                docker("run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
+                       "--security-opt", "no-new-privileges", "--user", "0:0",
+                       "-v", f"{self.generated_config}:/config", "python:3.12-slim-bookworm", "python", "-c",
+                       "import os,tempfile; from pathlib import Path; "
+                       "assert Path('/config').stat().st_uid == 0; "
+                       "probe=tempfile.TemporaryDirectory(dir='/config'); "
+                       "p=Path(probe.name)/'new'; p.write_text('probe'); p.replace(p.with_name('current')); probe.cleanup()")
 
     def test_named_quiet_hour_zones_ignore_server_zone_and_follow_dst(self):
         # Exercise actual GotoIfTime on synthetic Local channels; no phones ring.

@@ -47,6 +47,7 @@ class ComposeTests(unittest.TestCase):
                 service.pop("image", None)
         self.assertEqual(before, after)
         pbx_mounts = after["services"]["asterisk"]["volumes"]
+        self.assertTrue(next(m for m in pbx_mounts if m["target"] == "/etc/asterisk/conf.d")["read_only"])
         self.assertTrue(any(mount["source"] == "asterisk-data" and mount["target"] == "/var/lib/asterisk"
                             for mount in pbx_mounts))
 
@@ -131,3 +132,7 @@ class ComposeTests(unittest.TestCase):
             self.assertFalse(services[name].get("environment", {}).get("GDMS_PASSWORD"))
         self.assertFalse(services["portal"]["environment"].get("WIREGUARD_ENCRYPTION_KEY"))
         self.assertEqual(services["phone-provisioner"]["environment"]["ASTERISK_AUTO_APPLY_CONFIG"], "false")
+        self.assertEqual(services["phone-provisioner"]["user"], "0:0")
+        self.assertEqual(services["phone-provisioner"]["healthcheck"]["test"],
+                         ["CMD", "python", "-m", "frontporch.provisioning_storage"])
+        self.assertIn("prepare_phone_provisioning_storage", str(services["web"]["command"]))
