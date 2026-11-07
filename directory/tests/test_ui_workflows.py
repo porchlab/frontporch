@@ -65,6 +65,58 @@ class ParentUIWorkflowTests(TestCase):
     def setUp(self):
         self.client.force_login(self.user)
 
+    def test_quiet_hours_save_returns_to_child(self):
+        detail = reverse("directory:child_detail", args=[self.child.pk])
+        data = {"label": "Bedtime", "day_group": "weekdays",
+                "start_time": "20:00", "end_time": "07:00", "is_active": "on"}
+        response = self.client.post(
+            reverse("directory:blackout_create", args=[self.child.pk]), data
+        )
+        self.assertRedirects(response, detail)
+        period = self.child.blackout_periods.get()
+        data["label"] = "School nights"
+        response = self.client.post(
+            reverse("directory:blackout_update", args=[period.pk]), data
+        )
+        self.assertRedirects(response, detail)
+        period.refresh_from_db()
+        self.assertEqual(period.label, "School nights")
+        for route, pk in (("blackout_create", self.child.pk),
+                          ("blackout_update", period.pk)):
+            self.assertContains(self.client.get(reverse("directory:" + route, args=[pk])),
+                                f'href="{detail}">Cancel</a>')
+
+    def test_quiet_hours_pause_and_unpause(self):
+        period = m.ChildBlackoutPeriod.objects.create(
+            child=self.child, approved_by=self.parent, label="Bedtime",
+            day_group="weekdays", start_time="20:00", end_time="07:00",
+        )
+        detail = reverse("directory:child_detail", args=[self.child.pk])
+        for action, active, button in (("deactivate", False, "Unpause"),
+                                       ("activate", True, "Pause")):
+            url = reverse("directory:blackout_" + action, args=[period.pk])
+            self.client.get(url)
+            period.refresh_from_db()
+            self.assertEqual(period.is_active, not active)
+            response = self.client.post(url)
+            self.assertRedirects(response, detail)
+            period.refresh_from_db()
+            self.assertEqual(period.is_active, active)
+            self.assertEqual(period.approved_by, self.parent)
+            self.assertContains(self.client.get(detail), f'>{button}</button>')
+        self.assertTrue(m.FamilyActivity.objects.filter(
+            family=self.family, actor=self.user,
+            description="Bedtime was unpaused.",
+        ).exists())
+        self.client.force_login(self.other_user)
+        self.assertEqual(self.client.post(url).status_code, 404)
+        self.client.force_login(self.user)
+        self.parent.is_guardian = False
+        self.parent.save()
+        self.assertEqual(self.client.post(url).status_code, 403)
+        period.refresh_from_db()
+        self.assertTrue(period.is_active)
+
     def test_all_pages_render_and_hide_phone_credentials(self):
         routes = [
             "dashboard",

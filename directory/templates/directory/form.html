@@ -12,7 +12,7 @@
             {% include "directory/fields.html" %}
             <div class="form-actions">
                 <button class="button" type="submit">{{ submit_label|default:"Save changes" }}</button>
-                <a class="button secondary" href="{% url cancel_url_name|default:'directory:dashboard' %}">Cancel</a>
+                <a class="button secondary" href="{% if cancel_id %}{% url cancel_url_name cancel_id %}{% else %}{% url cancel_url_name|default:'directory:dashboard' %}{% endif %}">Cancel</a>
             </div>
         </form>
         {% if delete_url_name %}

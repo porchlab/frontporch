@@ -147,13 +147,18 @@ def blackout_create(request, child_id):
         if form.is_valid():
             blackout = form.save()
             _success(request, f"{blackout.label} was added for {child.name}.")
-            return redirect("directory:dashboard")
+            return redirect("directory:child_detail", child_id=child.pk)
     else:
         form = ChildBlackoutPeriodForm(child=child, approved_by=parent)
     return render(
         request,
         "directory/form.html",
-        {"form": form, "title": f"Add quiet hours for {child.name}"},
+        {
+            "form": form,
+            "title": f"Add quiet hours for {child.name}",
+            "cancel_url_name": "directory:child_detail",
+            "cancel_id": child.pk,
+        },
     )
 
 
@@ -176,7 +181,7 @@ def blackout_update(request, blackout_id):
         if form.is_valid():
             updated = form.save()
             _success(request, f"{updated.label} was updated.")
-            return redirect("directory:dashboard")
+            return redirect("directory:child_detail", child_id=blackout.child_id)
     else:
         form = ChildBlackoutPeriodForm(
             instance=blackout,
@@ -184,7 +189,14 @@ def blackout_update(request, blackout_id):
             approved_by=parent,
         )
     return render(
-        request, "directory/form.html", {"form": form, "title": "Edit quiet hours"}
+        request,
+        "directory/form.html",
+        {
+            "form": form,
+            "title": "Edit quiet hours",
+            "cancel_url_name": "directory:child_detail",
+            "cancel_id": blackout.child_id,
+        },
     )
 
 
@@ -201,8 +213,25 @@ def blackout_deactivate(request, blackout_id):
         blackout.is_active = False
         blackout.approved_by = parent
         blackout.save()
-        _success(request, f"{blackout.label} was deactivated.")
-    return redirect("directory:dashboard")
+        _success(request, f"{blackout.label} was paused.")
+    return redirect("directory:child_detail", child_id=blackout.child_id)
+
+
+@login_required
+@transaction.atomic
+def blackout_activate(request, blackout_id):
+    parent = _require_parent(request)
+    blackout = get_object_or_404(
+        ChildBlackoutPeriod,
+        id=blackout_id,
+        child__family=parent.family,
+    )
+    if request.method == "POST":
+        blackout.is_active = True
+        blackout.approved_by = parent
+        blackout.save()
+        _success(request, f"{blackout.label} was unpaused.")
+    return redirect("directory:child_detail", child_id=blackout.child_id)
 
 
 @login_required

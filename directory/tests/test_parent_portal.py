@@ -141,7 +141,7 @@ class ParentPortalTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse("directory:dashboard"))
+        self.assertRedirects(response, reverse("directory:child_detail", args=[self.child.id]))
         blackout = ChildBlackoutPeriod.objects.get(child=self.child)
         self.assertEqual(blackout.approved_by, self.parent)
         self.assertEqual(blackout.start_time, time(20, 30))

@@ -96,6 +96,11 @@ urlpatterns = [
         views.blackout_deactivate,
         name="blackout_deactivate",
     ),
+    path(
+        "blackouts/<int:blackout_id>/activate/",
+        views.blackout_activate,
+        name="blackout_activate",
+    ),
     path("contacts/new/", views.contact_create, name="contact_create"),
     path(
         "contacts/<int:contact_id>/remove/", views.contact_delete, name="contact_delete"
