@@ -23,6 +23,7 @@ from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 
 from frontporch.phone_profiles import MAX_LEASE_SECONDS, password_digest
+from frontporch.provisioning_storage import check_worker_storage, ProvisioningStorageError
 from frontporch.vpn_runtime import atomic_private_file
 from . import wireguard, wp816
 from .asterisk.ami import AsteriskManagerClient, AsteriskManagerSettings
@@ -69,6 +70,11 @@ def validate_configuration():
         path = getattr(settings, name)
         if not path or not Path(path).is_dir():
             raise ImproperlyConfigured("Configure private profile and receipt directories.")
+    try:
+        check_worker_storage(settings.PHONE_PROFILE_DIR, settings.PHONE_RECEIPT_DIR,
+            settings.ASTERISK_GENERATED_CONFIG_DIR, settings.ASTERISK_CUSTOM_SOUNDS_DIR)
+    except ProvisioningStorageError as error:
+        raise ImproperlyConfigured(str(error)) from None
 
 
 def save(enrollment, **values):

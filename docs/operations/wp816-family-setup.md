@@ -48,7 +48,8 @@ two verified image digests.
    that predates its durable registration intent.
 3. Set `FRONTPORCH_PROVISIONING_DIR` to a private host directory. Create `profiles`
    and `receipts` subdirectories, mode `0700`, owned by the container execution
-   user. Files are atomically written mode `0600`. Include the database and peer
+   user (UID/GID `0:0` in the reviewed Compose services). Files are atomically
+   written mode `0600`. Include the database and peer
    keyring in private backups; do not publish the short-lived profile directory.
 4. After review, install the new receiver and set its host-owned
    `WP816_ENROLLMENT_ENABLED=1` alongside `WP816_VPN_ENABLED=1`. The release includes
@@ -63,6 +64,30 @@ two verified image digests.
 6. Register a new phone through a real guardian account. Verify firmware, profile
    download, recent handshake, PBX contact, and echo audio. The end user performs
    this registration; operators should not pre-create that phone's GDMS record.
+
+Private web startup runs `prepare_phone_provisioning_storage` when enrollment is
+enabled. It makes only the generated PBX configuration mount, custom sounds mount,
+and `tts` directory owned by `0:0`, mode `0755`. It preserves existing files and
+does not recursively change the PBX configuration tree or runtime database. The
+worker uses explicit UID/GID `0:0`, drops every capability, and retains its
+read-only root filesystem. The profile and receipt directories remain private
+`0700`; the preparation command does not touch their ownership or mode.
+
+Asterisk mounts generated configuration and custom sounds read-only. Its upstream
+entrypoint can recursively assign `/etc/asterisk` to the Asterisk user during
+startup; without that read-only boundary it can take ownership of the shared
+generated directory. A UID 0 worker with no `DAC_OVERRIDE` capability cannot write
+an Asterisk-owned `0755` directory. Private web previously masked this mismatch
+because it can bypass those permission checks.
+
+The worker validates create/replace/delete access before processing any enrollment.
+Its health check repeats these probes and verifies receipt-directory access along
+with a recent heartbeat, so a running loop cannot conceal an unwritable mount.
+A failed probe stops startup or fails container health and reports the affected
+storage category without printing paths, credentials, or profile contents. Keep
+the mounts read-only on the Asterisk side when overriding Compose. An ordinary
+protected-main deployment prepares the directories through web startup before
+starting the worker; no additional host receiver installation is required.
 
 The current reviewed version is **1.0.3.39**, listed as general firmware by
 [Grandstream](https://www.grandstream.com/support/firmware). Before queuing an
@@ -120,7 +145,11 @@ claims, immutable assignment on repeat submit, provider-write uncertainty,
 firmware-first release, interrupted PBX apply, lease authentication/expiry, and
 handshake-plus-contact completion. Compose and receiver tests verify secret and
 network isolation and deployment ordering. Real nginx tests cover profile routing,
-cookie removal, rate limits, and private admin denial.
+cookie removal, rate limits, and private admin denial. Release-image tests
+reproduce mismatched Linux directory ownership under the worker's actual dropped
+capabilities, verify preparation and atomic writes, and reject read-only mounts
+even with a fresh heartbeat. Real PBX tests check that startup and replacement
+preserve the generated configuration writer and cannot chown its read-only mount.
 
 The original hardware pilot verified GDMS firmware upgrade and authenticated
 combined settings delivery. The replacement server has carried existing remote

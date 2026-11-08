@@ -16,6 +16,8 @@ services:
       context: .
       dockerfile: Dockerfile
     command: [python, manage.py, provision_phones]
+    # Matches the private-web storage preparation; no DAC-bypass capabilities.
+    user: "0:0"
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-frontporch}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-frontporch}
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY}
@@ -68,7 +70,7 @@ services:
       web:
         condition: service_healthy
     healthcheck:
-      test: [CMD, python, -c, "import json,time; from pathlib import Path; at=json.loads(Path('/var/lib/frontporch-profiles/worker-health.json').read_text())['at']; raise SystemExit(0 if 0 <= time.time()-at < 600 else 1)"]
+      test: [CMD, python, -m, frontporch.provisioning_storage]
       interval: 15s
       timeout: 5s
       retries: 3
