@@ -30,7 +30,9 @@ services:
       GDMS_CLIENT_SECRET: ${GDMS_CLIENT_SECRET:?set GDMS_CLIENT_SECRET}
       GDMS_ORG_ID: ${GDMS_ORG_ID:?set GDMS_ORG_ID}
       GDMS_SITE_ID: ${GDMS_SITE_ID:?set GDMS_SITE_ID}
-      WP816_FIRMWARE_URL: https://firmware.grandstream.com/wp8x6fw.bin
+      WP816_FIRMWARE_VERSION: ${WP816_FIRMWARE_VERSION:-}
+      WP816_FIRMWARE_URL: ${WP816_FIRMWARE_URL:-https://firmware.grandstream.com/wp8x6fw.bin}
+      WP816_FIRMWARE_SHA256: ${WP816_FIRMWARE_SHA256:-}
       PHONE_PROFILE_PUBLIC_URL: https://${FRONTPORCH_PUBLIC_HOST:-front.porchlab.app}/phone-profiles
       PHONE_PROFILE_DIR: /var/lib/frontporch-profiles
       PHONE_RECEIPT_DIR: /var/lib/frontporch-receipts

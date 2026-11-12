@@ -32,8 +32,6 @@ from .gdms import GDMSClient, GDMSSettings, GDMSError, GDMSAPIError, positive_id
 from .models import (Device, ExternalNumberExtension, FamilyActivity, Parent, PhoneEnrollment,
                      PhoneEnrollmentOperation, PhoneEnrollmentState as State, WireGuardPeer, lock_extension_namespace)
 
-TARGET_FIRMWARE = "1.0.3.39"
-FIRMWARE_SHA256 = "591babdf593e084a7d398740cf9d35bf446fcaae96f30235781e7cca64d59be9"
 TERMINAL = (State.READY, State.HELP, State.CANCELLED, State.DEREGISTER_HELP, State.DEREGISTERED)
 
 
@@ -47,24 +45,35 @@ def verify_firmware_download(url):
             if size > 80 * 1024 * 1024 or time.monotonic() > deadline:
                 raise ValueError("Firmware exceeds the reviewed size bound.")
             digest.update(chunk)
-    if digest.hexdigest() != FIRMWARE_SHA256:
+    if digest.hexdigest() != settings.WP816_FIRMWARE_SHA256:
         raise ValueError("Firmware differs from the reviewed release.")
 
+
+def validate_firmware_configuration():
+    if not re.fullmatch(r"[0-9]{1,3}(?:\.[0-9]{1,3}){3}", settings.WP816_FIRMWARE_VERSION):
+        raise ImproperlyConfigured("Configure WP816_FIRMWARE_VERSION as four numeric components.")
+    if not re.fullmatch(r"[0-9a-f]{64}", settings.WP816_FIRMWARE_SHA256):
+        raise ImproperlyConfigured("Configure WP816_FIRMWARE_SHA256 for the reviewed release.")
+    # Operator-owned, never supplied by a parent or provider reply.
+    try:
+        firmware = urlsplit(settings.WP816_FIRMWARE_URL)
+        valid = (firmware.scheme == "https" and firmware.hostname == "firmware.grandstream.com"
+            and firmware.port in (None, 443) and not firmware.username and not firmware.password
+            and not firmware.query and not firmware.fragment and firmware.path.endswith("/wp8x6fw.bin"))
+    except ValueError:
+        valid = False
+    if not valid:
+        raise ImproperlyConfigured("Configure the reviewed official WP816 firmware URL.")
 
 
 def validate_configuration():
     if not settings.PHONE_ENROLLMENT_ENABLED:
         raise ImproperlyConfigured("Phone enrollment is disabled.")
+    validate_firmware_configuration()
     positive_id(settings.GDMS_ORG_ID)
     positive_id(settings.GDMS_SITE_ID)
     GDMSSettings.from_django()
     wireguard.cipher()
-    # Both URLs are operator-owned, never supplied by a parent or provider reply.
-    firmware = urlsplit(settings.WP816_FIRMWARE_URL)
-    if (firmware.scheme != "https" or firmware.hostname != "firmware.grandstream.com"
-            or firmware.port not in (None, 443) or firmware.username or firmware.password
-            or firmware.query or firmware.fragment or not firmware.path.endswith("/wp8x6fw.bin")):
-        raise ImproperlyConfigured("Configure the reviewed official WP816 firmware URL.")
     wp816.bootstrap_profile("000000000001", settings.PHONE_PROFILE_PUBLIC_URL, "check", "check")
     for name in ("PHONE_PROFILE_DIR", "PHONE_RECEIPT_DIR"):
         path = getattr(settings, name)
@@ -273,10 +282,10 @@ class EnrollmentWorker:
             help_needed(enrollment, "firmware")
             return
         save(enrollment, firmware_version=version, detail_started_at=None)
-        if version == TARGET_FIRMWARE:
+        if version == settings.WP816_FIRMWARE_VERSION:
             save(enrollment, firmware_verified_at=now, state=State.CONFIGURING)
             return
-        if tuple(map(int, version.split("."))) > tuple(map(int, TARGET_FIRMWARE.split("."))):
+        if tuple(map(int, version.split("."))) > tuple(map(int, settings.WP816_FIRMWARE_VERSION.split("."))):
             help_needed(enrollment, "firmware")  # Never downgrade new stock automatically.
             return
         save(enrollment, state=State.UPGRADING)
@@ -321,7 +330,9 @@ class EnrollmentWorker:
                 save(enrollment, state=State.CONNECTING)
             return
         # Do not release secrets based on an old or cached observation.
-        if not enrollment.firmware_verified_at or now - enrollment.firmware_verified_at > timedelta(minutes=2):
+        if (enrollment.firmware_version != settings.WP816_FIRMWARE_VERSION
+                or not enrollment.firmware_verified_at
+                or now - enrollment.firmware_verified_at > timedelta(minutes=2)):
             save(enrollment, state=State.FIRMWARE, detail_started_at=None)
             return
         allocate_phone(enrollment)

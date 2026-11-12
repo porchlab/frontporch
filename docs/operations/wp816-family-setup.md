@@ -147,14 +147,54 @@ the mounts read-only on the Asterisk side when overriding Compose. An ordinary
 protected-main deployment prepares the directories through web startup before
 starting the worker; no additional host receiver installation is required.
 
-The current reviewed version is **1.0.3.39**, listed as general firmware by
-[Grandstream](https://www.grandstream.com/support/firmware). Before queuing an
-upgrade, the worker downloads the official file and checks SHA-256 against the
-hardware-tested release. A changed vendor file fails closed. The compiler and
-pin must be reviewed together for later releases. A newer handset version is
-flagged for compatibility review; automatic downgrade is forbidden. The URL is
-vendor-owned and mutable, so the post-upgrade live version remains the final
-configuration gate.
+The default reviewed version is **1.0.3.39**. The private worker's firmware policy
+can be set in the deployment environment (passed through `compose.provisioning.yaml`):
+
+```dotenv
+WP816_FIRMWARE_VERSION=1.0.3.39
+WP816_FIRMWARE_URL=https://firmware.grandstream.com/wp8x6fw.bin
+WP816_FIRMWARE_SHA256=591babdf593e084a7d398740cf9d35bf446fcaae96f30235781e7cca64d59be9
+```
+
+Blank or omitted version/checksum settings retain the reviewed default. Selecting
+a different version requires an explicit checksum; it never inherits the default
+release's hash. The version must have four numeric components and the checksum
+must be 64 lowercase hexadecimal characters. The URL must remain an official
+`https://firmware.grandstream.com/.../wp8x6fw.bin` URL, without credentials, query
+parameters, or redirects. These settings are operator-controlled, not parent inputs.
+
+Before queuing an upgrade, the worker downloads the file and verifies its SHA-256.
+A changed vendor file fails closed. The URL is vendor-owned and mutable, so a
+fresh live version matching the configured target is also required before releasing
+phone credentials. A handset on a newer version requires compatibility review;
+automatic downgrade is forbidden. Ready phones are not automatically upgraded
+or continuously checked when this policy changes.
+
+### Firmware release notifications
+
+[`renovate.json`](../../renovate.json) watches the stable WP8x6 release-note links
+on [Grandstream's firmware page](https://www.grandstream.com/support/firmware).
+It updates [`.github/firmware-versions.json`](../../.github/firmware-versions.json)
+in a review PR. This file records release awareness only; the application never
+loads it. Beta-page links and other phone models do not match the datasource.
+Only the custom firmware manager is enabled, and automerge is disabled.
+
+An owner must enable the [Renovate GitHub app](https://github.com/apps/renovate)
+for this repository (or configure an existing Renovate runner). Repository
+configuration alone does not activate polling. No production secrets are needed.
+The datasource uses Renovate's [custom HTML support](https://docs.renovatebot.com/modules/datasource/custom/);
+if Grandstream changes its link structure, inspect the Renovate dashboard/logs
+and update the matcher. A successful config validation is not proof of a future
+scheduled run.
+
+To adopt a release, review its notes and configuration parameter compatibility,
+download the exact binary from the official URL, and calculate its SHA-256
+(`shasum -a 256 wp8x6fw.bin`). Test GDMS provisioning, WireGuard, SIP registration,
+and the echo call on a pilot handset. Then set all three environment values
+together and recreate the private worker through the normal deployment procedure.
+Finish or resolve in-progress enrollments before changing the policy: an upgrade
+operation already submitted to GDMS is not automatically replaced. Merging a
+release-notification PR does not change the deployed firmware policy.
 
 ## Boundaries and recovery
 

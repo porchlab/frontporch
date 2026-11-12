@@ -270,3 +270,10 @@ PHONE_PROFILE_PUBLIC_URL = os.environ.get("PHONE_PROFILE_PUBLIC_URL", "")
 PHONE_PROFILE_DIR = os.environ.get("PHONE_PROFILE_DIR", "")
 PHONE_RECEIPT_DIR = os.environ.get("PHONE_RECEIPT_DIR", "")
 WP816_FIRMWARE_URL = os.environ.get("WP816_FIRMWARE_URL", "")
+# Preserve the reviewed pilot release for deployments without an override.
+# A different version must supply its own checksum; never reuse the pilot hash.
+WP816_FIRMWARE_VERSION = os.environ.get("WP816_FIRMWARE_VERSION", "") or "1.0.3.39"
+WP816_FIRMWARE_SHA256 = os.environ.get("WP816_FIRMWARE_SHA256", "") or (
+    "591babdf593e084a7d398740cf9d35bf446fcaae96f30235781e7cca64d59be9"
+    if WP816_FIRMWARE_VERSION == "1.0.3.39" else ""
+)

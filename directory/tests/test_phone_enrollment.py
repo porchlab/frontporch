@@ -12,7 +12,7 @@ from django.test import Client, TestCase, SimpleTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from directory.enrollment_worker import EnrollmentWorker, allocate_phone, credentials, publish_profile, profile_path, TARGET_FIRMWARE
+from directory.enrollment_worker import EnrollmentWorker, allocate_phone, credentials, publish_profile, profile_path
 from directory.gdms import GDMSTransportError, GDMSAPIError
 from directory.models import Child, Device, Family, Parent, PhoneEnrollment, PhoneEnrollmentOperation, PhoneEnrollmentState as State, WireGuardPeer
 from frontporch.phone_profiles import ProfileApplication
@@ -108,7 +108,7 @@ class EnrollmentTests(TestCase):
     GDMS_ORG_ID="1", GDMS_SITE_ID="2", WIREGUARD_SERVER_ADDRESS="10.77.0.1/24",
     WIREGUARD_SERVER_PUBLIC_KEY=base64.b64encode(b"s" * 32).decode(),
     WIREGUARD_ENDPOINT="vpn.example.com:51820", PHONE_PROFILE_PUBLIC_URL="https://phones.example.com/phone-profiles",
-    WP816_FIRMWARE_URL="https://firmware.grandstream.com/wp8x6fw.bin")
+    WP816_FIRMWARE_VERSION="1.0.3.39", WP816_FIRMWARE_URL="https://firmware.grandstream.com/wp8x6fw.bin")
 class EnrollmentWorkerTests(TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -143,7 +143,7 @@ class EnrollmentWorkerTests(TestCase):
 
     def verified(self):
         self.enrolled()
-        self.client.live_device.side_effect = [None, {"mac": self.enrollment.mac, "sn": self.enrollment.serial, "softwareVersion": TARGET_FIRMWARE}]
+        self.client.live_device.side_effect = [None, {"mac": self.enrollment.mac, "sn": self.enrollment.serial, "softwareVersion": settings.WP816_FIRMWARE_VERSION}]
         self.tick(); self.tick()
         self.assertEqual(self.enrollment.state, State.CONFIGURING)
 
@@ -171,7 +171,7 @@ class EnrollmentWorkerTests(TestCase):
 
     def test_firmware_gate_ignores_inventory_version_and_first_live_response(self):
         self.enrolled()
-        self.row["firmwareVersion"] = TARGET_FIRMWARE
+        self.row["firmwareVersion"] = settings.WP816_FIRMWARE_VERSION
         self.client.live_device.return_value = None
         self.tick(); self.tick()
         self.assertFalse(Device.objects.exists())
@@ -188,7 +188,7 @@ class EnrollmentWorkerTests(TestCase):
         download.assert_called_once()
         self.client.configure_xml.assert_not_called()
         self.assertFalse(Device.objects.exists())
-        self.client.live_device.return_value["softwareVersion"] = TARGET_FIRMWARE
+        self.client.live_device.return_value["softwareVersion"] = settings.WP816_FIRMWARE_VERSION
         self.tick(); self.tick(); self.tick()
         self.assertEqual(self.enrollment.state, State.CONNECTING)
 
@@ -198,6 +198,39 @@ class EnrollmentWorkerTests(TestCase):
         self.tick(); self.tick()
         self.assertEqual(self.enrollment.problem, "firmware")
         self.client.upgrade.assert_not_called()
+        self.client.configure_xml.assert_not_called()
+
+    @override_settings(WP816_FIRMWARE_VERSION="1.0.3.40",
+        WP816_FIRMWARE_URL="https://firmware.grandstream.com/BETA/wp8x6fw.bin")
+    @patch("directory.enrollment_worker.verify_firmware_download")
+    def test_configured_target_drives_upgrade_and_live_verification(self, download):
+        self.enrolled()
+        self.client.live_device.return_value = {"sn": self.enrollment.serial, "softwareVersion": "1.0.3.39"}
+        self.tick(); self.tick()
+        self.assertEqual(self.enrollment.state, State.UPGRADING)
+        download.assert_called_once_with(settings.WP816_FIRMWARE_URL)
+        self.assertEqual(self.client.upgrade.call_args.kwargs["firmware_url"], settings.WP816_FIRMWARE_URL)
+        self.assertFalse(Device.objects.exists())
+        self.client.live_device.return_value["softwareVersion"] = "1.0.3.40"
+        self.tick(); self.tick(); self.tick()
+        self.assertEqual(self.enrollment.state, State.CONNECTING)
+        self.client.upgrade.assert_called_once()
+
+    @override_settings(WP816_FIRMWARE_VERSION="1.0.3.38")
+    def test_newer_than_configured_target_is_not_downgraded(self):
+        self.enrolled()
+        self.client.live_device.return_value = {"sn": self.enrollment.serial, "softwareVersion": "1.0.3.39"}
+        self.tick(); self.tick()
+        self.assertEqual(self.enrollment.problem, "firmware")
+        self.client.upgrade.assert_not_called()
+        self.client.configure_xml.assert_not_called()
+
+    def test_changed_target_requires_fresh_verification_before_releasing_credentials(self):
+        self.verified()
+        with override_settings(WP816_FIRMWARE_VERSION="1.0.3.40"):
+            self.tick()
+        self.assertEqual(self.enrollment.state, State.FIRMWARE)
+        self.assertFalse(Device.objects.exists())
         self.client.configure_xml.assert_not_called()
 
     def test_profile_uses_new_family_peer_and_parent_extension_and_no_person_name_to_gdms(self):

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "enabledManagers": ["custom.regex"],
+  "dependencyDashboard": {"enabled": true},
+  "automerge": false,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/firmware-versions\\.json$/"],
+      "matchStrings": ["\"wp816Stable\":\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)\""],
+      "depNameTemplate": "Grandstream WP816 stable firmware",
+      "packageNameTemplate": "wp816",
+      "datasourceTemplate": "custom.grandstream-wp816",
+      "versioningTemplate": "loose",
+      "extractVersionTemplate": "^https://firmware\\.grandstream\\.com/Release_Note_WP8x6_(?<version>[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+)\\.pdf$"
+    }
+  ],
+  "customDatasources": {
+    "grandstream-wp816": {
+      "defaultRegistryUrlTemplate": "https://www.grandstream.com/support/firmware",
+      "format": "html"
+    }
+  },
+  "packageRules": [
+    {
+      "matchDatasources": ["custom.grandstream-wp816"],
+      "prBodyNotes": [
+        "This PR records a newly published stable firmware release. The tracking file is not consumed by FrontPorch and does not upgrade phones.",
+        "Review Grandstream's release notes, test GDMS provisioning, WireGuard, SIP registration and echo audio on a pilot handset, then configure WP816_FIRMWARE_VERSION, WP816_FIRMWARE_URL and WP816_FIRMWARE_SHA256 together in the private worker environment. See docs/operations/wp816-family-setup.md."
+      ]
+    }
+  ]
+}
