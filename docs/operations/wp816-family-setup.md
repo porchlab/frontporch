@@ -16,7 +16,7 @@ if needed, copy the hotspot's **Router** address from Wi-Fi settings and open it
 in Safari. After **Network connection success**, reconnect the mobile device to
 its normal network and return to FrontPorch. Closing the page does not stop setup.
 
-The phone may restart while applying firmware or configuration. FrontPorch never
+The phone may restart while applying firmware or configuration. During registration, FrontPorch never
 issues a separate reboot or factory-reset task. It waits for live firmware
 verification, sends a short-lived configuration download location, then verifies
 the new peer's handshake and the PBX contact. **Ready for a test call** means
@@ -28,6 +28,49 @@ This flow registers new phones. Previously imported peers and the original pilot
 phone remain in private admin; the enrollment page does not claim or reprovision
 them. Each new handset gets its own family-owned peer, while existing manual
 peers continue to work.
+
+## Deregistering a phone
+
+Open the phone under **Phone setup**, choose **Deregister phone**, and confirm
+removal. The worker removes its SIP device, incoming and outgoing dial shortcuts,
+download profile, and dedicated GDMS-provisioned WireGuard peer, then applies the
+PBX configuration. Shared manual gateways and the person's other phones remain
+available. The request is durable; keep the phone powered and connected to Wi-Fi
+while the worker sends its factory-reset task.
+
+When the phone restarts and shows its first-time setup screen, confirm that on
+the progress page. FrontPorch then cancels the reset task, removes the phone from
+GDMS, and verifies its absence. Only **Phone deregistered** releases the MAC and
+serial number for another registration, including registration by a different
+family. Registering again creates a new claim, SIP credentials, and network keys.
+Wi-Fi must be configured again. The original operation journal and family
+activity remain for audit; the removed phone disappears from the active list.
+
+This handset confirmation is necessary: GDMS's API confirms task creation, but
+does not document a reliable per-device reset-completion result. A cached online
+flag or numeric task status cannot prove a reset. Do not confirm an ordinary
+reboot. Failed or offline resets keep the claim reserved and never report the
+phone ready for reuse. An unprocessed registration with no accepted or uncertain
+GDMS enrollment command can be removed without resetting any hardware.
+
+Removal runs in the existing private provisioning worker, with the same feature
+gate and credentials. The public portal only records authorized intent and
+physical-reset confirmation. Existing imported/pilot phones without a
+`PhoneEnrollment` record still require operator removal; the portal does not
+guess their GDMS identity.
+
+Provider writes have committed intent records. On interruption, reset creation
+is reconciled by its unique task name; task cancellation and device deletion are
+reconciled by absence. Pending firmware tasks are cancelled before a reset, and
+the reset task is cancelled before releasing the phone, preventing delayed tasks
+from affecting a later owner. Uncertain writes are never blindly repeated.
+**Check again** resumes reconciliation; ownership conflicts or rejected commands
+require operator review of the private journal and GDMS. Do not delete operation
+records or mark a claim deregistered to bypass that review.
+
+Migration `0028` replaces unconditional MAC/serial uniqueness with uniqueness
+among unreleased claims. After a phone has been registered again, reversing this
+migration requires resolving the historical duplicate identities first.
 
 ## Operator enablement
 
@@ -150,6 +193,13 @@ reproduce mismatched Linux directory ownership under the worker's actual dropped
 capabilities, verify preparation and atomic writes, and reject read-only mounts
 even with a fresh heartbeat. Real PBX tests check that startup and replacement
 preserve the generated configuration writer and cannot chown its read-only mount.
+
+Deregistration tests also cover authorization, CSRF, duplicate submissions,
+credential and shortcut removal, shared gateway preservation, pending task
+cancellation, lost provider replies, ownership changes, and fresh registration
+after confirmed deletion. The remote factory reset and subsequent re-enrollment
+still require a supervised handset acceptance test; unit tests make no claim
+that a physical handset has reset.
 
 The original hardware pilot verified GDMS firmware upgrade and authenticated
 combined settings delivery. The replacement server has carried existing remote

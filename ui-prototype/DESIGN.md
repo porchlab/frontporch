@@ -72,7 +72,7 @@ states require review before they become reciprocal permissions.
 
 ## Intentional differences
 
-- The opt-in WP816 family enrollment workflow is production hardware integration.
+- The opt-in WP816 family enrollment and deregistration workflows are production hardware integration.
   The demo keeps simulated installer activation and never contacts GDMS.
 
 - Accounts, email, hardware activation, and calls are simulated. Password inputs

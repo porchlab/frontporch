@@ -74,7 +74,11 @@
       el("downloaded").hidden = !data.downloaded || data.state === "ready";
       el("extension").textContent = data.extension;
       el("ready").hidden = data.state !== "ready";
-      el("check").hidden = data.state === "ready";
+      el("check").hidden = !data.check_allowed;
+      el("reset").hidden = !data.reset_confirmation;
+      el("deregistered").hidden = !data.deregistered;
+      el("deregister").hidden = !data.can_deregister;
+      el("instructions").hidden = data.removing;
       el("stale").hidden = true;
       stopped = data.finished;
     } catch (_) { el("stale").hidden = false; }

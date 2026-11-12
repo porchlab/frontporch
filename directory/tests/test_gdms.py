@@ -38,6 +38,56 @@ class GDMSClientTests(SimpleTestCase):
     def requests(self):
         return [c.args[0] for c in self.opener.open.call_args_list]
 
+    def test_factory_reset_contract_and_invalid_task_ids(self):
+        self.opener.open.side_effect = [response(self.token), ok({"taskId": 42})]
+        self.assertEqual(self.client.factory_reset(mac=MAC, org_id=1, task_name="fp-reset-example"), 42)
+        request = self.requests()[-1]
+        self.assertEqual(urlsplit(request.full_url).path, "/oapi/v1.0.0/task/add")
+        self.assertEqual(json.loads(request.data), {
+            "taskName": "fp-reset-example", "taskType": 2, "macList": ["02:00:00:00:00:01"],
+            "execType": 1, "orgId": 1,
+        })
+        for value in (None, True, 0, "42"):
+            self.opener.open.side_effect = [ok({"taskId": value})]
+            with self.assertRaises(GDMSProtocolError):
+                self.client.factory_reset(mac=MAC, org_id=1, task_name="fp-reset-example")
+
+    def test_delete_validates_batch_result_and_sanitizes_provider_errors(self):
+        self.opener.open.side_effect = [response(self.token), ok({
+            "total": 1, "success": 1, "failure": 0, "errorMacList": [],
+        })]
+        self.client.delete_device(mac=MAC, org_id=1)
+        request = self.requests()[-1]
+        self.assertEqual(urlsplit(request.full_url).path, "/oapi/v1.0.0/device/delete")
+        self.assertEqual(json.loads(request.data), {"macList": ["02:00:00:00:00:01"], "orgId": 1})
+        for payload in ({}, {"total": True, "success": 1, "failure": 0, "errorMacList": []},
+                        {"total": 1, "success": 0, "failure": 1, "errorMacList": [{"errorMsg": "private-provider-detail"}]}):
+            self.opener.open.side_effect = [ok(payload)]
+            with self.assertRaises(GDMSError) as error:
+                self.client.delete_device(mac=MAC, org_id=1)
+            self.assertNotIn("private-provider-detail", str(error.exception))
+
+    def test_task_lookup_paginates_and_ignores_numeric_status(self):
+        task = {"id": 42, "name": "fp-reset-example", "orgId": 1, "taskType": 2, "status": 3}
+        self.opener.open.side_effect = [
+            response(self.token), ok({"result": [], "pages": 2}),
+            ok({"result": [task], "pages": 2}), ok(None),
+        ]
+        self.assertEqual(self.client.task_by_name(org_id=1, task_name=task["name"]), task)
+        self.assertEqual(json.loads(self.requests()[2].data)["pageNum"], 2)
+        self.client.delete_task(task["id"])
+        self.assertEqual(json.loads(self.requests()[-1].data), {"taskId": 42})
+        self.assertEqual(urlsplit(self.requests()[-1].full_url).path, "/oapi/v1.0.0/task/delete")
+
+    def test_task_lookup_rejects_ambiguous_or_foreign_identity(self):
+        task = {"id": 42, "name": "fp-reset-example", "orgId": 1, "taskType": 2}
+        for rows in ([task, task], [{**task, "orgId": 2}], [{**task, "id": True}]):
+            self.client._token = "test-token"
+            self.client._token_expires = 2000
+            self.opener.open.side_effect = [ok({"result": rows, "pages": 1})]
+            with self.assertRaises(GDMSProtocolError):
+                self.client.task_by_name(org_id=1, task_name=task["name"])
+
     def test_live_details_require_followup_and_matching_identity(self):
         live = {"device": {"mac": MAC, "softwareVersion": "1.0.3.39"}}
         self.opener.open.side_effect = [response(self.token), ok(live), ok(live), ok({"device": {"mac": "020000000002"}})]

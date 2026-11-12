@@ -34,7 +34,7 @@ from .models import (Device, ExternalNumberExtension, FamilyActivity, Parent, Ph
 
 TARGET_FIRMWARE = "1.0.3.39"
 FIRMWARE_SHA256 = "591babdf593e084a7d398740cf9d35bf446fcaae96f30235781e7cca64d59be9"
-TERMINAL = (State.READY, State.HELP, State.CANCELLED)
+TERMINAL = (State.READY, State.HELP, State.CANCELLED, State.DEREGISTER_HELP, State.DEREGISTERED)
 
 
 def verify_firmware_download(url):
@@ -112,7 +112,7 @@ def operation(enrollment, kind, callback):
         raise
     # Transport/protocol failures leave 'started', requiring reconciliation.
     entry.status = "accepted"
-    if kind == "upgrade":
+    if kind in ("upgrade", "reset"):
         entry.reference = str(result)
     entry.save(update_fields=["status", "reference", "updated_at"])
     return entry
@@ -208,9 +208,16 @@ class EnrollmentWorker:
         self.clock, self.contact_check, self.apply = clock, contact_check, apply
 
     def step(self, enrollment):
+        # HTTP only records removal intent. Refresh here so an already-selected
+        # work item cannot restart provisioning after a removal request.
+        enrollment.refresh_from_db()
         now = self.clock()
         # Next attempt is durable even if the process dies in a provider call.
         save(enrollment, next_attempt_at=now + timedelta(seconds=15))
+        if enrollment.deregistering:
+            from .deregistration_worker import DeregistrationWorker
+            DeregistrationWorker(self.client, self.apply).step(enrollment, now)
+            return
         if enrollment.state in TERMINAL:
             revoke_profile(enrollment)
             if enrollment.state == State.READY:

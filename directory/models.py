@@ -22,6 +22,11 @@ class PhoneEnrollmentState(models.TextChoices):
     READY = "ready", "Ready for a test call"
     HELP = "help", "Setup needs attention"
     CANCELLED = "cancelled", "Setup cancelled"
+    DEREGISTERING = "deregistering", "Removing FrontPorch access"
+    RESET_PENDING = "reset_pending", "Waiting for the phone to reset"
+    REMOVING = "removing", "Removing the phone"
+    DEREGISTER_HELP = "deregister_help", "Phone removal needs attention"
+    DEREGISTERED = "deregistered", "Phone deregistered"
 
 
 def lock_extension_namespace():
@@ -1766,8 +1771,8 @@ class PhoneEnrollment(TimeStampedModel):
     assigned_parent = models.ForeignKey(Parent, null=True, blank=True, on_delete=models.PROTECT, related_name="phone_enrollments")
     device = models.OneToOneField(Device, null=True, blank=True, on_delete=models.PROTECT, related_name="enrollment")
     friendly_name = models.CharField(max_length=80)
-    mac = models.CharField(max_length=12, unique=True)
-    serial = models.CharField(max_length=64, unique=True)
+    mac = models.CharField(max_length=12)
+    serial = models.CharField(max_length=64)
     state = models.CharField(max_length=16, choices=PhoneEnrollmentState.choices, default=PhoneEnrollmentState.QUEUED)
     problem = models.CharField(max_length=40, blank=True)
     consecutive_failures = models.PositiveIntegerField(default=0)
@@ -1783,12 +1788,25 @@ class PhoneEnrollment(TimeStampedModel):
     profile_downloaded_at = models.DateTimeField(null=True, blank=True)
     connected_at = models.DateTimeField(null=True, blank=True)
     next_attempt_at = models.DateTimeField(default=timezone.now, db_index=True)
+    deregistration_requested_at = models.DateTimeField(null=True, blank=True)
+    deregistration_requested_by = models.ForeignKey(
+        Parent, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="phone_deregistrations",
+    )
+    removal_applied_at = models.DateTimeField(null=True, blank=True)
+    reset_confirmed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
         constraints = [models.CheckConstraint(
             condition=~(models.Q(assigned_child__isnull=False) & models.Q(assigned_parent__isnull=False)),
             name="enrollment_at_most_one_person",
+        ), models.UniqueConstraint(
+            fields=["mac"], condition=~models.Q(state=PhoneEnrollmentState.DEREGISTERED),
+            name="unique_claimed_phone_mac",
+        ), models.UniqueConstraint(
+            fields=["serial"], condition=~models.Q(state=PhoneEnrollmentState.DEREGISTERED),
+            name="unique_claimed_phone_serial",
         )]
 
     def __str__(self):
@@ -1803,6 +1821,10 @@ class PhoneEnrollment(TimeStampedModel):
     def provider_name(self):
         # Never put family or person names in GDMS.
         return "fp-" + self.pk.hex
+
+    @property
+    def deregistering(self):
+        return self.deregistration_requested_at is not None
 
     def clean(self):
         from .gdms import normalize_mac
@@ -1824,7 +1846,10 @@ class PhoneEnrollmentOperation(TimeStampedModel):
     """Persist intent before a provider write; unknown outcomes are not retried."""
 
     enrollment = models.ForeignKey(PhoneEnrollment, on_delete=models.CASCADE, related_name="operations")
-    kind = models.CharField(max_length=16, choices=[(x, x) for x in ("add", "upgrade", "bootstrap", "retire")])
+    kind = models.CharField(max_length=16, choices=[(x, x) for x in (
+        "add", "upgrade", "bootstrap", "retire", "reset", "delete",
+        "cancel_upgrade", "cancel_reset",
+    )])
     status = models.CharField(max_length=12, choices=[(x, x) for x in ("started", "accepted", "rejected")], default="started")
     reference = models.CharField(max_length=64, blank=True)
 

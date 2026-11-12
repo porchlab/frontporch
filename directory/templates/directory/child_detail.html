@@ -27,6 +27,9 @@
                            href="{% url 'directory:phonebook' device.id %}">Print phonebook</a>
                         <a class="text-button blue-text"
                            href="{% url 'directory:phone_edit' device.id %}">Rename phone</a>
+                        {% if device.enrollment and phone_enrollment_enabled %}
+                            <a class="text-button" href="{% url 'directory:phone_deregister' device.enrollment.pk %}">Deregister phone</a>
+                        {% endif %}
                     </div>
                 </div>
             {% empty %}
