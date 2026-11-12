@@ -104,7 +104,10 @@ class ComposeTests(unittest.TestCase):
             "WIREGUARD_ENCRYPTION_KEY": "fixture-cipher", "WIREGUARD_ENDPOINT": "vpn.example.com:51820",
             "FRONTPORCH_PROVISIONING_DIR": "/operator/private-provisioning",
             "GDMS_USERNAME": "fixture-user", "GDMS_PASSWORD": "fixture-pass",
-            "GDMS_CLIENT_ID": "fixture-id", "GDMS_CLIENT_SECRET": "fixture-secret", "GDMS_ORG_ID": "1", "GDMS_SITE_ID": "2"}
+            "GDMS_CLIENT_ID": "fixture-id", "GDMS_CLIENT_SECRET": "fixture-secret", "GDMS_ORG_ID": "1", "GDMS_SITE_ID": "2",
+            "WP816_FIRMWARE_VERSION": "1.0.3.40",
+            "WP816_FIRMWARE_URL": "https://firmware.grandstream.com/BETA/wp8x6fw.bin",
+            "WP816_FIRMWARE_SHA256": "a" * 64}
         result = self.config(registry=True, vpn=True, enrollment=True, environment=environment)
         self.assertEqual(result.returncode, 0, result.stderr)
         config = json.loads(result.stdout)
@@ -132,6 +135,10 @@ class ComposeTests(unittest.TestCase):
             self.assertFalse(services[name].get("environment", {}).get("GDMS_PASSWORD"))
         self.assertFalse(services["portal"]["environment"].get("WIREGUARD_ENCRYPTION_KEY"))
         self.assertEqual(services["phone-provisioner"]["environment"]["ASTERISK_AUTO_APPLY_CONFIG"], "false")
+        for setting in ("WP816_FIRMWARE_VERSION", "WP816_FIRMWARE_URL", "WP816_FIRMWARE_SHA256"):
+            self.assertEqual(services["phone-provisioner"]["environment"][setting], environment[setting])
+            for name in ("web", "portal", "phone-profiles", "wireguard", "vpn-reconciler"):
+                self.assertNotIn(setting, services[name].get("environment", {}))
         self.assertEqual(services["phone-provisioner"]["user"], "0:0")
         self.assertEqual(services["phone-provisioner"]["healthcheck"]["test"],
                          ["CMD", "python", "-m", "frontporch.provisioning_storage"])
