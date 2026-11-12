@@ -143,7 +143,7 @@ def public_progress(enrollment):
     if removing and enrollment.problem == "service":
         message = "Phone removal is delayed. Your request is saved; contact FrontPorch if it doesn't continue."
     if state == State.RESET_PENDING:
-        message = "The factory reset was requested. Keep the phone powered and connected to Wi-Fi until it restarts, then confirm that its first-time setup screen is showing."
+        message = "The remote reset was requested. Keep the phone powered and connected to Wi-Fi until it restarts, then follow the checks below before confirming removal."
     elif state == State.DEREGISTERED:
         message = "This phone has been removed from your account. You can register it again as a new phone."
     return {
@@ -213,7 +213,7 @@ def check_again(request, enrollment_id):
 
 
 class DeregistrationForm(forms.Form):
-    confirm = forms.BooleanField(label="Remove this phone and erase its settings with a factory reset.")
+    confirm = forms.BooleanField(label="Remove this phone from my family’s account and request a remote reset.")
 
 
 @login_required
@@ -271,7 +271,7 @@ def confirm_reset(request, enrollment_id):
             enrollment.state = State.REMOVING
             enrollment.next_attempt_at = timezone.now()
             enrollment.save(update_fields=["reset_confirmed_at", "state", "next_attempt_at", "updated_at"])
-            record_activity(actor, f"Confirmed the phone's factory setup screen: {enrollment.friendly_name}.")
+            record_activity(actor, f"Confirmed the phone restarted and its FrontPorch account was cleared: {enrollment.friendly_name}.")
         else:
-            messages.error(request, "Confirm that the phone shows its first-time setup screen after the requested reset.")
+            messages.error(request, "Confirm that the phone has restarted and its FrontPorch account is gone. Erasing saved Wi-Fi networks is optional.")
     return redirect("directory:phone_setup_detail", enrollment_id=enrollment.pk)

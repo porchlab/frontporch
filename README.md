@@ -53,8 +53,10 @@ The portal provides children
 and phones, exact child-to-child invitations, private family discovery, contacts,
 quiet hours, dial shortcuts, guardian membership, and family settings. With the opt-in WP816 enrollment service, guardians can register a phone for a
 child, parent, or household through **Phone setup**. They can also deregister an
-enrolled phone there: FrontPorch revokes calling access, requests a factory reset,
-and removes it from GDMS after the guardian confirms the reset. Once removal is
+enrolled phone there: FrontPorch revokes calling access, requests a remote reset,
+and removes it from GDMS after the guardian confirms that the phone restarted
+and its FrontPorch account is gone. Saved Wi-Fi networks may remain; a full
+factory reset from the handset's menu is optional. Once removal is
 verified, the phone can be registered again with fresh credentials. Other phone reservations
 require installer activation. See the [WP816 family setup guide](docs/operations/wp816-family-setup.md). See the [implementation and upgrade
 guide](docs/parent-ui-implementation.md) before deploying this version.

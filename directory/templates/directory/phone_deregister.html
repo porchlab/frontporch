@@ -4,9 +4,9 @@
 <section class="form-panel panel">
     <div class="eyebrow">YOUR FAMILY’S PHONES</div>
     <h1>Deregister {{ enrollment.friendly_name }}?</h1>
-    <p>This removes the phone from your family’s account and stops its FrontPorch calls. Its dial shortcuts and saved settings will be erased.</p>
-    <p>Keep the phone powered and connected to Wi-Fi. We’ll request a factory reset, ask you to confirm its first-time setup screen, and remove it from our device service. Then it can be registered as a new phone.</p>
-    <p>Wi-Fi settings will also be erased. You’ll need to connect it to Wi-Fi again during a new registration.</p>
+    <p>This removes the phone from your family’s account, stops its FrontPorch calls, and removes its dial shortcuts.</p>
+    <p>Keep the phone powered and connected to Wi-Fi. We’ll request a remote reset, ask you to confirm that the phone restarted and its FrontPorch account is gone, and remove it from our device service. Then it can be registered as a new phone.</p>
+    <p>Saved Wi-Fi networks may remain on the phone. A full factory reset to erase Wi-Fi and other local settings is optional and is not required to deregister or register the phone again. We’ll show you how after removal.</p>
     <form method="post">
         {% csrf_token %}
         {% include "directory/fields.html" %}

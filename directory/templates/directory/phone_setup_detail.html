@@ -18,10 +18,19 @@
         </div>
         <form data-progress-reset method="post" action="{% url 'directory:phone_confirm_reset' enrollment.pk %}" {% if not progress.reset_confirmation %}hidden{% endif %}>
             {% csrf_token %}
-            <p><label><input type="checkbox" name="confirm" required> The phone has restarted and shows its first-time setup screen.</label></p>
+            <p>Saved Wi-Fi networks may remain after the remote reset. You can finish removal and register the phone again without erasing them. A full factory reset is optional; instructions appear after removal.</p>
+            <p class="form-note">If the phone has not restarted or its FrontPorch account is still configured, leave this unchecked and contact FrontPorch for help.</p>
+            <p><label><input type="checkbox" name="confirm" required> The phone has restarted and its FrontPorch account is gone.</label></p>
             <button class="button danger" type="submit">Confirm reset and finish removal</button>
         </form>
-        <p data-progress-deregistered {% if not progress.deregistered %}hidden{% endif %}><a class="button" href="{% url 'directory:phone_setup_register' %}">Register a phone</a></p>
+        <div data-progress-deregistered {% if not progress.deregistered %}hidden{% endif %}>
+            <p><a class="button" href="{% url 'directory:phone_setup_register' %}">Register a phone</a></p>
+            <details>
+                <summary>Optional: full factory reset</summary>
+                <p>This is not required to deregister or register the phone again. If you want to erase saved Wi-Fi networks and other local settings, open <strong>Settings → Advanced Settings → Factory reset</strong> on the phone. Confirm with the left softkey and wait for it to restart.</p>
+                <p>Check that the settings are cleared. You’ll need to reconnect the phone to Wi-Fi to use it again.</p>
+            </details>
+        </div>
         <p data-progress-stale hidden>We couldn’t refresh this page. Your request is saved. Reconnect this device to the Internet to see progress.</p>
         <form class="form-actions" method="post" action="{% url 'directory:phone_setup_check' enrollment.pk %}">{% csrf_token %}<button class="button secondary" data-progress-check {% if not progress.check_allowed %}hidden{% endif %}>Check again</button></form>
         <p data-progress-deregister {% if not progress.can_deregister %}hidden{% endif %}><a class="text-button" href="{% url 'directory:phone_deregister' enrollment.pk %}">Deregister phone</a></p>
