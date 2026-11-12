@@ -154,6 +154,7 @@ Django models
 - [GL.iNet Opal router setup checklist](docs/operations/opal-router-checklist.md)
 - [WP816 family registration and deployment](docs/operations/wp816-family-setup.md)
 - [WP816 automated onboarding: GDMS compatibility gate](docs/operations/wp816-onboarding.md)
+- [GWN7062ET gateway: Networking diagnostics and compatibility gate](docs/operations/gwn7062et-onboarding.md)
 - [Family WireGuard peers and staged QNAP migration](docs/operations/wireguard-server.md)
 
 ## Local Setup
