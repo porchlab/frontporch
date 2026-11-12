@@ -39,14 +39,15 @@ future children never inherit them. Family contacts apply to all children, inclu
 future ones. Shortcut eligibility is recomputed from current permissions, active
 destinations, contact numbers, and explicit enabled group membership.
 
-Phones belong to children, shortcuts belong to individual phones, and quiet hours
-are separate schedules. Parents reserve inactive phones with automatic extensions;
+Phones and shortcut keys belong to children. Every phone owned by one child uses
+the same keys, and child destinations remain stable when their phones change.
+Quiet hours are separate schedules. Parents reserve inactive phones with automatic extensions;
 installer actions appear only inside **Demo tools**. A configured phone is not
 advertised as currently online.
 
 Each phone has a standalone printable phonebook using the same print styles as
 Django. Its entries come from the existing simulated destination checks, with
-shared extensions deduplicated and only that phone's active, still-authorized
+shared extensions deduplicated and that child's active, still-authorized
 shortcuts included. Parent calls have one stable extension, with shortcuts on the same entry and a guardian-controlled ring setting. Paused
 or revoked targets are omitted, and inactive source phones show a setup notice.
 The preview reads current session state, defaults to black and white, offers
@@ -66,9 +67,12 @@ from another family.
 
 Changes live in `sessionStorage`, not in a shared backend. A new visitor receives
 fictional fixtures. Refreshing preserves the tab's progress; Reset restores the
-sample family. Versions 1–8 migrate to version 9 without dropping approved pairs,
+sample family. Versions 1–9 migrate to version 10 without dropping approved pairs,
 contacts, phone extensions, shortcut keys, or quiet schedules. One-way legacy
-states require review before they become reciprocal permissions.
+states require review before they become reciprocal permissions. Version 10 moves
+phone shortcuts to their child and retargets child phones to child identities.
+Conflicting keys from multiple legacy phones remain visible as separate, paused
+assignments; reassign or remove the duplicates before enabling them.
 
 ## Intentional differences
 

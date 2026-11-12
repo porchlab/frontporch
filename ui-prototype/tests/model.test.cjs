@@ -29,7 +29,7 @@ test('version 8 households gain Eastern timezone without losing edits', () => {
   assert.equal(JSON.stringify(restored.connections), JSON.stringify(data.connections));
 });
 
-test('phonebooks list every permitted extension, with shortcuts scoped to the selected phone', () => {
+test('phonebooks list every permitted extension, with shortcuts shared by the child', () => {
   const data = Demo.seed();
   const second = Demo.reservePhone(data, 'casey', 'Desk'); second.active = true;
   const entries = Demo.phonebook(data, 'casey-phone');
@@ -37,30 +37,30 @@ test('phonebooks list every permitted extension, with shortcuts scoped to the se
   assert.equal(entries.find(e => e.extension === '7000').name, 'Alex');
   assert.equal(entries.find(e => e.extension === '7000').shortcuts[0].digits, '2');
   assert(entries.some(e => e.name === 'Grandma June' && e.shortcuts.length === 0));
-  assert(Demo.phonebook(data, second.id).every(e => e.shortcuts.length === 0));
+  assert.equal(Demo.phonebook(data, second.id).find(e => e.extension === "7000").shortcuts[0].digits, "2");
   assert(!JSON.stringify(entries).includes('+1202555'));
   assert.equal(Demo.phonebook(data, 'river-phone-0').length, 0);
 });
-test('phonebooks deduplicate shared extensions and omit shortcuts pointing at an inactive shared phone', () => {
+test('phonebooks deduplicate shared extensions and keep child shortcuts when one shared phone is inactive', () => {
   const data = Demo.seed(), peer = data.network[0].children[0];
   peer.devices.push({...peer.devices[0], id:'alex-second', name:'Alex desk'});
-  Demo.saveShortcut(data, 'casey-phone', '', {digits:'3', target:'device:alex-second', label:'Buddy', active:true});
+  Demo.saveShortcut(data, 'casey-phone', '', {digits:'3', target:'child:river-0', label:'Buddy', active:true});
   let entries = Demo.phonebook(data, 'casey-phone');
   assert.equal(entries.filter(e => e.extension === '7000').length, 1);
   assert.deepEqual(Array.from(entries.find(e => e.extension === '7000').shortcuts, s => s.digits), ['2', '3']);
   peer.devices[0].active = false;
   entries = Demo.phonebook(data, 'casey-phone');
-  assert.deepEqual(Array.from(entries.find(e => e.extension === '7000').shortcuts, s => s.digits), ['3']);
+  assert.deepEqual(Array.from(entries.find(e => e.extension === '7000').shortcuts, s => s.digits), ['2', '3']);
 });
 test('phonebooks recheck revoked connections, removed contacts, paused shortcuts and inactive phones', () => {
   const data = Demo.seed(), source = Demo.findDevice(data, 'casey-phone').phone;
   Demo.saveShortcut(data, source.id, '', {digits:'1', target:'contact:+12025550142', label:'Grandma', active:true});
-  source.shortcuts[0].active = false;
+  data.children[0].shortcuts[0].active = false;
   assert.equal(Demo.phonebook(data, source.id).find(e => e.extension === '7000').shortcuts.length, 0);
-  source.shortcuts[0].active = true;
+  data.children[0].shortcuts[0].active = true;
   data.connections = []; data.contacts = [];
   assert.equal(Demo.phonebook(data, source.id).length, 0);
-  assert.equal(source.shortcuts.length, 2);
+  assert.equal(data.children[0].shortcuts.length, 2);
   Demo.acceptInvitation(data, 'cedar-invite', ['jordan']);
   assert.equal(Demo.phonebook(data, source.id).length, 0);
   data.contacts.push({name:'Grandma', phone:'+12025550142', extension:'6100'});
@@ -99,20 +99,20 @@ test('reserving multiple phones never enables calling and avoids all extension o
   assert.equal(first.active, false); assert.equal(second.active, false);
   assert.notEqual(first.extension, second.extension);
   assert.equal(Demo.findChild(data, 'casey').devices.length, 3);
-  assert(!Demo.destinations(data, 'casey-phone').some(t => t.key === `device:${first.id}`));
+  assert(!Demo.destinations(data, 'casey-phone').some(t => t.key === 'child:casey'));
   first.active = true;
-  assert(Demo.destinations(data, 'casey-phone').some(t => t.key === `device:${first.id}`));
+  assert(Demo.destinations(data, 'casey-phone').some(t => t.key === 'child:casey'));
   const contact = Demo.saveContact(data, '', {label:'Friend', phone_number:'202-555-0199', notes:''});
   assert.notEqual(contact.extension, first.extension);
 });
-test('shortcut keys are per phone and never grant a connection', () => {
+test('shortcut keys are per child and never grant a connection', () => {
   const data = Demo.seed(), other = Demo.reservePhone(data, 'casey', 'Desk');
   Demo.saveShortcut(data, 'casey-phone', '', {digits:'1', target:'contact:+12025550142', label:'Grandma', active:true});
-  Demo.saveShortcut(data, other.id, '', {digits:'1', target:'contact:+12025550163', label:'Drew', active:true});
+  assert.throws(() => Demo.saveShortcut(data, other.id, '', {digits:'1', target:'contact:+12025550163', label:'Drew', active:true}), /already assigned/);
   assert.throws(() => Demo.saveShortcut(data, other.id, '', {digits:'1', target:'contact:+12025550142'}), /already assigned/);
   assert.throws(() => Demo.saveShortcut(data, other.id, '', {digits:'0', target:'contact:+12025550142'}), /1 to 9/);
-  assert.throws(() => Demo.saveShortcut(data, other.id, '', {digits:'3', target:'device:river-phone-1'}), /approved destination/);
-  assert(!Demo.destinations(data, 'casey-phone').some(t => t.key === 'device:casey-phone'));
+  assert.throws(() => Demo.saveShortcut(data, other.id, '', {digits:'3', target:'child:river-1'}), /approved destination/);
+  assert(!Demo.destinations(data, 'casey-phone').some(t => t.key === 'child:casey'));
 });
 test('acceptance creates only the selected Cartesian child pairs', () => {
   const data = Demo.seed(); Demo.acceptInvitation(data, 'cedar-invite', ['casey']);
@@ -141,9 +141,9 @@ test('pending invitations in either direction prevent duplicates without grantin
 test('removing a pair withdraws shortcut eligibility without removing other pairs', () => {
   const data = Demo.seed(); Demo.acceptInvitation(data, 'cedar-invite', ['casey']);
   data.connections = data.connections.filter(c => c.id !== 'casey-alex-pair');
-  assert(!Demo.destinations(data, 'casey-phone').some(t => t.key === 'device:river-phone-0'));
-  assert.equal(Demo.findDevice(data, 'casey-phone').phone.shortcuts.length, 1);
-  assert(Demo.destinations(data, 'casey-phone').some(t => t.key === 'device:cedar-phone-0'));
+  assert(!Demo.destinations(data, 'casey-phone').some(t => t.key === 'child:river-0'));
+  assert.equal(Demo.findChild(data, 'casey').shortcuts.length, 1);
+  assert(Demo.destinations(data, 'casey-phone').some(t => t.key === 'child:cedar-0'));
 });
 test('contact access follows the number, includes future children, and is revoked on removal', () => {
   const data = Demo.seed();
@@ -240,7 +240,7 @@ test('legacy session keeps identity, permissions, phones, schedules, contacts an
   const data = Demo.load(store);
   assert.equal(data.children[0].devices[0].active, false);
   assert.equal(data.children[0].quietHours[0].day_group, 'weekdays');
-  assert.equal(data.children[0].devices[0].shortcuts[0].target, 'device:river-phone-0');
+  assert.equal(data.children[0].shortcuts[0].target, 'child:river-0');
   assert.equal(data.connections.length, 1);
   assert.equal(data.contacts[0].extension, '6100');
   assert.equal(data.guardians[0].directoryVisible, true);
@@ -266,14 +266,14 @@ test('parent calling preferences preserve one extension and reject an unavailabl
   assert.equal(parent.callDestination, 'both');
   Demo.saveProfile(data, {display_name:'Morgan', phone:parent.phone, call_destination:'disabled'});
   assert(!Demo.phonebook(data, 'casey-phone').some(e => e.extension === extension));
-  assert(data.children[0].devices[0].shortcuts.some(s => s.target === 'parent:primary'));
+  assert(data.children[0].shortcuts.some(s => s.target === 'parent:primary'));
 });
 
 test('version 7 parent shortcuts gain a stable extension without enabling unconfigured phone numbers', () => {
   const data = Demo.seed(), parent = data.guardians[0], storage = memory();
   delete parent.extension; delete parent.callDestination;
   parent.phone = '+12025550199';
-  data.children[0].devices[0].shortcuts.push({id:'parent-key', digits:'1', target:'parent:primary', active:true, label:'Mom'});
+  data.children[0].shortcuts.push({id:'parent-key', digits:'1', target:'parent:primary', active:true, label:'Mom'});
   data.guardians.push({id:'other', name:'Taylor', phone:'+12025550188', active:true});
   storage.setItem(Demo.STORAGE_KEY, JSON.stringify({version:7, data}));
   const upgraded = Demo.load(storage), upgradedParent = upgraded.guardians[0];
@@ -321,4 +321,33 @@ test('group invitations require discovery and can be declined or cancelled', () 
   const second = Demo.sendGroupInvitation(data, group.id, 'river');
   Demo.groupInvitationAction(data, second.id, 'cancelled');
   assert.deepEqual(Array.from(group.members), ['casey']);
+});
+
+test('child shortcuts survive replacing both phones and pause when the connection is revoked', () => {
+  const data = Demo.seed(), child = data.children[0], peer = data.network[0].children[0];
+  child.devices = []; peer.devices = [];
+  assert.equal(Demo.destinations(data, child.id).some(t => t.key === 'child:river-0'), false);
+  const source = Demo.reservePhone(data, child.id, 'Replacement'); source.active = true;
+  peer.devices.push({id:'new-peer-phone', name:'New phone', extension:'7100', active:true});
+  assert.equal(Demo.phonebook(data, source.id).find(e => e.extension === '7100').shortcuts[0].digits, '2');
+  data.connections = [];
+  assert(!Demo.phonebook(data, source.id).some(e => e.extension === '7100'));
+  assert.equal(child.shortcuts.length, 1);
+});
+
+test('version 9 migrates device references and exposes conflicting keys paused for review', () => {
+  const data = Demo.seed(), store = memory(), child = data.children[0];
+  child.devices[0].shortcuts = child.shortcuts;
+  child.shortcuts = [];
+  child.devices[0].shortcuts[0].target = 'device:river-phone-0';
+  child.devices.push({id:'old-second', name:'Desk', extension:'5100', active:true,
+    shortcuts:[{id:'duplicate', digits:'2', target:'contact:+12025550142', label:'Grandma', active:true}]});
+  store.value = JSON.stringify({version:9, data});
+  const restored = Demo.load(store), shortcuts = restored.children[0].shortcuts;
+  assert.equal(shortcuts.length, 2);
+  assert.equal(shortcuts[0].target, 'child:river-0');
+  assert(shortcuts.every(s => !s.active));
+  assert(restored.activity[0].text.includes('conflicting shortcut keys'));
+  Demo.saveShortcut(restored, 'casey', 'duplicate', {digits:'3', target:'contact:+12025550142', active:true});
+  assert.equal(restored.children[0].shortcuts.find(s => s.id === 'duplicate').digits, '3');
 });

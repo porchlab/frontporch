@@ -452,14 +452,17 @@ class ShortcutForm(forms.Form):
     )
 
     def __init__(self, *args, source, parent, instance=None, **kwargs):
-        from .models import DialShortcut
-        from .services import shortcut_destinations, shortcut_targets
+        from .models import Child, DialShortcut
+        from .services import shortcut_destinations, shortcut_source, shortcut_targets
 
-        self.source, self.parent = source, parent
-        self.instance = instance or DialShortcut(
-            source_device=source, approved_by=parent
+        self.source, self.parent = shortcut_source(source), parent
+        source_field = (
+            "source_child" if isinstance(self.source, Child) else "source_device"
         )
-        self.destinations = shortcut_destinations(source)
+        self.instance = instance or DialShortcut(
+            **{source_field: self.source}, approved_by=parent
+        )
+        self.destinations = shortcut_destinations(self.source)
         if instance:
             selected = next(
                 (
@@ -484,20 +487,19 @@ class ShortcutForm(forms.Form):
         ]
 
     def clean_digits(self):
-        from .models import DialShortcut
-
         digits = self.cleaned_data["digits"]
         if (
-            DialShortcut.objects.filter(source_device=self.source, digits=digits)
+            self.source.dial_shortcuts.filter(digits=digits)
             .exclude(pk=self.instance.pk)
             .exists()
         ):
-            raise forms.ValidationError("This key is already assigned on this phone.")
+            raise forms.ValidationError("This key is already assigned.")
         return digits
 
     def save(self):
         shortcut = self.instance
         for field in (
+            "child_target",
             "internal_target_device",
             "external_target_extension",
             "parent_target",

@@ -6,7 +6,7 @@ const icon = name => `<svg class="icon" width="20" height="20" viewBox="0 0 24 2
 const avatar = (name, color = "blue", size = "") => `<span class="avatar ${esc(color)} ${size}">${esc(String(name).slice(0, 1).toUpperCase())}</span>`;
 const button = (label, action, id = "", kind = "secondary") => `<button type="button" class="${/text-button|card-action/.test(kind) ? kind : `button ${kind}`}" data-action="${action}" data-id="${esc(id)}">${label}</button>`;
 const link = (label, route, kind = "text-button blue-text") => `<a class="${kind}" href="#family/${esc(route)}">${label}</a>`;
-const phonebookLink = (phone, kind = "button secondary") => `<a class="${kind}" href="phonebook.html?phone=${encodeURIComponent(phone.id)}">Print phonebook</a>`;
+const phonebookLink = (phone, kind = "button secondary", label = "Print phonebook") => `<a class="${kind}" href="phonebook.html?phone=${encodeURIComponent(phone.id)}">${esc(label)}</a>`;
 const brand = () => `<a class="brand" href="#welcome"><span class="brand-mark">${icon("home")}</span>FrontPorch<span class="brand-period">.</span></a>`;
 const note = text => `<div class="demo-notice">${text}</div>`;
 const empty = (title, text, action = "") => `<div class="empty-state"><h3>${title}</h3><p>${text}</p>${action}</div>`;
@@ -134,7 +134,7 @@ function route() {
 }
 function childCard(child) {
   const pairs = state.connections.filter(c => c.childId === child.id).length;
-  return `<article class="child-card"><div class="child-card-heading">${avatar(child.name, child.color)}<div><h3>${esc(child.name)}</h3><span>A place to call their own</span></div><button class="icon-button" data-action="child" data-id="${esc(child.id)}" aria-label="Edit ${esc(child.name)}">${icon("edit")}</button></div><div class="child-meta">${child.devices.map(phone => `<div class="phone-status"><span>${icon("phone")} ${esc(phone.name)} · <b>${phone.extension}</b></span><span class="pill ${phone.active ? "green" : "amber"}">${phone.active ? "Enabled" : "Setup pending"}</span></div>${link(`${icon("phone")} Dial shortcuts <span>${phone.shortcuts.length} set ${icon("chevron")}</span>`, `shortcuts/${phone.id}`, "shortcut-card-link")}${phonebookLink(phone, "shortcut-card-link")}`).join("") || `<div class="phone-status">${icon("phone")} No phone registered yet</div>`}<span>${icon("users")} ${pairs} connection${pairs === 1 ? "" : "s"} · ${state.contacts.length} external contacts</span><span>${icon("clock")} ${child.quietHours.length} quiet hours schedule${child.quietHours.length === 1 ? "" : "s"}</span></div>${link(`Manage phone & permissions ${icon("arrow")}`, `child/${child.id}`, "card-action")}</article>`;
+  return `<article class="child-card"><div class="child-card-heading">${avatar(child.name, child.color)}<div><h3>${esc(child.name)}</h3><span>A place to call their own</span></div><button class="icon-button" data-action="child" data-id="${esc(child.id)}" aria-label="Edit ${esc(child.name)}">${icon("edit")}</button></div><div class="child-meta">${child.devices.map(phone => `<div class="phone-status"><span>${icon("phone")} ${esc(phone.name)} · <b>${phone.extension}</b></span><span class="pill ${phone.active ? "green" : "amber"}">${phone.active ? "Enabled" : "Setup pending"}</span></div>${phonebookLink(phone, "shortcut-card-link")}`).join("") || `<div class="phone-status">${icon("phone")} No phone registered yet</div>`}${link(`${icon("phone")} Dial shortcuts <span>${child.shortcuts.length} set ${icon("chevron")}</span>`, `shortcuts/${child.id}`, "shortcut-card-link")}<span>${icon("users")} ${pairs} connection${pairs === 1 ? "" : "s"} · ${state.contacts.length} external contacts</span><span>${icon("clock")} ${child.quietHours.length} quiet hours schedule${child.quietHours.length === 1 ? "" : "s"}</span></div>${link(`Manage phone & permissions ${icon("arrow")}`, `child/${child.id}`, "card-action")}</article>`;
 }
 function setupChecklist() {
   if (state.setupDismissed) return "";
@@ -156,16 +156,18 @@ function childrenPage() {
 function childPage() {
   const child = Demo.findChild(state, detailId);
   if (!child) return empty("Child not found.", "Choose a child from Children & phones.", link("Children & phones", "children", "button"));
-  return `${heading(`${esc(child.name)}’s place to call.`, "Phones, quiet hours, and the people in their circle.", button("Edit child", "child", child.id))}<div class="settings-grid"><section class="panel"><h2>Their phones</h2>${child.devices.map(phone => `<div class="device-row"><h3>${esc(phone.name)}</h3><p>Extension ${phone.extension} · ${phone.active ? "Enabled" : "Setup pending · your installer activates this phone"}</p><div class="inline-actions">${link("Dial shortcuts", `shortcuts/${phone.id}`, "button secondary")}${phonebookLink(phone)}${button("Rename phone", "rename-phone", phone.id, "text-button blue-text")}</div></div>`).join("") || '<p class="small-empty">No phone registered yet.</p>'}${button("Add a phone", "phone", child.id, "spaced")}<p class="form-note spaced">Your installer connects and tests the physical phone. Enabled does not mean the phone is currently online.</p></section><section class="panel"><div class="section-heading"><h2>Quiet hours</h2>${button("Add quiet hours", "quiet", child.id, "text-button blue-text")}</div><p class="form-note">All times use ${esc(state.timezone)}, your family’s time zone. An end time before the start time means the next morning. The day group selects the days quiet hours start.</p>${child.quietHours.map(period => `<div class="device-row"><h3>${esc(period.label)} ${period.is_active ? "" : '<span class="pill neutral">Paused</span>'}</h3><p>${esc(PORTAL.forms.quiet.find(f => f.name === "day_group").choices.find(([key]) => key === period.day_group)?.[1])} · ${esc(period.start_time)}–${esc(period.end_time)}</p><div class="inline-actions"><button class="text-button blue-text" data-action="edit-quiet" data-id="${esc(child.id)}" data-period="${esc(period.id)}">Edit</button>${period.is_active ? `<button class="text-button" data-action="pause-quiet" data-id="${esc(child.id)}" data-period="${esc(period.id)}">Pause</button>` : ""}</div></div>`).join("") || '<p class="small-empty">No quiet hours set.</p>'}</section></div><p class="section-footnote">${link("Manage family connections", "circle")} · ${link("Manage external contacts", "contacts")}</p>`;
+  return `${heading(`${esc(child.name)}’s place to call.`, "Phones, quiet hours, and the people in their circle.", button("Edit child", "child", child.id))}<div class="settings-grid"><section class="panel"><h2>Their phones</h2>${link(`Dial shortcuts · ${child.shortcuts.length} set`, `shortcuts/${child.id}`, "button secondary")}<p class="form-note">One set of keys shared by all their phones.</p>${child.devices.map(phone => `<div class="device-row"><h3>${esc(phone.name)}</h3><p>Extension ${phone.extension} · ${phone.active ? "Enabled" : "Setup pending · your installer activates this phone"}</p><div class="inline-actions">${phonebookLink(phone)}${button("Rename phone", "rename-phone", phone.id, "text-button blue-text")}</div></div>`).join("") || '<p class="small-empty">No phone registered yet.</p>'}${button("Add a phone", "phone", child.id, "spaced")}<p class="form-note spaced">Your installer connects and tests the physical phone. Enabled does not mean the phone is currently online.</p></section><section class="panel"><div class="section-heading"><h2>Quiet hours</h2>${button("Add quiet hours", "quiet", child.id, "text-button blue-text")}</div><p class="form-note">All times use ${esc(state.timezone)}, your family’s time zone. An end time before the start time means the next morning. The day group selects the days quiet hours start.</p>${child.quietHours.map(period => `<div class="device-row"><h3>${esc(period.label)} ${period.is_active ? "" : '<span class="pill neutral">Paused</span>'}</h3><p>${esc(PORTAL.forms.quiet.find(f => f.name === "day_group").choices.find(([key]) => key === period.day_group)?.[1])} · ${esc(period.start_time)}–${esc(period.end_time)}</p><div class="inline-actions"><button class="text-button blue-text" data-action="edit-quiet" data-id="${esc(child.id)}" data-period="${esc(period.id)}">Edit</button>${period.is_active ? `<button class="text-button" data-action="pause-quiet" data-id="${esc(child.id)}" data-period="${esc(period.id)}">Pause</button>` : ""}</div></div>`).join("") || '<p class="small-empty">No quiet hours set.</p>'}</section></div><p class="section-footnote">${link("Manage family connections", "circle")} · ${link("Manage external contacts", "contacts")}</p>`;
 }
 function shortcutsPage() {
-  const source = Demo.findDevice(state, detailId);
-  if (!source) return empty("Phone not found.", "Choose a phone from Children & phones.");
-  const targets = Demo.destinations(state, source.phone.id);
-  return `${heading(`Dial shortcuts · ${esc(source.phone.name)}`, "A familiar voice, one digit away.", `<div class="inline-actions">${phonebookLink(source.phone)}${link("Back to child", `child/${source.child.id}`, "button secondary")}</div>`)}<div class="info-strip"><p>Shortcuts never add calling permission. Only approved destinations can be assigned.</p></div><div class="dial-grid">${PORTAL.forms.shortcut.find(f => f.name === "digits").choices.map(([digit]) => {
-    const shortcut = source.phone.shortcuts.find(s => s.digits === digit);
+  const source = Demo.shortcutOwner(state, detailId);
+  if (!source) return empty("Child not found.", "Choose a child from Children & phones.");
+  const targets = Demo.destinations(state, source.id);
+  return `${heading(`Dial shortcuts · ${esc(source.name)}`, "One set of keys, shared by all their phones.", `<div class="inline-actions">${source.devices.map(phone => phonebookLink(phone, "button secondary", `Print phonebook · ${phone.name}`)).join("")}${link("Back to child", `child/${source.id}`, "button secondary")}</div>`)}<div class="info-strip"><p>Shortcuts never add calling permission. Only approved destinations can be assigned.</p></div><div class="dial-grid">${PORTAL.forms.shortcut.find(f => f.name === "digits").choices.flatMap(([digit]) => {
+    const matches = source.shortcuts.filter(s => s.digits === digit);
+    return (matches.length ? matches : [null]).map(shortcut => {
     const target = shortcut && targets.find(t => t.key === shortcut.target);
-    return `<article class="dial-slot"><span class="dial-digit">${digit}</span><h2>${shortcut ? esc(shortcut.label || target?.name || shortcut.targetName || "Saved destination") : "Not assigned"}</h2>${shortcut ? `<p>${target ? esc(`${target.name} · ${target.detail}`) : "Destination unavailable"}</p><span class="pill ${target && shortcut.active ? "green" : "neutral"}">${!target ? "Unavailable" : shortcut.active ? "Enabled" : "Paused"}</span>` : ""}<div class="inline-actions"><button class="text-button blue-text" data-action="edit-shortcut" data-id="${esc(source.phone.id)}" data-digit="${digit}">${shortcut ? "Edit" : "Assign"}</button>${shortcut ? `<button class="text-button" data-action="toggle-shortcut" data-id="${esc(source.phone.id)}" data-shortcut="${esc(shortcut.id)}">${shortcut.active ? "Pause" : "Enable"}</button><button class="text-button danger-text" data-action="remove-shortcut" data-id="${esc(source.phone.id)}" data-shortcut="${esc(shortcut.id)}">Remove</button>` : ""}</div></article>`;
+    return `<article class="dial-slot"><span class="dial-digit">${digit}</span><h2>${shortcut ? esc(shortcut.label || target?.name || shortcut.targetName || "Saved destination") : "Not assigned"}</h2>${shortcut ? `<p>${target ? esc(`${target.name} · ${target.detail}`) : "Destination unavailable"}</p><span class="pill ${target && shortcut.active ? "green" : "neutral"}">${!target ? "Unavailable" : shortcut.active ? "Enabled" : "Paused"}</span>` : ""}<div class="inline-actions"><button class="text-button blue-text" data-action="edit-shortcut" data-id="${esc(source.id)}" data-digit="${digit}" data-shortcut="${esc(shortcut?.id || "")}">${shortcut ? "Edit" : "Assign"}</button>${shortcut ? `<button class="text-button" data-action="toggle-shortcut" data-id="${esc(source.id)}" data-shortcut="${esc(shortcut.id)}">${shortcut.active ? "Pause" : "Enable"}</button><button class="text-button danger-text" data-action="remove-shortcut" data-id="${esc(source.id)}" data-shortcut="${esc(shortcut.id)}">Remove</button>` : ""}</div></article>`;
+    });
   }).join("")}</div>`;
 }
 function connectionsPage() {
@@ -217,12 +219,12 @@ function quietDialog(childId, periodId = "") {
   const period = child.quietHours.find(p => p.id === periodId);
   openDialog(`${period ? "Edit" : "Add"} quiet hours for ${esc(child.name)}`, `<p class="form-note">Times use ${esc(state.timezone)}, your family’s time zone. An end time before the start time means the next morning. The day group selects the days quiet hours start.</p>${fields("quiet", period || {})}`, {form:"quiet", id:childId, extra:`data-period="${esc(periodId)}"`});
 }
-function shortcutDialog(deviceId, digit) {
-  const source = Demo.findDevice(state, deviceId);
+function shortcutDialog(deviceId, digit, shortcutId) {
+  const source = Demo.shortcutOwner(state, deviceId);
   if (!source) return;
-  const shortcut = source.phone.shortcuts.find(s => s.digits === digit);
+  const shortcut = source.shortcuts.find(s => s.id === shortcutId);
   const options = [["", "Choose an approved destination"], ...Demo.destinations(state, deviceId).map(t => [t.key, `${t.name} · ${t.detail}`])];
-  openDialog(`Dial shortcut · ${esc(source.phone.name)}`, `<p class="dialog-intro">Choose an already approved destination. Shortcuts never add calling permission; quiet hours still apply.</p>${field("shortcut", "digits", {digits:digit})}${field("shortcut", "target", {target:shortcut?.target || ""}, {options})}${field("shortcut", "label", {label:shortcut?.label || ""})}${field("shortcut", "is_active", {is_active:shortcut ? shortcut.active : true})}`, {form:"shortcut", id:deviceId, extra:`data-shortcut="${esc(shortcut?.id || "")}"`, submit:"Save shortcut"});
+  openDialog(`Dial shortcut · ${esc(source.name)}`, `<p class="dialog-intro">Choose an already approved destination. Shortcuts never add calling permission; quiet hours still apply.</p>${field("shortcut", "digits", {digits:digit})}${field("shortcut", "target", {target:shortcut?.target || ""}, {options})}${field("shortcut", "label", {label:shortcut?.label || ""})}${field("shortcut", "is_active", {is_active:shortcut ? shortcut.active : true})}`, {form:"shortcut", id:deviceId, extra:`data-shortcut="${esc(shortcut?.id || "")}"`, submit:"Save shortcut"});
 }
 function connectionDialog(familyId, code = "") {
   const target = Demo.family(state, familyId);
@@ -320,18 +322,19 @@ document.addEventListener("click", async event => {
         }
         break;
       }
-      case "edit-shortcut": shortcutDialog(id, digit); break;
+      case "edit-shortcut": shortcutDialog(id, digit, shortcutId); break;
       case "toggle-shortcut": {
-        const item = Demo.findDevice(state, id)?.phone.shortcuts.find(s => s.id === shortcutId);
+        const item = Demo.shortcutOwner(state, id)?.shortcuts.find(s => s.id === shortcutId);
         if (item) {
           Demo.assert(item.active || Demo.destinations(state, id).some(t => t.key === item.target), "Choose an approved destination before enabling this shortcut.");
+          Demo.assert(item.active || !Demo.shortcutOwner(state, id).shortcuts.some(s => s.id !== item.id && s.digits === item.digits), "Reassign or remove the conflicting key before enabling it.");
           item.active = !item.active; finish(item.active ? "Shortcut enabled." : "Shortcut paused.");
         }
         break;
       }
-      case "remove-shortcut": confirm("Remove this shortcut?", "This frees the key on this phone. Calling permissions stay the same.", () => {
-        const source = Demo.findDevice(state, id);
-        if (source) { source.phone.shortcuts = source.phone.shortcuts.filter(s => s.id !== shortcutId); finish("Shortcut removed."); }
+      case "remove-shortcut": confirm("Remove this shortcut?", "This frees the key on all their phones. Calling permissions stay the same.", () => {
+        const source = Demo.shortcutOwner(state, id);
+        if (source) { source.shortcuts = source.shortcuts.filter(s => s.id !== shortcutId); finish("Shortcut removed."); }
       }); break;
       case "invite": connectionDialog(id); break;
       case "invite-code": openDialog("Find a family by code", `${fields("code")}${note("Try WILLOW-3R7J, or PINE-7K2M for a fictional unlisted family.")}`, {form:"code", submit:"Find family"}); break;

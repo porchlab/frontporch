@@ -14,6 +14,7 @@ from .services import (
     shortcut_destination_allowed,
     shortcut_destinations,
     shortcut_targets,
+    shortcuts_for,
 )
 
 
@@ -45,13 +46,20 @@ def _device_entry(device):
 
 
 def device_phonebook(source):
-    """One entry per callable extension, with shortcuts for this device only."""
+    """One entry per callable extension, with the child’s shared shortcuts."""
     if not source.is_active or not source.assigned_child_id:
         return []
 
     entries = {}
     target_entries = {}
     for target_field, target, _ in shortcut_destinations(source).values():
+        if target_field == "child_target":
+            child_entries = {}
+            for device in target.devices.filter(is_active=True).exclude(pk=source.pk):
+                entry = _device_entry(device)
+                child_entries[entry.extension] = entries.setdefault(entry.extension, entry)
+            target_entries[(target_field, target.pk)] = list(child_entries.values())
+            continue
         if target_field == "internal_target_device":
             entry = _device_entry(target)
         elif target_field == "parent_target":
@@ -74,7 +82,7 @@ def device_phonebook(source):
         else:
             continue
         entry = entries.setdefault(entry.extension, entry)
-        target_entries[(target_field, target.pk)] = entry
+        target_entries[(target_field, target.pk)] = [entry]
 
     contact_labels = dict(
         models.FamilyContact.objects.filter(family=source.owning_family).values_list(
@@ -98,11 +106,13 @@ def device_phonebook(source):
             extension.dial_extension,
         )
         entries[entry.extension] = entry
-        target_entries[("external_target_extension", extension.pk)] = entry
+        target_entries[("external_target_extension", extension.pk)] = [entry]
 
     for shortcut in (
-        source.dial_shortcuts.filter(is_active=True, approved_by__isnull=False)
+        shortcuts_for(source).filter(is_active=True, approved_by__isnull=False)
         .select_related(
+            "source_child__family",
+            "child_target__family",
             "source_device__assigned_child__family",
             "approved_by",
             "internal_target_device__assigned_child__family",
@@ -117,16 +127,10 @@ def device_phonebook(source):
     ):
         if not shortcut_destination_allowed(shortcut):
             continue
-        entry = next(
-            (
-                entry
-                for (target_field, target_id), entry in target_entries.items()
-                if shortcut_targets(shortcut, target_field, target_id)
-            ),
-            None,
-        )
-        if entry is not None:
-            entry.shortcuts.append({"digits": shortcut.digits, "label": shortcut.label})
+        for (target_field, target_id), matched_entries in target_entries.items():
+            if shortcut_targets(shortcut, target_field, target_id):
+                for entry in matched_entries:
+                    entry.shortcuts.append({"digits": shortcut.digits, "label": shortcut.label})
     return _sorted_entries(entries.values())
 
 

@@ -21,10 +21,6 @@
                 </span>
             </div>
             <a class="shortcut-card-link"
-               href="{% url 'directory:shortcuts' device.id %}">
-                {% icon 'phone' %} Dial shortcuts <span>{{ device.dial_shortcuts.count }} set {% icon 'chevron' %}</span>
-            </a>
-            <a class="shortcut-card-link"
                href="{% url 'directory:phonebook' device.id %}">
                 {% icon 'book' %} Print phonebook {% icon 'chevron' %}
             </a>
@@ -33,6 +29,10 @@
                 <span>{% icon 'phone' %} No phone registered yet</span>
             </div>
         {% endfor %}
+        <a class="shortcut-card-link"
+           href="{% url 'directory:child_shortcuts' child.id %}">
+            {% icon 'phone' %} Dial shortcuts <span>{{ child.dial_shortcuts.count }} set {% icon 'chevron' %}</span>
+        </a>
         {% for landline in child.landlines.all %}
             <div class="phone-status">
                 {% icon 'phone' %} Landline · {{ landline.dial_extension }} <span class="pill neutral">{% if landline.is_active %}Enabled{% else %}Disabled{% endif %}</span>

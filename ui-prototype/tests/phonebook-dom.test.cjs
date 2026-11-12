@@ -25,7 +25,7 @@ test('demo HTML passes escaped names, final rows, multiple shortcuts and parent 
       data.children[0].devices[0].name='Bedroom <north>';
       data.contacts[0].name='Grandma <June> & Élodie';
       data.guardians[0].phone='+12025550199'; data.guardians[0].callDestination='phone';
-      Demo.saveShortcut(data,'casey-phone','',{digits:'3',target:'device:river-phone-0',label:'Best & <buddy>',active:true});
+      Demo.saveShortcut(data,'casey-phone','',{digits:'3',target:'child:river-0',label:'Best & <buddy>',active:true});
       Demo.saveShortcut(data,'casey-phone','',{digits:'4',target:'parent:primary',label:'Call home',active:true});
     `,{color});
     assert.equal(data.title,'Casey & "C"’s phonebook.');

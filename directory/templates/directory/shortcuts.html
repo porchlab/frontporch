@@ -3,17 +3,17 @@
 {% block content %}
     <div class="page-heading">
         <div>
-            <div class="eyebrow">DIAL SHORTCUTS · EXTENSION {{ device.sip_extension }}</div>
+            <div class="eyebrow">DIAL SHORTCUTS · {{ source_name }}</div>
             <h1>One key. A familiar voice.</h1>
-            <p>{{ device.friendly_name }} · Choose the people on this phone’s keys.</p>
+            <p>{% if child %}One set of keys for all of {{ child.name }}’s phones.{% else %}Choose the people on this phone’s keys.{% endif %}</p>
         </div>
-        {% if device.assigned_child_id %}
+        {% for phone in phones %}
             <a class="button secondary"
-               href="{% url 'directory:phonebook' device.id %}">Print phonebook</a>
-        {% endif %}
+               href="{% url 'directory:phonebook' phone.id %}">Print phonebook · {{ phone.friendly_name }}</a>
+        {% endfor %}
     </div>
     <div class="info-strip">
-        <p>Shortcuts use existing calling permissions. Quiet hours still apply. {% if not device.is_active %}This phone is awaiting installer activation.{% endif %}
+        <p>Shortcuts use existing calling permissions. Quiet hours still apply. {% if child %}Shortcuts stay with {{ child.name }} when a phone is replaced.{% endif %}
         </p>
     </div>
     <div class="dial-grid">
@@ -28,7 +28,7 @@
                     </span>
                     <div class="inline-actions">
                         <a class="text-button blue-text"
-                           href="{% url 'directory:shortcut_edit' device.id slot.shortcut.id %}">Edit</a>
+                           href="{{ slot.edit_url }}">Edit</a>
                         {% if slot.shortcut.is_active %}
                             <form method="post"
                                   action="{% url 'directory:shortcut_action' slot.shortcut.id 'pause' %}">
@@ -46,7 +46,7 @@
                 {% else %}
                     <h2>A place for someone.</h2>
                     <a class="text-button blue-text"
-                       href="{% url 'directory:shortcut_create' device.id %}?key={{ slot.digit }}">
+                       href="{{ create_url }}?key={{ slot.digit }}">
                     {% icon 'plus' %} Assign a person</a>
                 {% endif %}
             </article>
