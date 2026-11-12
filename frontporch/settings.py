@@ -84,6 +84,13 @@ GDMS_USERNAME = os.environ.get("GDMS_USERNAME", "")
 GDMS_PASSWORD = os.environ.get("GDMS_PASSWORD", "")
 GDMS_CLIENT_ID = os.environ.get("GDMS_CLIENT_ID", "")
 GDMS_CLIENT_SECRET = os.environ.get("GDMS_CLIENT_SECRET", "")
+# Separate, operator-only GDMS Networking diagnostics. Not used by startup or
+# the enrollment worker; public Compose services do not receive these secrets.
+GWN_REGION = os.environ.get("GWN_REGION", "us")
+GWN_APP_ID = os.environ.get("GWN_APP_ID", "")
+GWN_SECRET_KEY = os.environ.get("GWN_SECRET_KEY", "")
+GWN_USERNAME = os.environ.get("GWN_USERNAME", "")
+GWN_PASSWORD = os.environ.get("GWN_PASSWORD", "")
 # An empty configuration never starts a VPN service or peer reconciler.
 WIREGUARD_ENABLED = env_bool("WIREGUARD_ENABLED", default=False)
 WIREGUARD_SERVER_ADDRESS = os.environ.get("WIREGUARD_SERVER_ADDRESS", "")
