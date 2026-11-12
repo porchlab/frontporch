@@ -305,3 +305,57 @@ class GDMSClient:
         if not matches:
             raise GDMSProtocolError("GDMS live device identity does not match.")
         return device
+
+    def factory_reset(self, *, mac, org_id, task_name):
+        """Acceptance is not evidence that the handset has reset."""
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", task_name):
+            raise ValueError("Use a neutral, unique reset task name.")
+        data = self._request("POST", "/task/add", data={
+            "taskName": task_name, "taskType": 2, "macList": [wire_mac(mac)],
+            "execType": 1, "orgId": positive_id(org_id),
+        })
+        if not isinstance(data, dict) or type(data.get("taskId")) is not int or data["taskId"] <= 0:
+            raise GDMSProtocolError("GDMS did not return a reset task identifier.")
+        return data["taskId"]
+
+    def task_by_name(self, *, org_id, task_name):
+        """Read all pages to reconcile our unique task name; never infer status.
+
+        The reference's Task List example repeats Add Task. The list envelope
+        and id/name/orgId/taskType fields were verified read-only on 2026-11-11.
+        Its undocumented numeric status is deliberately not interpreted.
+        """
+        matches = []
+        org_id = positive_id(org_id)
+        for page in range(1, 101):
+            data = self._request("POST", "/task/list", data={
+                "orgId": org_id, "pageNum": page, "pageSize": 100,
+            })
+            rows = self._rows(data)
+            for row in rows:
+                if row.get("name") == task_name:
+                    if (row.get("orgId") != org_id or type(row.get("id")) is not int
+                            or row["id"] <= 0 or type(row.get("taskType")) is not int):
+                        raise GDMSProtocolError("GDMS task identity is invalid.")
+                    matches.append(row)
+            pages = data.get("pages")
+            if type(pages) is not int or pages < 0 or len(matches) > 1:
+                raise GDMSProtocolError("GDMS task lookup is ambiguous.")
+            if page >= pages:
+                return matches[0] if matches else None
+        raise GDMSProtocolError("GDMS task pagination exceeded the limit.")
+
+    def delete_task(self, task_id):
+        return self._request("POST", "/task/delete", data={"taskId": positive_id(task_id)})
+
+    def delete_device(self, *, mac, org_id):
+        data = self._request("POST", "/device/delete", data={
+            "macList": [wire_mac(mac)], "orgId": positive_id(org_id),
+        })
+        if (not isinstance(data, dict)
+                or any(type(data.get(key)) is not int for key in ("total", "success", "failure"))
+                or data.get("total") != 1 or not isinstance(data.get("errorMacList"), list)):
+            raise GDMSProtocolError("GDMS deletion response is invalid.")
+        if data["success"] != 1 or data["failure"] != 0 or data["errorMacList"]:
+            raise GDMSError("GDMS did not remove the device.")
+        return data

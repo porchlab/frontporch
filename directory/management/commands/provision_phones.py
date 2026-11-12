@@ -32,9 +32,18 @@ class Command(BaseCommand):
                 acquired = cursor.fetchone()[0]
             if acquired:
                 try:
-                    pending = PhoneEnrollment.objects.filter(next_attempt_at__lte=timezone.now()).filter(
+                    setup = Q(deregistration_requested_at__isnull=True) & (
                         ~Q(state__in=TERMINAL) | Q(state=PhoneEnrollmentState.READY, operations__kind="bootstrap")
-                    ).exclude(state=PhoneEnrollmentState.READY, operations__kind="retire").distinct().order_by("next_attempt_at")[:10]
+                    )
+                    removal = Q(deregistration_requested_at__isnull=False) & ~Q(
+                        state__in=[PhoneEnrollmentState.DEREGISTERED, PhoneEnrollmentState.DEREGISTER_HELP]
+                    )
+                    pending = PhoneEnrollment.objects.filter(
+                        next_attempt_at__lte=timezone.now(),
+                    ).filter(setup | removal).exclude(
+                        deregistration_requested_at__isnull=True,
+                        state=PhoneEnrollmentState.READY, operations__kind="retire",
+                    ).distinct().order_by("next_attempt_at")[:10]
                     for enrollment in pending.select_related("assigned_child", "assigned_parent", "device__wireguard_peer", "requested_by", "family"):
                         try:
                             worker.step(enrollment)
