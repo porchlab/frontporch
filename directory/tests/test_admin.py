@@ -340,7 +340,7 @@ class DirectoryAdminTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        shortcut = DialShortcut.objects.get(source_device=child_device, digits="3")
+        shortcut = DialShortcut.objects.get(source_child=child_device.assigned_child, digits="3")
         self.assertEqual(shortcut.conference_group_target, group)
 
     def assert_admin_can_create_dial_shortcut(self, submit_name):

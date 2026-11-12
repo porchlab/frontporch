@@ -26,7 +26,7 @@ test('phonebooks escape all family values, keep the final row with the footer an
   const html = run(`(() => {
     const data=Demo.seed(), value='<img src=x onerror=alert(1)>';
     data.family=value; data.children[0].name=value; data.children[0].devices[0].name=value;
-    data.contacts[0].name=value; data.children[0].devices[0].shortcuts[0].label=value;
+    data.contacts[0].name=value; data.children[0].shortcuts[0].label=value;
     return phonebookCard(data, 'casey-phone');
   })()`);
   assert(!html.includes('<img src=x')); assert(html.includes('&lt;img src=x'));
@@ -103,4 +103,19 @@ test('group invitation dialogs show scoped choices and shared group edits preser
   assert.match(run('connectionsPage()'), /Casey, Alex/);
   run('Demo.saveGroup(state, testGroup.id, {}, []);');
   assert.doesNotMatch(run('connectionsPage()'), /Friends &lt;club&gt;/);
+});
+
+
+test('each child has one shared shortcut link even with multiple phones or none', () => {
+  const {run} = ui();
+  const result = run(`(() => {
+    Demo.reservePhone(state, "casey", "Desk");
+    detailId = "casey";
+    return {card:childCard(state.children[0]), detail:childPage(), empty:childCard(state.children[1])};
+  })()`);
+  for (const html of [result.card, result.detail]) {
+    assert.equal((html.match(/href="#family\/shortcuts\/casey"/g) || []).length, 1);
+    assert(!html.includes('shortcuts/casey-phone'));
+  }
+  assert(result.empty.includes('href="#family/shortcuts/jordan"'));
 });

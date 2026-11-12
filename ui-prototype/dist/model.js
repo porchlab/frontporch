@@ -2,15 +2,15 @@
 
 // Fictional, tab-local state. Django remains the authority for real permissions.
 const Demo = (() => {
-  const VERSION = 9;
+  const VERSION = 10;
   const STORAGE_KEY = "frontporch-design-v1";
   const TIME_ZONE = "America/New_York";
   const id = () => globalThis.crypto.randomUUID();
   const same = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
   const assert = (condition, message) => { if (!condition) throw new Error(message); };
   const clone = value => JSON.parse(JSON.stringify(value));
-  const device = (key, name, extension, active = true) => ({id:key, name, extension, active, shortcuts:[]});
-  const child = (key, name, color = "yellow", devices = []) => ({id:key, name, color, notes:"", devices, quietHours:[]});
+  const device = (key, name, extension, active = true) => ({id:key, name, extension, active});
+  const child = (key, name, color = "yellow", devices = []) => ({id:key, name, color, notes:"", devices, shortcuts:[], quietHours:[]});
   const guardian = (key, name, email, primary = false) => ({id:key, name, email, primary, active:true, phone:"", extension:"", callDestination:"frontporch", devices:[], directoryVisible:false, emergencyNoticeDismissed:false});
 
   function network() {
@@ -36,7 +36,7 @@ const Demo = (() => {
     const primary = guardian("primary", "Morgan", "morgan@example.com", true);
     primary.extension = "5200";
     const casey = child("casey", "Casey", "yellow", [device("casey-phone", "Bedroom phone", "4754")]);
-    casey.devices[0].shortcuts.push({id:"casey-alex", digits:"2", target:"device:river-phone-0", label:"Alex", active:true, targetName:"Alex’s phone"});
+    casey.shortcuts.push({id:"casey-alex", digits:"2", target:"child:river-0", label:"Alex", active:true, targetName:"Alex"});
     casey.quietHours.push({id:"homework", label:"Homework", day_group:"weekdays", start_time:"16:00", end_time:"17:00", is_active:true, notes:""});
     return {
       family:"Maple", timezone:TIME_ZONE, setupDismissed:false, directoryListed:false, inviteCode:"MAPLE-9Q4T",
@@ -77,6 +77,7 @@ const Demo = (() => {
     }
     return null;
   }
+  function shortcutOwner(data, sourceId) { return findChild(data, sourceId) || findDevice(data, sourceId)?.child; }
   function family(data, familyId) { return data.network.find(f => f.id === familyId); }
   function selectedChildren(data, ids) {
     const selected = [...new Set(ids)].filter(key => findChild(data, key));
@@ -147,19 +148,22 @@ const Demo = (() => {
     invitation.status = "accepted";
     return invitation;
   }
-  function destinations(data, deviceId) {
-    const source = findDevice(data, deviceId);
-    if (!source) return [];
+  function destinations(data, sourceId) {
+    const owner = shortcutOwner(data, sourceId);
+    if (!owner) return [];
+    const sourcePhone = findDevice(data, sourceId)?.phone;
     const result = [];
-    const addPhone = (phone, group, detail, childName, familyName) => {
-      if (phone.active && phone.id !== deviceId) result.push({key:`device:${phone.id}`, name:phone.name, group, detail,
-        phonebookName:childName, extension:phone.extension, description:`${familyName} family`});
+    const addChild = (child, group, familyName) => {
+      const phones = child.devices.filter(p => p.active && p.id !== sourcePhone?.id);
+      if (!phones.length || (!sourcePhone && child.id === owner.id && phones.length < 2)) return;
+      result.push({key:`child:${child.id}`, name:child.name, group, detail:familyName,
+        extensions:[...new Set(phones.map(p => p.extension))], description:`${familyName} family`});
     };
-    for (const child of data.children) for (const phone of child.devices) addPhone(phone, "Your family’s phones", child.name, child.name, data.family);
-    for (const pair of data.connections.filter(c => c.childId === source.child.id)) {
+    for (const child of data.children) addChild(child, "Your family’s phones", data.family);
+    for (const pair of data.connections.filter(c => c.childId === owner.id)) {
       const peerFamily = family(data, pair.familyId);
       const peer = peerFamily?.children.find(c => c.id === pair.peerId);
-      for (const phone of peer?.devices || []) addPhone(phone, "Approved child connections", `${peer.name} · ${peerFamily.name}`, peer.name, peerFamily.name);
+      if (peer) addChild(peer, "Approved child connections", peerFamily.name);
     }
     for (const contact of data.contacts) result.push({key:`contact:${contact.phone}`, name:contact.name, detail:`Extension ${contact.extension}`, group:"Family contacts",
       extension:contact.extension, description:"Family contact"});
@@ -169,7 +173,7 @@ const Demo = (() => {
       if (parent.extension && (ringsPhone || ringsFrontporch)) result.push({key:`parent:${parent.id}`, name:parent.name,
         detail:`Extension ${parent.extension}`, group:"Your family’s phones", extension:parent.extension, description:`${data.family} family`});
     }
-    for (const group of data.groups.filter(g => g.is_active && g.enabled && g.extension && g.members.length >= 2 && g.members.includes(source.child.id)))
+    for (const group of data.groups.filter(g => g.is_active && g.enabled && g.extension && g.members.length >= 2 && g.members.includes(owner.id)))
       result.push({key:`group:${group.id}`, name:group.name, detail:`Extension ${group.extension}`, group:"Group calls",
         extension:group.extension, description:"Group call"});
     return result;
@@ -179,32 +183,34 @@ const Demo = (() => {
     if (!source?.phone.active) return [];
     const entries = new Map(), targets = new Map();
     for (const target of destinations(data, deviceId)) {
-      const key = target.extension || target.key;
-      const entry = entries.get(key) || {name:target.phonebookName || target.name,
-        description:target.description, extension:target.extension, shortcuts:[]};
-      entries.set(key, entry);
-      targets.set(target.key, {key, entry});
+      const matches = [];
+      for (const extension of target.extensions || [target.extension]) {
+        const entry = entries.get(extension) || {name:target.name,
+          description:target.description, extension, shortcuts:[]};
+        entries.set(extension, entry);
+        matches.push(entry);
+      }
+      targets.set(target.key, matches);
     }
-    for (const shortcut of [...source.phone.shortcuts].sort((a, b) => a.digits.localeCompare(b.digits))) {
-      const target = targets.get(shortcut.target);
-      if (!shortcut.active || !target || !/^[1-9]$/.test(shortcut.digits)) continue;
-      entries.set(target.key, target.entry);
-      target.entry.shortcuts.push({digits:shortcut.digits, label:shortcut.label || ""});
+    for (const shortcut of [...source.child.shortcuts].sort((a, b) => a.digits.localeCompare(b.digits))) {
+      const matches = targets.get(shortcut.target);
+      if (!shortcut.active || !matches || !/^[1-9]$/.test(shortcut.digits)) continue;
+      for (const entry of matches) entry.shortcuts.push({digits:shortcut.digits, label:shortcut.label || ""});
     }
     return [...entries.values()].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase(), "en")
       || a.description.localeCompare(b.description, "en") || a.extension.localeCompare(b.extension, "en"));
   }
   function saveShortcut(data, deviceId, shortcutId, values) {
-    const source = findDevice(data, deviceId);
-    assert(source, "Choose a phone first.");
-    const existing = source.phone.shortcuts.find(s => s.id === shortcutId);
+    const source = shortcutOwner(data, deviceId);
+    assert(source, "Choose a child first.");
+    const existing = source.shortcuts.find(s => s.id === shortcutId);
     assert(!shortcutId || existing, "This shortcut has been removed.");
     assert(/^[1-9]$/.test(values.digits), "Choose a single digit from 1 to 9.");
-    assert(!source.phone.shortcuts.some(s => s.id !== shortcutId && s.digits === values.digits), "This key is already assigned on this phone.");
-    const target = destinations(data, deviceId).find(t => t.key === values.target);
+    assert(!source.shortcuts.some(s => s.id !== shortcutId && s.digits === values.digits), "This key is already assigned for this child.");
+    const target = destinations(data, source.id).find(t => t.key === values.target);
     assert(target, "Choose an already approved destination. You can pause or remove unavailable shortcuts.");
     const shortcut = {...values, id:existing?.id || id(), targetName:target.name};
-    source.phone.shortcuts = [...source.phone.shortcuts.filter(s => s.id !== shortcutId), shortcut];
+    source.shortcuts = [...source.shortcuts.filter(s => s.id !== shortcutId), shortcut];
     return shortcut;
   }
   function normalizePhone(value) {
@@ -396,15 +402,36 @@ const Demo = (() => {
     data.activity = clone(old.activity || []);
     // Allocate after all legacy device/contact numbers have been retained.
     for (const parent of data.guardians) parent.extension = "";
-    return migrateParentCalls(data);
+    return migrateChildShortcuts(migrateParentCalls(data));
   }
   function migrateParentCalls(data) {
     data.timezone ||= TIME_ZONE;
     for (const parent of data.guardians) {
       if (!parent.extension) parent.extension = nextExtension(data);
-      const approvedMobile = parent.phone && data.children.some(c => c.devices.some(p => p.active && p.shortcuts.some(s => s.active && s.target === `parent:${parent.id}`)));
+      const approvedMobile = parent.phone && data.children.some(c => c.devices.some(p => p.active && (p.shortcuts || c.shortcuts || []).some(s => s.active && s.target === `parent:${parent.id}`)));
       parent.callDestination ||= approvedMobile ? "phone" : "frontporch";
       parent.devices ||= [];
+    }
+    return data;
+  }
+  function migrateChildShortcuts(data) {
+    const children = [...data.children, ...data.network.flatMap(f => f.children)];
+    const owners = new Map(children.flatMap(c => c.devices.map(p => [p.id, c.id])));
+    for (const child of children) {
+      child.shortcuts ||= [];
+      for (const phone of child.devices) {
+        child.shortcuts.push(...(phone.shortcuts || []));
+        delete phone.shortcuts;
+      }
+      for (const shortcut of child.shortcuts) {
+        if (shortcut.target.startsWith("device:")) {
+          const target = owners.get(shortcut.target.slice(7));
+          if (target) shortcut.target = `child:${target}`;
+        }
+      }
+      const conflicts = child.shortcuts.filter(s => child.shortcuts.filter(other => other.digits === s.digits).length > 1);
+      for (const shortcut of conflicts) shortcut.active = false;
+      if (conflicts.length) data.activity.unshift({text:`${child.name} has conflicting shortcut keys from multiple phones. They are paused; review Dial shortcuts to reassign or remove them.`, time:"Just now"});
     }
     return data;
   }
@@ -413,13 +440,14 @@ const Demo = (() => {
       const saved = JSON.parse(storage.getItem(STORAGE_KEY));
       if (saved?.version === VERSION && Array.isArray(saved.data?.network)
           && Array.isArray(saved.data?.children) && saved.data?.guardians?.some(g => g.primary)) return saved.data;
-      if ([7,8].includes(saved?.version) && Array.isArray(saved.data?.network) && saved.data?.guardians?.some(g => g.primary)) return migrateParentCalls(saved.data);
+      if (saved?.version === 9 && Array.isArray(saved.data?.children) && Array.isArray(saved.data?.network)) return migrateChildShortcuts(saved.data);
+      if ([7,8].includes(saved?.version) && Array.isArray(saved.data?.network) && saved.data?.guardians?.some(g => g.primary)) return migrateChildShortcuts(migrateParentCalls(saved.data));
       if ([1,2,3,4,5,6].includes(saved?.version) && Array.isArray(saved.data?.children)) return migrateLegacy(saved.data);
     } catch { /* Storage may be unavailable; a fresh in-memory demo still works. */ }
     return seed();
   }
   function save(storage, data) { storage.setItem(STORAGE_KEY, JSON.stringify({version:VERSION, data})); }
-  return {VERSION, STORAGE_KEY, TIME_ZONE, validateTimezone, timezoneChoices, saveFamilyTimezone, id, same, assert, seed, actor, primaryOnly, findChild, findDevice, family, nextExtension,
+  return {VERSION, STORAGE_KEY, TIME_ZONE, validateTimezone, timezoneChoices, saveFamilyTimezone, id, same, assert, seed, actor, primaryOnly, findChild, findDevice, shortcutOwner, family, nextExtension,
     reservePhone, saveChild, saveQuiet, listedFamilies, sendInvitation, acceptInvitation, destinations, phonebook, saveShortcut,
     normalizePhone, saveContact, inviteStatus, inviteGuardian, resendGuardian, joinGuardian, removeGuardian, saveProfile,
     saveGroup, sendGroupInvitation, acceptGroupInvitation, groupInvitationAction, migrateLegacy, load, save};

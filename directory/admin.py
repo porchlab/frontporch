@@ -408,7 +408,7 @@ class ExternalContactPermissionAdmin(admin.ModelAdmin):
 @admin.register(DialShortcut)
 class DialShortcutAdmin(admin.ModelAdmin):
     list_display = (
-        "source_device",
+        "source_display",
         "digits",
         "target_display",
         "label",
@@ -417,13 +417,15 @@ class DialShortcutAdmin(admin.ModelAdmin):
     )
     list_filter = (
         "is_active",
-        "source_device__assigned_child__family",
+        "source_child__family",
         "source_device__assigned_parent__family",
         "source_device__assigned_family",
     )
     search_fields = (
         "digits",
         "label",
+        "source_child__name",
+        "child_target__name",
         "source_device__friendly_name",
         "source_device__sip_extension",
         "internal_target_device__friendly_name",
@@ -441,12 +443,17 @@ class DialShortcutAdmin(admin.ModelAdmin):
         "approved_by__display_name",
         "notes",
     )
-    ordering = ("source_device__friendly_name", "digits")
+    ordering = ("source_child__name", "source_device__friendly_name", "digits")
+
+    @admin.display(description="Source")
+    def source_display(self, obj):
+        return obj.source
 
     @admin.display(description="Target")
     def target_display(self, obj):
         return (
-            obj.internal_target_device
+            obj.child_target
+            or obj.internal_target_device
             or obj.external_target_extension
             or obj.parent_target
             or obj.child_landline_target

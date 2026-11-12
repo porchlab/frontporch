@@ -224,10 +224,13 @@ class PhonebookTests(TestCase):
             with self.subTest(value=value):
                 self.assertNotContains(response, value)
 
-    def test_shortcuts_do_not_transfer_to_another_phone_of_same_child(self):
+    def test_shortcuts_are_shared_by_all_phones_of_same_child(self):
         entries = device_phonebook(self.second_source)
         self.assertTrue(entries)
-        self.assertTrue(all(not entry.shortcuts for entry in entries))
+        self.assertEqual(
+            {e.extension: e.shortcuts for e in entries if e.shortcuts},
+            {e.extension: e.shortcuts for e in device_phonebook(self.source) if e.shortcuts},
+        )
         self.assertNotIn("", {entry.extension for entry in entries})
 
     def test_revoked_relationship_removes_destinations_and_stale_shortcuts(self):
@@ -272,9 +275,9 @@ class PhonebookTests(TestCase):
         for extension in ["5201", "6201", self.contact_extension.dial_extension, ""]:
             self.assertNotIn(extension, entries)
 
-    def test_shortcut_to_inactive_shared_device_is_not_printed(self):
+    def test_shortcut_to_child_keeps_working_with_another_active_device(self):
         m.Device.objects.filter(pk=self.friend_shared_phone.pk).update(is_active=False)
-        self.assertEqual([s["digits"] for s in self.entries()["5201"].shortcuts], ["2"])
+        self.assertEqual([s["digits"] for s in self.entries()["5201"].shortcuts], ["1", "2"])
 
     def test_group_requires_calling_enabled_and_current_membership(self):
         for changes in [{"calling_enabled": False}, {"is_active": False}]:

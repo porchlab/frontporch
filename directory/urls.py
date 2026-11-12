@@ -67,6 +67,9 @@ urlpatterns = [
     path("invitations/", portal.invitations, name="invitations"),
     path("settings/", portal.family_settings, name="settings"),
     path("settings/<str:preference>/", portal.preference, name="preference"),
+    path("children/<int:child_id>/shortcuts/", portal.shortcuts, name="child_shortcuts"),
+    path("children/<int:child_id>/shortcuts/new/", portal.shortcut_edit, name="child_shortcut_create"),
+    path("children/<int:child_id>/shortcuts/<int:shortcut_id>/", portal.shortcut_edit, name="child_shortcut_edit"),
     path("phones/<int:device_id>/shortcuts/", portal.shortcuts, name="shortcuts"),
     path(
         "phones/<int:device_id>/shortcuts/new/",

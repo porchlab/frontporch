@@ -1045,12 +1045,28 @@ class ExternalContactPermission(TimeStampedModel):
 
 
 class DialShortcut(TimeStampedModel):
+    source_child = models.ForeignKey(
+        Child,
+        on_delete=models.CASCADE,
+        related_name="dial_shortcuts",
+        null=True,
+        blank=True,
+    )
     source_device = models.ForeignKey(
         Device,
         on_delete=models.CASCADE,
         related_name="dial_shortcuts",
+        null=True,
+        blank=True,
     )
     digits = models.CharField(max_length=1)
+    child_target = models.ForeignKey(
+        Child,
+        on_delete=models.CASCADE,
+        related_name="targeted_by_shortcuts",
+        null=True,
+        blank=True,
+    )
     internal_target_device = models.ForeignKey(
         Device,
         on_delete=models.CASCADE,
@@ -1098,44 +1114,68 @@ class DialShortcut(TimeStampedModel):
     notes = models.TextField(blank=True)
 
     class Meta:
-        ordering = ["source_device__friendly_name", "digits"]
+        ordering = ["source_child__name", "source_device__friendly_name", "digits"]
         constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(source_child__isnull=False, source_device__isnull=True)
+                    | models.Q(source_child__isnull=True, source_device__isnull=False)
+                ),
+                name="dial_shortcut_has_exactly_one_source",
+            ),
+            models.UniqueConstraint(
+                fields=["source_child", "digits"],
+                name="unique_shortcut_digits_per_source_child",
+            ),
             models.UniqueConstraint(
                 fields=["source_device", "digits"],
                 name="unique_shortcut_digits_per_source_device",
             ),
             models.CheckConstraint(
                 condition=(
-                    (
-                        models.Q(internal_target_device__isnull=False)
+                    models.Q(
+                        child_target__isnull=False,
+                        internal_target_device__isnull=True,
+                        external_target_extension__isnull=True,
+                        parent_target__isnull=True,
+                        child_landline_target__isnull=True,
+                        conference_group_target__isnull=True,
+                    )
+                    | (
+                        models.Q(child_target__isnull=True)
+                        & models.Q(internal_target_device__isnull=False)
                         & models.Q(external_target_extension__isnull=True)
                         & models.Q(parent_target__isnull=True)
                         & models.Q(child_landline_target__isnull=True)
                         & models.Q(conference_group_target__isnull=True)
                     )
                     | (
-                        models.Q(internal_target_device__isnull=True)
+                        models.Q(child_target__isnull=True)
+                        & models.Q(internal_target_device__isnull=True)
                         & models.Q(external_target_extension__isnull=False)
                         & models.Q(parent_target__isnull=True)
                         & models.Q(child_landline_target__isnull=True)
                         & models.Q(conference_group_target__isnull=True)
                     )
                     | (
-                        models.Q(internal_target_device__isnull=True)
+                        models.Q(child_target__isnull=True)
+                        & models.Q(internal_target_device__isnull=True)
                         & models.Q(external_target_extension__isnull=True)
                         & models.Q(parent_target__isnull=False)
                         & models.Q(child_landline_target__isnull=True)
                         & models.Q(conference_group_target__isnull=True)
                     )
                     | (
-                        models.Q(internal_target_device__isnull=True)
+                        models.Q(child_target__isnull=True)
+                        & models.Q(internal_target_device__isnull=True)
                         & models.Q(external_target_extension__isnull=True)
                         & models.Q(parent_target__isnull=True)
                         & models.Q(child_landline_target__isnull=False)
                         & models.Q(conference_group_target__isnull=True)
                     )
                     | (
-                        models.Q(internal_target_device__isnull=True)
+                        models.Q(child_target__isnull=True)
+                        & models.Q(internal_target_device__isnull=True)
                         & models.Q(external_target_extension__isnull=True)
                         & models.Q(parent_target__isnull=True)
                         & models.Q(child_landline_target__isnull=True)
@@ -1146,95 +1186,90 @@ class DialShortcut(TimeStampedModel):
             ),
         ]
 
+    @property
+    def source(self):
+        return self.source_child or self.source_device
+
+    @property
+    def source_family(self):
+        return (
+            self.source_child.family
+            if self.source_child_id
+            else self.source_device.owning_family
+        )
+
     def __str__(self):
-        return f"{self.source_device} dials {self.digits}"
+        return f"{self.source} dials {self.digits}"
 
     def clean(self):
+        # Normalize legacy callers and Admin inputs into stable child identities.
         if (
-            self.internal_target_device_id
-            and self.internal_target_device.assigned_parent_id
+            self.source_device_id
+            and self.source_device.assigned_child_id
+            and not self.source_child_id
         ):
-            if not self.parent_target_id:
-                self.parent_target = self.internal_target_device.assigned_parent
+            self.source_child = self.source_device.assigned_child
+            self.source_device = None
+        if self.internal_target_device_id:
+            target = self.internal_target_device
+            if target.assigned_child_id and not self.child_target_id:
+                self.child_target = target.assigned_child
+                self.internal_target_device = None
+            elif target.assigned_parent_id and not self.parent_target_id:
+                self.parent_target = target.assigned_parent
                 self.internal_target_device = None
         errors = {}
-        if self.digits not in {"1", "2", "3", "4", "5", "6", "7", "8", "9"}:
+        if bool(self.source_child_id) == bool(self.source_device_id):
+            errors["source_child"] = "Shortcut must have exactly one source."
+        if self.digits not in set("123456789"):
             errors["digits"] = "Shortcut digits must be one of 1 through 9."
-
-        target_count = sum(
-            target is not None
-            for target in (
-                self.internal_target_device,
-                self.external_target_extension,
-                self.parent_target,
-                self.child_landline_target,
-                self.conference_group_target,
+        targets = [
+            (field, getattr(self, field))
+            for field in (
+                "child_target",
+                "internal_target_device",
+                "external_target_extension",
+                "parent_target",
+                "child_landline_target",
+                "conference_group_target",
             )
-        )
-        if target_count != 1:
+            if getattr(self, field + "_id")
+        ]
+        if len(targets) != 1:
             errors["internal_target_device"] = "Shortcut must have exactly one target."
-
-        if self.source_device_id:
+        if self.source and "source_child" not in errors:
             if (
                 self.approved_by_id
-                and self.approved_by.family_id != self.source_device.owning_family.id
+                and self.approved_by.family_id != self.source_family.pk
             ):
-                errors["approved_by"] = (
-                    "Approval must come from the source device's family."
-                )
-            if self.internal_target_device_id and not _devices_may_call(
-                self.source_device,
-                self.internal_target_device,
-            ):
-                errors["internal_target_device"] = (
-                    "Source device is not allowed to call this target device."
-                )
-            if self.external_target_extension_id and not _device_may_call_external(
-                self.source_device,
-                self.external_target_extension,
-            ):
-                errors["external_target_extension"] = (
-                    "Source device is not allowed to call this external number."
-                )
-            if self.parent_target_id and not _device_may_call_parent(
-                self.source_device,
-                self.parent_target,
-            ):
-                errors["parent_target"] = (
-                    "Source device is not allowed to call this parent phone."
-                )
-            if self.child_landline_target_id and not _device_may_call_child_landline(
-                self.source_device,
-                self.child_landline_target,
-            ):
-                errors["child_landline_target"] = (
-                    "Source device is not allowed to call this child landline."
-                )
-            if self.conference_group_target_id:
-                group = self.conference_group_target
-                source_child_id = self.source_device.assigned_child_id
-                if (
-                    not group.is_active
-                    or not group.calling_enabled
-                    or not group.dial_extension
-                    or group.members.count() < 2
-                ):
-                    errors["conference_group_target"] = (
-                        "Conference group must be active and dialable."
-                    )
-                elif (
-                    not source_child_id
-                    or not group.members.filter(id=source_child_id).exists()
-                ):
-                    errors["conference_group_target"] = (
-                        "Source device's child must be a member of this conference group."
-                    )
+                errors["approved_by"] = "Approval must come from the source's family."
+            if len(targets) == 1:
+                from .services import shortcut_target_allowed
 
+                field, target = targets[0]
+                if not shortcut_target_allowed(
+                    self.source, field, target, require_available=False
+                ):
+                    errors[field] = "Source is not allowed to call this destination."
         if errors:
             raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
+        identity_fields = (
+            "source_child",
+            "source_device",
+            "child_target",
+            "internal_target_device",
+            "parent_target",
+        )
+        before = {field: getattr(self, field + "_id") for field in identity_fields}
         self.full_clean()
+        if kwargs.get("update_fields") is not None:
+            kwargs["update_fields"] = set(kwargs["update_fields"]) | {
+                field
+                for field, previous in before.items()
+                if previous != getattr(self, field + "_id")
+            }
         super().save(*args, **kwargs)
 
 

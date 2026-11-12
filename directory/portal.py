@@ -21,6 +21,7 @@ from .services import (
     shortcut_destination_allowed,
     shortcut_destinations,
     shortcut_targets,
+    shortcut_source,
 )
 from .views import _require_parent
 
@@ -32,7 +33,7 @@ def welcome(request):
 def _children(family):
     return (
         models.Child.objects.filter(family=family)
-        .prefetch_related("devices__dial_shortcuts", "devices__enrollment", "blackout_periods", "landlines")
+        .prefetch_related("dial_shortcuts", "devices__enrollment", "blackout_periods", "landlines")
         .order_by("name")
     )
 
@@ -354,25 +355,43 @@ def _source(parent, device_id):
     )
 
 
+def _shortcut_source(parent, device_id=None, child_id=None, *, lock=False):
+    if child_id is None:
+        device = _source(parent, device_id)
+        source = shortcut_source(device)
+    else:
+        source = get_object_or_404(models.Child, pk=child_id, family=parent.family)
+    if lock:
+        source = type(source).objects.select_for_update().get(pk=source.pk)
+    return source
+
+
+def _shortcut_url(source, action="shortcuts", *args):
+    prefix = "child_" if isinstance(source, models.Child) else ""
+    return reverse(f"directory:{prefix}{action}", args=[source.pk, *args])
+
+
 @login_required
-def shortcuts(request, device_id):
+def shortcuts(request, device_id=None, child_id=None):
     parent = _require_parent(request)
-    device = _source(parent, device_id)
-    destinations = shortcut_destinations(device)
+    source = _shortcut_source(parent, device_id, child_id)
+    destinations = shortcut_destinations(source)
     assigned = {}
-    for shortcut in device.dial_shortcuts.select_related(
+    for shortcut in source.dial_shortcuts.select_related(
+        "source_child__family",
+        "source_device",
         "approved_by",
+        "child_target",
         "internal_target_device",
         "external_target_extension",
         "parent_target",
         "child_landline_target__child",
         "conference_group_target",
     ):
-        allowed = shortcut_destination_allowed(shortcut)
         label = next(
             (
                 label
-                for _, (field, obj, label) in destinations.items()
+                for field, obj, label in destinations.values()
                 if shortcut_targets(shortcut, field, obj.pk)
             ),
             "Destination unavailable",
@@ -380,54 +399,64 @@ def shortcuts(request, device_id):
         assigned[shortcut.digits] = {
             "shortcut": shortcut,
             "target_label": label,
-            "allowed": allowed,
+            "allowed": shortcut_destination_allowed(shortcut),
+            "edit_url": _shortcut_url(source, "shortcut_edit", shortcut.pk),
         }
     slots = [{"digit": str(n), **assigned.get(str(n), {})} for n in range(1, 10)]
+    child = source if isinstance(source, models.Child) else None
     return render(
         request,
         "directory/shortcuts.html",
-        {"section": "children", "device": device, "slots": slots},
+        {
+            "section": "children",
+            "source_name": child.name if child else source.friendly_name,
+            "child": child,
+            "device": None if child else source,
+            "phones": child.devices.all() if child else [],
+            "slots": slots,
+            "create_url": _shortcut_url(source, "shortcut_create"),
+        },
     )
 
 
 @login_required
 @transaction.atomic
-def shortcut_edit(request, device_id, shortcut_id=None):
+def shortcut_edit(request, device_id=None, child_id=None, shortcut_id=None):
     parent = _require_parent(request)
-    device = _source(parent, device_id)
+    source = _shortcut_source(
+        parent, device_id, child_id, lock=request.method == "POST"
+    )
     shortcut = (
-        get_object_or_404(models.DialShortcut, pk=shortcut_id, source_device=device)
+        get_object_or_404(source.dial_shortcuts, pk=shortcut_id)
         if shortcut_id
         else None
     )
     form = forms.ShortcutForm(
-        request.POST or None, source=device, parent=parent, instance=shortcut
+        request.POST or None, source=source, parent=parent, instance=shortcut
     )
-    if (
-        not shortcut
-        and request.GET.get("key", "") in "123456789"
-        and len(request.GET.get("key", "")) == 1
-    ):
+    if not shortcut and request.GET.get("key") in list("123456789"):
         form.initial["digits"] = request.GET["key"]
+    source_name = (
+        source.name if isinstance(source, models.Child) else source.friendly_name
+    )
     if request.method == "POST" and form.is_valid():
-        models.Device.objects.select_for_update().get(pk=device.pk)
         try:
             shortcut = form.save()
         except ValidationError as error:
             form.add_error(None, "; ".join(error.messages))
         else:
             record_activity(
-                parent, f"Saved shortcut {shortcut.digits} on {device.friendly_name}."
+                parent, f"Saved shortcut {shortcut.digits} for {source_name}."
             )
             messages.success(request, "Dial shortcut saved.")
-            return redirect("directory:shortcuts", device_id=device.pk)
+            return redirect(_shortcut_url(source))
     return render(
         request,
         "directory/form.html",
         {
             "form": form,
             "section": "children",
-            "title": f"Dial shortcut · {device.friendly_name}",
+            "title": f"Dial shortcut · {source_name}",
             "intro": "Choose an already approved destination. Shortcuts never add calling permission; quiet hours still apply.",
         },
     )
@@ -439,22 +468,25 @@ def shortcut_edit(request, device_id, shortcut_id=None):
 def shortcut_action(request, shortcut_id, action):
     parent = _require_parent(request)
     shortcut = get_object_or_404(models.DialShortcut, pk=shortcut_id)
-    device = _source(parent, shortcut.source_device_id)
+    source = _shortcut_source(
+        parent, shortcut.source_device_id, shortcut.source_child_id, lock=True
+    )
+    source_name = (
+        source.name if isinstance(source, models.Child) else source.friendly_name
+    )
     if action == "remove":
         shortcut.delete()
         record_activity(
-            parent, f"Removed shortcut {shortcut.digits} from {device.friendly_name}."
+            parent, f"Removed shortcut {shortcut.digits} for {source_name}."
         )
     elif action == "pause":
-        # A revoked destination must still be pausable without passing target validation.
+        # A revoked destination must still be pausable without target validation.
         models.DialShortcut.objects.filter(pk=shortcut.pk).update(is_active=False)
         from .asterisk.autoreload import schedule_asterisk_configuration_apply
 
         schedule_asterisk_configuration_apply()
-        record_activity(
-            parent, f"Paused shortcut {shortcut.digits} on {device.friendly_name}."
-        )
-    return redirect("directory:shortcuts", device_id=device.pk)
+        record_activity(parent, f"Paused shortcut {shortcut.digits} for {source_name}.")
+    return redirect(_shortcut_url(source))
 
 
 @login_required

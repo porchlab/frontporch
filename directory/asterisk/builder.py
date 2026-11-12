@@ -568,6 +568,8 @@ def build_asterisk_configuration():
     for shortcut in (
         DialShortcut.objects.filter(is_active=True, approved_by__isnull=False)
         .select_related(
+            "source_child__family",
+            "child_target__family",
             "source_device__assigned_child__family",
             "source_device__assigned_parent__family",
             "source_device__assigned_family",
@@ -579,102 +581,117 @@ def build_asterisk_configuration():
             "child_landline_target",
             "conference_group_target",
         )
-        .order_by("source_device_id", "digits", "id")
+        .order_by("source_child_id", "source_device_id", "digits", "id")
     ):
         if not shortcut_destination_allowed(shortcut):
             continue
-        source = endpoints_by_device_id.get(shortcut.source_device_id)
-        if not source:
-            continue
-        if (
-            shortcut.internal_target_device_id
-            and shortcut.internal_target_device.assigned_parent_id
-        ):
-            parent = shortcut.internal_target_device.assigned_parent
-            if any(
-                rule.source_endpoint == source
-                and rule.dialed_extension == parent.dial_extension
-                for rule in rules
+        if shortcut.source_child_id:
+            sources = sip_endpoints_by_child_id.get(shortcut.source_child_id, ())
+        else:
+            device_source = endpoints_by_device_id.get(shortcut.source_device_id)
+            sources = (device_source,) if device_source else ()
+        for source in sources:
+            if shortcut.child_target_id:
+                shortcut_rules.extend(
+                    DialShortcutRule(
+                        source_endpoint=source,
+                        digits=shortcut.digits,
+                        target_endpoint=target,
+                    )
+                    for target in sip_endpoints_by_child_id.get(
+                        shortcut.child_target_id, ()
+                    )
+                    if target != source
+                )
+            elif (
+                shortcut.internal_target_device_id
+                and shortcut.internal_target_device.assigned_parent_id
+            ):
+                parent = shortcut.internal_target_device.assigned_parent
+                if any(
+                    rule.source_endpoint == source
+                    and rule.dialed_extension == parent.dial_extension
+                    for rule in rules
+                ):
+                    shortcut_rules.append(
+                        DialShortcutRule(
+                            source_endpoint=source,
+                            digits=shortcut.digits,
+                            target_extension=parent.dial_extension,
+                        )
+                    )
+            elif shortcut.internal_target_device_id:
+                target = endpoints_by_device_id.get(shortcut.internal_target_device_id)
+                if not target:
+                    continue
+                shared_targets = (
+                    endpoint
+                    for endpoint in sip_endpoints_by_extension.get(target.extension, ())
+                    if endpoint != source
+                    and endpoint.owner_type == target.owner_type
+                    and endpoint.owner_id == target.owner_id
+                )
+                shortcut_rules.extend(
+                    DialShortcutRule(
+                        source_endpoint=source,
+                        digits=shortcut.digits,
+                        target_endpoint=shared_target,
+                    )
+                    for shared_target in shared_targets
+                )
+            elif (
+                shortcut.external_target_extension_id
+                and shortcut.external_target_extension.is_active
             ):
                 shortcut_rules.append(
                     DialShortcutRule(
                         source_endpoint=source,
                         digits=shortcut.digits,
-                        target_extension=parent.dial_extension,
+                        external_number_extension_id=shortcut.external_target_extension_id,
+                        normalized_number=(
+                            shortcut.external_target_extension.external_phone_number.normalized_number
+                        ),
                     )
                 )
-        elif shortcut.internal_target_device_id:
-            target = endpoints_by_device_id.get(shortcut.internal_target_device_id)
-            if not target:
-                continue
-            shared_targets = (
-                endpoint
-                for endpoint in sip_endpoints_by_extension.get(target.extension, ())
-                if endpoint != source
-                and endpoint.owner_type == target.owner_type
-                and endpoint.owner_id == target.owner_id
-            )
-            shortcut_rules.extend(
-                DialShortcutRule(
-                    source_endpoint=source,
-                    digits=shortcut.digits,
-                    target_endpoint=shared_target,
-                )
-                for shared_target in shared_targets
-            )
-        elif (
-            shortcut.external_target_extension_id
-            and shortcut.external_target_extension.is_active
-        ):
-            shortcut_rules.append(
-                DialShortcutRule(
-                    source_endpoint=source,
-                    digits=shortcut.digits,
-                    external_number_extension_id=shortcut.external_target_extension_id,
-                    normalized_number=(
-                        shortcut.external_target_extension.external_phone_number.normalized_number
-                    ),
-                )
-            )
-        elif shortcut.parent_target_id:
-            extension = shortcut.parent_target.dial_extension
-            if any(
-                rule.source_endpoint == source and rule.dialed_extension == extension
-                for rule in rules
-            ):
+            elif shortcut.parent_target_id:
+                extension = shortcut.parent_target.dial_extension
+                if any(
+                    rule.source_endpoint == source and rule.dialed_extension == extension
+                    for rule in rules
+                ):
+                    shortcut_rules.append(
+                        DialShortcutRule(
+                            source_endpoint=source,
+                            digits=shortcut.digits,
+                            target_extension=extension,
+                        )
+                    )
+            elif shortcut.child_landline_target_id:
+                target = landline_endpoints_by_id.get(shortcut.child_landline_target_id)
+                if not target:
+                    continue
                 shortcut_rules.append(
                     DialShortcutRule(
                         source_endpoint=source,
                         digits=shortcut.digits,
-                        target_extension=extension,
+                        target_endpoint=target,
                     )
                 )
-        elif shortcut.child_landline_target_id:
-            target = landline_endpoints_by_id.get(shortcut.child_landline_target_id)
-            if not target:
-                continue
-            shortcut_rules.append(
-                DialShortcutRule(
-                    source_endpoint=source,
-                    digits=shortcut.digits,
-                    target_endpoint=target,
+            elif shortcut.conference_group_target_id:
+                conference_route = conference_routes_by_id.get(
+                    shortcut.conference_group_target_id
                 )
-            )
-        elif shortcut.conference_group_target_id:
-            conference_route = conference_routes_by_id.get(
-                shortcut.conference_group_target_id
-            )
-            if not conference_route or not conference_route.member_for_child(
-                source.child_id
-            ):
-                continue
-            shortcut_rules.append(
-                DialShortcutRule(
-                    source_endpoint=source,
-                    digits=shortcut.digits,
-                    conference_route=conference_route,
+                if not conference_route or not conference_route.member_for_child(
+                    source.child_id
+                ):
+                    continue
+                shortcut_rules.append(
+                    DialShortcutRule(
+                        source_endpoint=source,
+                        digits=shortcut.digits,
+                        conference_route=conference_route,
+                    )
                 )
-            )
 
     return AsteriskConfiguration(
         endpoints=endpoints,
