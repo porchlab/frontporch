@@ -38,20 +38,35 @@ PBX configuration. Shared manual gateways and the person's other phones remain
 available. The request is durable; keep the phone powered and connected to Wi-Fi
 while the worker sends its factory-reset task.
 
-When the phone restarts and shows its first-time setup screen, confirm that on
-the progress page. FrontPorch then cancels the reset task, removes the phone from
-GDMS, and verifies its absence. Only **Phone deregistered** releases the MAC and
-serial number for another registration, including registration by a different
-family. Registering again creates a new claim, SIP credentials, and network keys.
-Wi-Fi must be configured again. The original operation journal and family
-activity remain for audit; the removed phone disappears from the active list.
+After the phone restarts, check that its FrontPorch account is no longer
+configured, then confirm that on the progress page. Saved Wi-Fi networks may
+remain; erasing them is optional and is not a prerequisite for deregistration
+or re-registration. If the phone does not restart or its FrontPorch account
+remains configured, leave the confirmation unchecked and contact the operator.
+
+FrontPorch then cancels the reset task, removes the phone from GDMS, and verifies
+its absence. Only **Phone deregistered** releases the MAC and serial number for
+another registration, including registration by a different family. Registering
+again creates a new claim, SIP credentials, and network keys. The original
+operation journal and family activity remain for audit; the removed phone
+disappears from the active list.
+
+For an optional full factory reset, wait until **Phone deregistered** appears,
+then use **Settings → Advanced Settings → Factory reset** on the handset,
+confirm with the left softkey, and wait for it to restart. This is Grandstream's
+documented [handset factory-reset procedure](https://documentation.grandstream.com/knowledge-base/wp8x6-user-guide/#factory-reset).
+Check that the saved settings are cleared. Reconnect to Wi-Fi when ready to use
+the phone again. This optional step erases local settings and is separate from
+FrontPorch account removal.
 
 This handset confirmation is necessary: GDMS's API confirms task creation, but
 does not document a reliable per-device reset-completion result. A cached online
-flag or numeric task status cannot prove a reset. Do not confirm an ordinary
-reboot. Failed or offline resets keep the claim reserved and never report the
-phone ready for reuse. An unprocessed registration with no accepted or uncertain
-GDMS enrollment command can be removed without resetting any hardware.
+flag or numeric task status cannot prove the phone restarted and cleared its
+FrontPorch account. Confirmation records those two observations, not a complete
+wipe of local settings. Failed or offline resets keep the claim reserved and
+never report the phone ready for reuse. An unprocessed registration with no
+accepted or uncertain GDMS enrollment command can be removed without resetting
+any hardware.
 
 Removal runs in the existing private provisioning worker, with the same feature
 gate and credentials. The public portal only records authorized intent and
@@ -197,9 +212,16 @@ preserve the generated configuration writer and cannot chown its read-only mount
 Deregistration tests also cover authorization, CSRF, duplicate submissions,
 credential and shortcut removal, shared gateway preservation, pending task
 cancellation, lost provider replies, ownership changes, and fresh registration
-after confirmed deletion. The remote factory reset and subsequent re-enrollment
-still require a supervised handset acceptance test; unit tests make no claim
-that a physical handset has reset.
+after confirmed deletion. A supervised WP816 test on firmware 1.0.3.39 found that
+the GDMS factory-reset task rebooted the handset and cleared its SIP account,
+but left its saved Wi-Fi connection available. The published
+[GDMS API](https://doc.grandstream.dev/GDMS-API/EN/) defines task type 2 as factory
+reset but documents no option to force Wi-Fi erasure. This observation does not
+establish whether the network was retained by the firmware or restored after
+reset; the remote command must not be treated as proof of a full wipe.
+Confirmation, verified GDMS deletion, and subsequent re-enrollment still require
+a supervised acceptance test, as does the optional handset factory reset. Unit
+tests make no claim that a physical handset has reset.
 
 The original hardware pilot verified GDMS firmware upgrade and authenticated
 combined settings delivery. The replacement server has carried existing remote
