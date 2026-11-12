@@ -219,7 +219,7 @@ class ParentUIWorkflowTests(TestCase):
             reverse("directory:shortcut_create", args=[self.device.pk]),
             {
                 "digits": "1",
-                "target": f"device:{self.peer_device.pk}",
+                "target": f"child:{self.peer_device.assigned_child_id}",
                 "is_active": "on",
             },
         )
@@ -354,7 +354,7 @@ class ParentUIWorkflowTests(TestCase):
             url,
             {
                 "digits": "1",
-                "target": f"device:{self.peer_device.pk}",
+                "target": f"child:{self.peer_device.assigned_child_id}",
                 "is_active": "on",
             },
         )

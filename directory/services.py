@@ -104,88 +104,190 @@ def children_may_conference(children):
     return explicit_conference_group_exists(participants)
 
 
-def shortcut_destination_allowed(shortcut):
-    """Recheck the saved target; an old shortcut never grants calling access."""
+def shortcut_source(source):
+    """Child-owned keys are shared by all of that child's FrontPorch phones."""
+    from .models import Device
+
+    return (
+        source.assigned_child
+        if isinstance(source, Device) and source.assigned_child_id
+        else source
+    )
+
+
+def shortcut_source_family(source):
+    from .models import Child
+
+    return source.family if isinstance(source, Child) else source.owning_family
+
+
+def shortcuts_for(source):
+    return shortcut_source(source).dial_shortcuts.all()
+
+
+def shortcut_target_allowed(source, field, target, *, require_available=True):
+    """Calling permissions belong to people; availability never grants access."""
     from .models import (
+        Child,
+        Device,
+        FamilyContact,
+        ExternalContactPermission,
+        _children_may_call,
         _devices_may_call,
         _device_may_call_external,
         _device_may_call_parent,
         _device_may_call_child_landline,
     )
 
-    source = shortcut.source_device
-    if (
-        not shortcut.approved_by_id
-        or shortcut.approved_by.family_id != source.owning_family.pk
-    ):
-        return False
-    if shortcut.internal_target_device_id:
-        target = shortcut.internal_target_device
+    child = source if isinstance(source, Child) else source.assigned_child
+    family = shortcut_source_family(source)
+    if field == "child_target":
+        permitted = family.pk == target.family_id or bool(
+            child and _children_may_call(child, target)
+        )
+        if not permitted or not require_available:
+            return permitted
+        devices = target.devices.filter(is_active=True)
+        if isinstance(source, Device):
+            devices = devices.exclude(pk=source.pk)
+        elif child.pk == target.pk:
+            return devices.count() > 1
+        return devices.exists()
+    if field == "internal_target_device":
+        if target.assigned_child_id:
+            return shortcut_target_allowed(
+                source,
+                "child_target",
+                target.assigned_child,
+                require_available=require_available,
+            )
         if target.assigned_parent_id:
-            return _device_may_call_parent(source, target.assigned_parent)
-        return target.is_active and _devices_may_call(source, target)
-    if shortcut.external_target_extension_id:
-        return _device_may_call_external(source, shortcut.external_target_extension)
-    if shortcut.parent_target_id:
-        return _device_may_call_parent(source, shortcut.parent_target)
-    if shortcut.child_landline_target_id:
-        return _device_may_call_child_landline(source, shortcut.child_landline_target)
-    if shortcut.conference_group_target_id:
-        group = shortcut.conference_group_target
+            return shortcut_target_allowed(
+                source,
+                "parent_target",
+                target.assigned_parent,
+                require_available=require_available,
+            )
+        permitted = (
+            family.pk == target.owning_family.pk
+            if isinstance(source, Child)
+            else _devices_may_call(source, target)
+        )
+        return permitted and (target.is_active or not require_available)
+    if field == "external_target_extension":
+        if not isinstance(source, Child):
+            return _device_may_call_external(source, target)
+        return target.is_active and (
+            FamilyContact.objects.filter(
+                family=family, external_phone_number=target.external_phone_number
+            ).exists()
+            or ExternalContactPermission.objects.filter(
+                child=child,
+                external_phone_number=target.external_phone_number,
+                approved_by__isnull=False,
+            ).exists()
+        )
+    if field == "parent_target":
+        if not isinstance(source, Child):
+            return _device_may_call_parent(source, target)
+        return target.family_id == family.pk and target.has_call_destination()
+    if field == "child_landline_target":
+        if not isinstance(source, Child):
+            return _device_may_call_child_landline(source, target)
+        return target.is_active and (
+            family.pk == target.child.family_id
+            or _children_may_call(child, target.child)
+        )
+    if field == "conference_group_target":
         return bool(
-            group.is_active
-            and group.calling_enabled
-            and group.dial_extension
-            and group.members.count() >= 2
-            and source.assigned_child_id
-            and group.members.filter(pk=source.assigned_child_id).exists()
+            target.is_active
+            and target.calling_enabled
+            and target.dial_extension
+            and target.members.count() >= 2
+            and child
+            and target.members.filter(pk=child.pk).exists()
         )
     return False
 
 
+def shortcut_destination_allowed(shortcut):
+    """Recheck saved approval and current permissions before rendering any route."""
+    if (
+        not shortcut.source
+        or not shortcut.approved_by_id
+        or shortcut.approved_by.family_id != shortcut.source_family.pk
+    ):
+        return False
+    for field in (
+        "child_target",
+        "internal_target_device",
+        "external_target_extension",
+        "parent_target",
+        "child_landline_target",
+        "conference_group_target",
+    ):
+        if getattr(shortcut, field + "_id"):
+            return shortcut_target_allowed(
+                shortcut.source, field, getattr(shortcut, field)
+            )
+    return False
+
+
 def shortcut_targets(shortcut, target_field, target_id):
-    """A reassigned parent device resolves to its owner's logical destination."""
-    if target_field == "parent_target" and shortcut.internal_target_device_id:
-        return shortcut.internal_target_device.assigned_parent_id == target_id
+    if shortcut.internal_target_device_id:
+        if target_field == "parent_target":
+            return shortcut.internal_target_device.assigned_parent_id == target_id
+        if target_field == "child_target":
+            return shortcut.internal_target_device.assigned_child_id == target_id
     return getattr(shortcut, target_field + "_id") == target_id
 
 
 def shortcut_destinations(source):
-    """Return only approved targets; contact labels are scoped to this family."""
+    """Return one approved destination per child, independent of handset identity."""
     from .models import (
+        Child,
         Device,
         FamilyContact,
         Parent,
         ChildLandline,
         ConferenceGroup,
-        _devices_may_call,
-        _device_may_call_external,
-        _device_may_call_parent,
-        _device_may_call_child_landline,
     )
 
+    family = shortcut_source_family(source)
+    child = source if isinstance(source, Child) else source.assigned_child
     destinations = {}
-    for device in Device.objects.filter(is_active=True).select_related(
-        "assigned_child__family", "assigned_parent__family", "assigned_family"
+    for target in Child.objects.select_related("family").order_by(
+        "family__name", "name", "pk"
     ):
-        if not device.assigned_parent_id and _devices_may_call(source, device):
+        if shortcut_target_allowed(source, "child_target", target):
+            destinations[f"child:{target.pk}"] = (
+                "child_target",
+                target,
+                f"{target.name} · {target.family.name}",
+            )
+    for device in Device.objects.filter(
+        is_active=True, assigned_child__isnull=True, assigned_parent__isnull=True
+    ).select_related("assigned_family"):
+        if shortcut_target_allowed(source, "internal_target_device", device):
             destinations[f"device:{device.pk}"] = (
                 "internal_target_device",
                 device,
                 f"{device.friendly_name} · {device.owning_family.name}",
             )
-    for contact in FamilyContact.objects.filter(
-        family=source.owning_family
-    ).select_related("external_phone_number__dialable_extension"):
+    for contact in FamilyContact.objects.filter(family=family).select_related(
+        "external_phone_number__dialable_extension"
+    ):
         extension = contact.dial_extension
-        if extension and _device_may_call_external(source, extension):
+        if extension and shortcut_target_allowed(
+            source, "external_target_extension", extension
+        ):
             destinations[f"external:{extension.pk}"] = (
                 "external_target_extension",
                 extension,
                 f"{contact.label} · External contact",
             )
-    for parent in Parent.objects.filter(family=source.owning_family):
-        if _device_may_call_parent(source, parent):
+    for parent in Parent.objects.filter(family=family):
+        if shortcut_target_allowed(source, "parent_target", parent):
             destinations[f"parent:{parent.pk}"] = (
                 "parent_target",
                 parent,
@@ -194,15 +296,15 @@ def shortcut_destinations(source):
     for landline in ChildLandline.objects.filter(is_active=True).select_related(
         "child__family"
     ):
-        if _device_may_call_child_landline(source, landline):
+        if shortcut_target_allowed(source, "child_landline_target", landline):
             destinations[f"landline:{landline.pk}"] = (
                 "child_landline_target",
                 landline,
                 f"{landline.child.name} · Landline",
             )
-    if source.assigned_child_id:
+    if child:
         for group in ConferenceGroup.objects.filter(
-            members=source.assigned_child, is_active=True, calling_enabled=True
+            members=child, is_active=True, calling_enabled=True
         ).exclude(dial_extension=""):
             if group.members.count() >= 2:
                 destinations[f"group:{group.pk}"] = (

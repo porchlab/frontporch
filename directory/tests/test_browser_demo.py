@@ -211,9 +211,10 @@ class BrowserDemoPermissionParityTests(TestCase):
                 "id": str(child.pk),
                 "name": child.name,
                 "quietHours": [],
+                "shortcuts": [],
                 "devices": [
                     {
-                        "id": str(phone.pk),
+                        "id": f"phone-{phone.pk}",
                         "name": phone.friendly_name,
                         "extension": phone.sip_extension,
                         "active": phone.is_active,
@@ -284,11 +285,11 @@ class BrowserDemoPermissionParityTests(TestCase):
             internal_target_device=devices[2],
             approved_by=local_parent,
         )
-        data["children"][0]["devices"][0]["shortcuts"].append(
+        data["children"][0]["shortcuts"].append(
             {
                 "digits": "1",
                 "active": True,
-                "target": f"device:{devices[2].pk}",
+                "target": f"child:{peers[0].pk}",
             }
         )
 
@@ -298,7 +299,7 @@ class BrowserDemoPermissionParityTests(TestCase):
             parent_target=local_parent,
             approved_by=local_parent,
         )
-        data["children"][0]["devices"][0]["shortcuts"].append(
+        data["children"][0]["shortcuts"].append(
             {
                 "digits": "2",
                 "active": True,
@@ -316,7 +317,7 @@ class BrowserDemoPermissionParityTests(TestCase):
                     (
                         target.friendly_name
                         if field == "internal_target_device"
-                        else target.display_name if field == "parent_target" else label
+                        else target.name if field == "child_target" else target.display_name if field == "parent_target" else label
                     )
                     for field, target, label in shortcut_destinations(
                         devices[0]
@@ -348,7 +349,7 @@ class BrowserDemoPermissionParityTests(TestCase):
                 {
                     "data": data,
                     "selected": [str(children[0].pk)],
-                    "source": str(devices[0].pk),
+                    "source": f"phone-{devices[0].pk}",
                     "revokedPeer": str(peers[0].pk),
                 }
             ),

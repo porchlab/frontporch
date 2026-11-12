@@ -826,7 +826,7 @@ class DirectoryDomainTests(TestCase):
 
         with self.assertRaisesMessage(
             ValidationError,
-            "Source device's child must be a member of this conference group.",
+            "Source is not allowed to call this destination.",
         ):
             DialShortcut.objects.create(
                 source_device=source,
@@ -848,7 +848,7 @@ class DirectoryDomainTests(TestCase):
 
         with self.assertRaisesMessage(
             ValidationError,
-            "Conference group must be active and dialable.",
+            "Source is not allowed to call this destination.",
         ):
             DialShortcut.objects.create(
                 source_device=source,

@@ -16,10 +16,11 @@ not load its JavaScript or store household data in browser storage.
   is required to invite a new family.
 - Overview with setup progress, invitations, connected child pairs, and private activity.
 - Children, multiple actual devices per child, phone naming, inactive automatic
-  reservations, quiet hours, and per-device shortcut keys 1–9.
+  reservations, quiet hours, and one set of shortcut keys 1–9 per child.
+  Shortcuts to a child follow their active phones when a handset is replaced.
 - Printable phonebook cards from each child's phone or shortcut page. The preview
   defaults to black and white, with an optional color style. Each card lists all
-  currently authorized, active destination extensions and this phone's enabled
+  currently authorized, active destination extensions and this child's enabled
   shortcuts, including family contacts and enabled groups. Shared extensions
   appear once; each parent has one extension with their shortcuts on the same row.
   Landline cards follow the child-only dial-in flow and include the available
@@ -64,6 +65,9 @@ approved scope, upgrade semantics, and deployment assumptions.
 Parent calling uses one stable extension for FrontPorch phones and the parent's
 saved phone number. See the [parent calling and upgrade guide](operations/parent-calling.md)
 for routing choices, migration behavior, and rollback requirements.
+
+See the [child shortcut upgrade guide](operations/child-shortcuts.md) for shared
+keys, handset replacement, migration conflicts, and rollback.
 
 ## Upgrade and operation
 

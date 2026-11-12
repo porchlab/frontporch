@@ -15,14 +15,14 @@
             <div class="section-heading">
                 <h2>Their phones</h2>
             </div>
+            <a class="button secondary" href="{% url 'directory:child_shortcuts' child.id %}">Dial shortcuts · {{ child.dial_shortcuts.count }} set</a>
+            <p class="form-note">One set of keys shared by all of {{ child.name }}’s phones.</p>
             {% for device in child.devices.all %}
                 <div class="device-row">
                     <h3>{{ device.friendly_name }}</h3>
                     <p>Extension {{ device.sip_extension }} · {% if device.setup_pending %}<a href="{% url 'directory:phone_setup_detail' device.enrollment.pk %}">Continue phone setup</a>{% elif device.is_active %}Enabled{% else %}Setup pending · your installer activates this phone{% endif %}
                     </p>
                     <div class="inline-actions">
-                        <a class="button secondary"
-                           href="{% url 'directory:shortcuts' device.id %}">Dial shortcuts</a>
                         <a class="button secondary"
                            href="{% url 'directory:phonebook' device.id %}">Print phonebook</a>
                         <a class="text-button blue-text"

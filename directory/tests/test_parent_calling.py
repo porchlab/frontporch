@@ -176,7 +176,7 @@ class ParentCallingTests(TestCase):
         self.assertIn("PJSIP/12025550188@voipms-endpoint", context)
         self.assertIn("exten => 1,1,Goto(5300,1)", context)
 
-    def test_reassigned_device_shortcut_resolves_to_the_same_parent_everywhere(self):
+    def test_reassigned_child_device_does_not_redirect_shortcuts_to_parent(self):
         sibling = m.Child.objects.create(family=self.family, name="Riley")
         device = m.Device.objects.create(
             assigned_child=sibling,
@@ -198,16 +198,17 @@ class ParentCallingTests(TestCase):
         device.save()
         shortcut.refresh_from_db()
         form = ShortcutForm(source=self.source, parent=self.parent, instance=shortcut)
-        self.assertEqual(form.initial["target"], f"parent:{self.parent.pk}")
-        self.assertIn("exten => 2,1,Goto(5300,1)", self.rendered_context())
+        self.assertEqual(shortcut.child_target_id, sibling.pk)
+        self.assertEqual(form.initial["target"], "")
+        self.assertNotIn("exten => 2,", self.rendered_context())
         entries = device_phonebook(self.source)
         self.assertEqual(len(entries), 1)
-        self.assertEqual([s["digits"] for s in entries[0].shortcuts], ["1", "2"])
+        self.assertEqual([s["digits"] for s in entries[0].shortcuts], ["1"])
         self.client.force_login(self.parent.user)
         response = self.client.get(
             reverse("directory:shortcuts", args=[self.source.pk])
         )
-        self.assertNotContains(response, "Destination unavailable")
+        self.assertContains(response, "Destination unavailable")
 
     def test_mobile_only_parent_has_stable_extension_without_a_shortcut(self):
         m.Device.objects.filter(assigned_parent=self.parent).delete()
@@ -240,13 +241,13 @@ class ParentCallingTests(TestCase):
         )
         # Simulate a stale shortcut after an ownership change without validating it away.
         m.DialShortcut.objects.filter(pk=self.shortcut.pk).update(
-            source_device=other_source
+            source_child=other_child
         )
         self.assertNotIn("5300", {e.extension for e in device_phonebook(other_source)})
         self.assertNotIn("exten => 5300,", self.rendered_context(other_source))
         self.assertNotIn("exten => 1,", self.rendered_context(other_source))
         m.DialShortcut.objects.filter(pk=self.shortcut.pk).update(
-            source_device=self.source, approved_by=other_parent
+            source_child=self.child, approved_by=other_parent
         )
         self.assertNotIn("exten => 1,", self.rendered_context())
         self.assertEqual(device_phonebook(self.source)[0].shortcuts, [])
